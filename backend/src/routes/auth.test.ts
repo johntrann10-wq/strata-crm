@@ -94,6 +94,84 @@ describe("auth route helper logic", () => {
     expect(updates).toBeNull();
   });
 
+  it("backfills Apple linkage and private relay metadata for an existing email account", async () => {
+    const { resolveAppleAccountUpdates } = await import("./auth.js");
+    const updates = resolveAppleAccountUpdates(
+      {
+        appleSubject: null,
+        appleEmail: null,
+        appleEmailIsPrivateRelay: null,
+        firstName: null,
+        lastName: "Existing",
+        emailVerified: false,
+      },
+      {
+        appleSubject: "apple-sub-123",
+        appleEmail: "relay@privaterelay.appleid.com",
+        appleEmailIsPrivateRelay: true,
+        firstName: "Jamie",
+        lastName: "Fresh",
+        emailVerified: true,
+      }
+    );
+    expect(updates).toMatchObject({
+      appleSubject: "apple-sub-123",
+      appleEmail: "relay@privaterelay.appleid.com",
+      appleEmailIsPrivateRelay: true,
+      firstName: "Jamie",
+      emailVerified: true,
+    });
+    expect(updates?.lastName).toBeUndefined();
+    expect(updates?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("returns no Apple account updates when the account is already linked", async () => {
+    const { resolveAppleAccountUpdates } = await import("./auth.js");
+    const updates = resolveAppleAccountUpdates(
+      {
+        appleSubject: "apple-sub-123",
+        appleEmail: "relay@privaterelay.appleid.com",
+        appleEmailIsPrivateRelay: true,
+        firstName: "Jamie",
+        lastName: "Existing",
+        emailVerified: true,
+      },
+      {
+        appleSubject: "apple-sub-123",
+        appleEmail: "relay@privaterelay.appleid.com",
+        appleEmailIsPrivateRelay: true,
+        firstName: "Jamie",
+        lastName: "Fresh",
+        emailVerified: true,
+      }
+    );
+    expect(updates).toBeNull();
+  });
+
+  it("rejects an Apple sign-in when the email is linked to a different Apple account", async () => {
+    const { resolveAppleAccountUpdates } = await import("./auth.js");
+    expect(() =>
+      resolveAppleAccountUpdates(
+        {
+          appleSubject: "apple-sub-123",
+          appleEmail: "owner@example.com",
+          appleEmailIsPrivateRelay: false,
+          firstName: "Jamie",
+          lastName: "Existing",
+          emailVerified: true,
+        },
+        {
+          appleSubject: "apple-sub-999",
+          appleEmail: "owner@example.com",
+          appleEmailIsPrivateRelay: false,
+          firstName: "Jamie",
+          lastName: "Existing",
+          emailVerified: true,
+        }
+      )
+    ).toThrowError("This email is already linked to a different Apple account.");
+  });
+
   it("rejects a Google sign-in when the email is linked to a different Google profile", async () => {
     const { resolveGoogleAccountUpdates } = await import("./auth.js");
     expect(() =>
