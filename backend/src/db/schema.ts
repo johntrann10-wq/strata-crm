@@ -154,10 +154,13 @@ export const users = pgTable("users", {
   lastName: text("last_name"),
   emailVerified: boolean("email_verified").default(false),
   googleProfileId: text("google_profile_id"),
+  appleSubject: text("apple_subject"),
+  appleEmail: text("apple_email"),
+  appleEmailIsPrivateRelay: boolean("apple_email_is_private_relay").default(false).notNull(),
   authTokenVersion: integer("auth_token_version").default(1).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (t) => [uniqueIndex("users_apple_subject_unique").on(t.appleSubject)]);
 
 export const businesses = pgTable("businesses", {
   id: uuid("id").primaryKey().defaultRandom(),

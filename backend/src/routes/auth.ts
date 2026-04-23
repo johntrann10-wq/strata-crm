@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 import { db } from "../db/index.js";
 import { businessMemberships, businesses, membershipPermissionGrants, users } from "../db/schema.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { BadRequestError, UnauthorizedError } from "../lib/errors.js";
+import { AppError, BadRequestError, UnauthorizedError } from "../lib/errors.js";
+import { verifyAppleIdentityToken } from "../lib/appleAuth.js";
 import { logger } from "../lib/logger.js";
 import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
@@ -31,6 +32,15 @@ const signUpSchema = z.object({
   firstName: z.string().trim().max(80).optional(),
   lastName: z.string().trim().max(80).optional(),
   inviteToken: z.string().min(1).optional(),
+});
+const appleNativeSignInSchema = z.object({
+  identityToken: z.string().min(1, "Apple sign-in did not return an identity token."),
+  authorizationCode: z.string().trim().min(1).optional(),
+  email: z.string().trim().email().max(MAX_EMAIL_LENGTH).optional(),
+  firstName: z.string().trim().max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
+  fullName: z.string().trim().max(160).optional(),
+  isPrivateEmail: z.boolean().optional(),
 });
 const forgotPasswordSchema = z.object({
   email: z.string().email().max(MAX_EMAIL_LENGTH),
@@ -94,6 +104,13 @@ const googleOAuthCallbackLimiter = createRateLimiter({
   message: "Too many Google callback attempts. Please try again shortly.",
 });
 
+const appleNativeSignInLimiter = createRateLimiter({
+  id: "auth_apple_native",
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  message: "Too many Apple sign-in attempts. Please try again shortly.",
+});
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -103,6 +120,15 @@ type GoogleAuthUserSnapshot = {
   firstName?: string | null;
   lastName?: string | null;
   emailVerified?: boolean | null;
+};
+
+type AppleAuthUserSnapshot = {
+  appleSubject?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  emailVerified?: boolean | null;
+  appleEmail?: string | null;
+  appleEmailIsPrivateRelay?: boolean | null;
 };
 
 type GoogleAuthProfile = {
@@ -144,12 +170,93 @@ export function resolveGoogleAccountUpdates(existingUser: GoogleAuthUserSnapshot
   };
 }
 
+type AppleAuthProfile = {
+  appleSubject: string;
+  appleEmail: string | null;
+  appleEmailIsPrivateRelay: boolean;
+  firstName: string | null;
+  lastName: string | null;
+  emailVerified: boolean;
+};
+
+export function resolveAppleAccountUpdates(existingUser: AppleAuthUserSnapshot, profile: AppleAuthProfile) {
+  if (existingUser.appleSubject && existingUser.appleSubject !== profile.appleSubject) {
+    throw new UnauthorizedError("This email is already linked to a different Apple account.");
+  }
+
+  const updates: {
+    appleSubject?: string;
+    appleEmail?: string | null;
+    appleEmailIsPrivateRelay?: boolean;
+    firstName?: string | null;
+    lastName?: string | null;
+    emailVerified?: boolean;
+    updatedAt?: Date;
+  } = {};
+
+  if (!existingUser.appleSubject) {
+    updates.appleSubject = profile.appleSubject;
+  }
+  if (profile.appleEmail && existingUser.appleEmail !== profile.appleEmail) {
+    updates.appleEmail = profile.appleEmail;
+  }
+  if (
+    existingUser.appleEmailIsPrivateRelay == null ||
+    existingUser.appleEmailIsPrivateRelay !== profile.appleEmailIsPrivateRelay
+  ) {
+    updates.appleEmailIsPrivateRelay = profile.appleEmailIsPrivateRelay;
+  }
+  if (!existingUser.firstName && profile.firstName) {
+    updates.firstName = profile.firstName;
+  }
+  if (!existingUser.lastName && profile.lastName) {
+    updates.lastName = profile.lastName;
+  }
+  if (!existingUser.emailVerified && profile.emailVerified) {
+    updates.emailVerified = true;
+  }
+
+  if (Object.keys(updates).length === 0) return null;
+  return {
+    ...updates,
+    updatedAt: new Date(),
+  };
+}
+
+function splitFullName(fullName: string | undefined): { firstName: string | null; lastName: string | null } {
+  if (!fullName) return { firstName: null, lastName: null };
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: null, lastName: null };
+  return {
+    firstName: parts[0] ?? null,
+    lastName: parts.length > 1 ? parts.slice(1).join(" ") : null,
+  };
+}
+
+function resolveAppleNameParts(params: {
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+}): { firstName: string | null; lastName: string | null } {
+  const trimmedFirstName = params.firstName?.trim() || null;
+  const trimmedLastName = params.lastName?.trim() || null;
+  if (trimmedFirstName || trimmedLastName) {
+    return {
+      firstName: trimmedFirstName,
+      lastName: trimmedLastName,
+    };
+  }
+  return splitFullName(params.fullName);
+}
+
 function serializeAuthUser(user: {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
   googleProfileId?: string | null;
+  appleSubject?: string | null;
+  appleEmailIsPrivateRelay?: boolean | null;
   passwordHash?: string | null;
 }) {
   return {
@@ -158,6 +265,8 @@ function serializeAuthUser(user: {
     firstName: user.firstName,
     lastName: user.lastName,
     googleProfileId: user.googleProfileId ?? null,
+    appleSubject: user.appleSubject ?? null,
+    appleEmailIsPrivateRelay: user.appleEmailIsPrivateRelay ?? false,
     hasPassword: Boolean(user.passwordHash),
     googleImageUrl: null,
     profilePicture: null,
@@ -208,6 +317,9 @@ type AuthUserRecord = {
   firstName: string | null;
   lastName: string | null;
   googleProfileId: string | null;
+  appleSubject: string | null;
+  appleEmail: string | null;
+  appleEmailIsPrivateRelay: boolean | null;
   passwordHash: string | null;
   authTokenVersion: number | null;
   emailVerified: boolean | null;
@@ -223,6 +335,12 @@ function mapLegacyUserRow(row: Record<string, unknown>): AuthUserRecord {
     lastName: (row.last_name as string | null | undefined) ?? (row.lastName as string | null | undefined) ?? null,
     googleProfileId:
       (row.google_profile_id as string | null | undefined) ?? (row.googleProfileId as string | null | undefined) ?? null,
+    appleSubject: (row.apple_subject as string | null | undefined) ?? (row.appleSubject as string | null | undefined) ?? null,
+    appleEmail: (row.apple_email as string | null | undefined) ?? (row.appleEmail as string | null | undefined) ?? null,
+    appleEmailIsPrivateRelay:
+      (row.apple_email_is_private_relay as boolean | null | undefined) ??
+      (row.appleEmailIsPrivateRelay as boolean | null | undefined) ??
+      null,
     passwordHash:
       (row.password_hash as string | null | undefined) ?? (row.passwordHash as string | null | undefined) ?? null,
     emailVerified:
@@ -240,6 +358,9 @@ function normalizeAuthUser(user: AuthUserRecord): AuthUserRecord {
     firstName: user.firstName ?? null,
     lastName: user.lastName ?? null,
     googleProfileId: user.googleProfileId ?? null,
+    appleSubject: user.appleSubject ?? null,
+    appleEmail: user.appleEmail ?? null,
+    appleEmailIsPrivateRelay: user.appleEmailIsPrivateRelay ?? false,
     passwordHash: user.passwordHash ?? null,
     authTokenVersion: user.authTokenVersion ?? null,
     emailVerified: user.emailVerified ?? null,
@@ -254,6 +375,9 @@ async function createUserSafe(params: {
   firstName?: string | null;
   lastName?: string | null;
   googleProfileId?: string | null;
+  appleSubject?: string | null;
+  appleEmail?: string | null;
+  appleEmailIsPrivateRelay?: boolean;
   emailVerified?: boolean;
 }): Promise<AuthUserRecord | null> {
   const id = randomUUID();
@@ -267,6 +391,9 @@ async function createUserSafe(params: {
         firstName: params.firstName ?? null,
         lastName: params.lastName ?? null,
         googleProfileId: params.googleProfileId ?? null,
+        appleSubject: params.appleSubject ?? null,
+        appleEmail: params.appleEmail ?? null,
+        appleEmailIsPrivateRelay: params.appleEmailIsPrivateRelay ?? false,
         emailVerified: params.emailVerified ?? false,
       })
       .returning({
@@ -275,6 +402,9 @@ async function createUserSafe(params: {
         firstName: users.firstName,
         lastName: users.lastName,
         googleProfileId: users.googleProfileId,
+        appleSubject: users.appleSubject,
+        appleEmail: users.appleEmail,
+        appleEmailIsPrivateRelay: users.appleEmailIsPrivateRelay,
         passwordHash: users.passwordHash,
         authTokenVersion: users.authTokenVersion,
         emailVerified: users.emailVerified,
@@ -288,6 +418,13 @@ async function createUserSafe(params: {
       email: params.email,
       error: error instanceof Error ? error.message : String(error),
     });
+    if (params.appleSubject || params.appleEmail || params.appleEmailIsPrivateRelay) {
+      throw new AppError(
+        "Sign in with Apple is temporarily unavailable while the latest account schema update is being applied.",
+        503,
+        "APPLE_AUTH_SCHEMA_REQUIRED"
+      );
+    }
     const result = await db.execute(sql`
       INSERT INTO users (
         id,
@@ -321,6 +458,9 @@ async function updateUserReturningSafe(
     firstName?: string | null;
     lastName?: string | null;
     googleProfileId?: string | null;
+    appleSubject?: string | null;
+    appleEmail?: string | null;
+    appleEmailIsPrivateRelay?: boolean;
     emailVerified?: boolean;
     updatedAt: Date;
   }
@@ -333,6 +473,9 @@ async function updateUserReturningSafe(
         firstName: updates.firstName,
         lastName: updates.lastName,
         googleProfileId: updates.googleProfileId,
+        appleSubject: updates.appleSubject,
+        appleEmail: updates.appleEmail,
+        appleEmailIsPrivateRelay: updates.appleEmailIsPrivateRelay,
         emailVerified: updates.emailVerified,
         updatedAt: updates.updatedAt,
       })
@@ -343,6 +486,9 @@ async function updateUserReturningSafe(
         firstName: users.firstName,
         lastName: users.lastName,
         googleProfileId: users.googleProfileId,
+        appleSubject: users.appleSubject,
+        appleEmail: users.appleEmail,
+        appleEmailIsPrivateRelay: users.appleEmailIsPrivateRelay,
         passwordHash: users.passwordHash,
         authTokenVersion: users.authTokenVersion,
         emailVerified: users.emailVerified,
@@ -356,6 +502,13 @@ async function updateUserReturningSafe(
       userId,
       error: error instanceof Error ? error.message : String(error),
     });
+    if (updates.appleSubject || updates.appleEmail || updates.appleEmailIsPrivateRelay != null) {
+      throw new AppError(
+        "Sign in with Apple is temporarily unavailable while the latest account schema update is being applied.",
+        503,
+        "APPLE_AUTH_SCHEMA_REQUIRED"
+      );
+    }
     const result = await db.execute(sql`
       UPDATE users
       SET
@@ -411,6 +564,24 @@ async function loadUserByEmailSafe(email: string): Promise<AuthUserRecord | null
     `);
     const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0];
     return row ? mapLegacyUserRow(row) : null;
+  }
+}
+
+async function loadUserByAppleSubjectSafe(appleSubject: string): Promise<AuthUserRecord | null> {
+  try {
+    const [user] = await db.select().from(users).where(eq(users.appleSubject, appleSubject)).limit(1);
+    return user ? normalizeAuthUser(user as AuthUserRecord) : null;
+  } catch (error) {
+    if (!isUserSchemaDriftError(error)) throw error;
+    logger.warn("Users schema drift detected during Apple subject lookup", {
+      appleSubject,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new AppError(
+      "Sign in with Apple is temporarily unavailable while the latest account schema update is being applied.",
+      503,
+      "APPLE_AUTH_SCHEMA_REQUIRED"
+    );
   }
 }
 
@@ -889,6 +1060,114 @@ authRouter.post(
     const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
     setAuthCookie(res, token, req);
     res.status(201).json({
+      data: {
+        ...serializeAuthUser(user),
+        token,
+      },
+    });
+  })
+);
+authRouter.post(
+  "/apple/native",
+  appleNativeSignInLimiter.middleware,
+  wrapAsync(async (req: Request, res: Response) => {
+    const parsed = appleNativeSignInSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid input");
+    }
+
+    const verifiedApple = await verifyAppleIdentityToken(parsed.data.identityToken);
+    const verifiedEmail = verifiedApple.email ? normalizeEmail(verifiedApple.email) : null;
+    const appleEmailIsPrivateRelay =
+      verifiedApple.isPrivateEmail ||
+      parsed.data.isPrivateEmail === true ||
+      (verifiedEmail?.endsWith("@privaterelay.appleid.com") ?? false);
+    const resolvedNames = resolveAppleNameParts({
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
+      fullName: parsed.data.fullName,
+    });
+    const appleProfile = {
+      appleSubject: verifiedApple.subject,
+      appleEmail: verifiedEmail,
+      appleEmailIsPrivateRelay,
+      firstName: resolvedNames.firstName,
+      lastName: resolvedNames.lastName,
+      emailVerified: verifiedApple.emailVerified || Boolean(verifiedEmail),
+    };
+
+    let user = await loadUserByAppleSubjectSafe(verifiedApple.subject);
+    let created = false;
+
+    if (user) {
+      const accountUpdates = resolveAppleAccountUpdates(user, appleProfile);
+      if (accountUpdates) {
+        const updatedUser = await updateUserReturningSafe(user.id, {
+          appleSubject: accountUpdates.appleSubject,
+          appleEmail: accountUpdates.appleEmail,
+          appleEmailIsPrivateRelay: accountUpdates.appleEmailIsPrivateRelay,
+          firstName: accountUpdates.firstName,
+          lastName: accountUpdates.lastName,
+          emailVerified: accountUpdates.emailVerified,
+          updatedAt: accountUpdates.updatedAt ?? new Date(),
+        });
+        if (updatedUser) user = updatedUser;
+      }
+    } else {
+      if (!verifiedEmail) {
+        throw new BadRequestError(
+          "Apple did not provide an email for this account. If this is your first Apple sign-in, try again and allow email sharing, or use your existing login method first."
+        );
+      }
+
+      const existingByEmail = await loadUserByEmailSafe(verifiedEmail);
+      if (existingByEmail) {
+        const accountUpdates = resolveAppleAccountUpdates(existingByEmail, appleProfile);
+        if (accountUpdates) {
+          const updatedUser = await updateUserReturningSafe(existingByEmail.id, {
+            appleSubject: accountUpdates.appleSubject,
+            appleEmail: accountUpdates.appleEmail,
+            appleEmailIsPrivateRelay: accountUpdates.appleEmailIsPrivateRelay,
+            firstName: accountUpdates.firstName,
+            lastName: accountUpdates.lastName,
+            emailVerified: accountUpdates.emailVerified,
+            updatedAt: accountUpdates.updatedAt ?? new Date(),
+          });
+          user = updatedUser ?? existingByEmail;
+        } else {
+          user = existingByEmail;
+        }
+      } else {
+        user = await createUserSafe({
+          email: verifiedEmail,
+          firstName: resolvedNames.firstName,
+          lastName: resolvedNames.lastName,
+          appleSubject: appleProfile.appleSubject,
+          appleEmail: appleProfile.appleEmail,
+          appleEmailIsPrivateRelay: appleProfile.appleEmailIsPrivateRelay,
+          emailVerified: appleProfile.emailVerified,
+        });
+        created = true;
+      }
+    }
+
+    if (!user) {
+      throw new BadRequestError("We couldn't complete Sign in with Apple. Please try again.");
+    }
+
+    const activatedMemberships = await activateInvitedMemberships(user.id);
+    await sendActivatedMembershipEmails(req, { email: user.email, firstName: user.firstName }, activatedMemberships);
+
+    const token = createAccessToken(user.id, normalizeTokenVersion(user.authTokenVersion));
+    setAuthCookie(res, token, req);
+    logger.info(created ? "User signed up via Apple" : "User signed in via Apple", {
+      userId: user.id,
+      email: user.email,
+      appleSubject: verifiedApple.subject,
+      privateRelay: appleEmailIsPrivateRelay,
+    });
+
+    res.status(created ? 201 : 200).json({
       data: {
         ...serializeAuthUser(user),
         token,
