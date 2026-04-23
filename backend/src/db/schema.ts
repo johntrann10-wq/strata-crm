@@ -158,9 +158,33 @@ export const users = pgTable("users", {
   appleEmail: text("apple_email"),
   appleEmailIsPrivateRelay: boolean("apple_email_is_private_relay").default(false).notNull(),
   authTokenVersion: integer("auth_token_version").default(1).notNull(),
+  accountDeletionRequestedAt: timestamp("account_deletion_requested_at", { withTimezone: true }),
+  accountDeletionRequestNote: text("account_deletion_request_note"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [uniqueIndex("users_apple_subject_unique").on(t.appleSubject)]);
+
+export const accountDeletionAudits = pgTable(
+  "account_deletion_audits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    deletedUserId: uuid("deleted_user_id").notNull(),
+    emailHash: text("email_hash").notNull(),
+    emailDomain: text("email_domain"),
+    authProviders: text("auth_providers").default("[]").notNull(),
+    ownedBusinessCount: integer("owned_business_count").default(0).notNull(),
+    businessMembershipCount: integer("business_membership_count").default(0).notNull(),
+    linkedStaffProfileCount: integer("linked_staff_profile_count").default(0).notNull(),
+    retainedDataSummary: text("retained_data_summary").default("[]").notNull(),
+    deletionMode: text("deletion_mode").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("account_deletion_audits_deleted_user_unique").on(t.deletedUserId)]
+);
 
 export const businesses = pgTable("businesses", {
   id: uuid("id").primaryKey().defaultRandom(),
