@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { activityLogs, appointments } from "../db/schema.js";
+import { activityLogs, appointments, clients } from "../db/schema.js";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
@@ -56,14 +56,52 @@ export function serializeActivityLogRecord(row: ActivityLogListRow) {
   };
 }
 
+const MEDIA_URL_MAX_LENGTH = 900_000;
+const MEDIA_DATA_URL_MAX_BYTES = 650 * 1024;
+const MEDIA_DATA_URL_PREFIX = /^data:image\/(?:png|jpe?g|webp);base64,/i;
+
+function estimateDataUrlBytes(value: string): number {
+  const parts = value.split(",", 2);
+  if (parts.length !== 2) return Number.POSITIVE_INFINITY;
+  const base64 = parts[1].replace(/\s+/g, "");
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+function getMediaReferenceError(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return "Media URL is required.";
+
+  if (trimmed.startsWith("data:")) {
+    if (!MEDIA_DATA_URL_PREFIX.test(trimmed)) {
+      return "Uploaded media must be a PNG, JPG, or WebP image.";
+    }
+    if (estimateDataUrlBytes(trimmed) > MEDIA_DATA_URL_MAX_BYTES) {
+      return "Uploaded photo is too large. Keep it under 650 KB after compression.";
+    }
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return null;
+    }
+  } catch {
+    // Fall through to validation error below.
+  }
+
+  return "Media URL must be an https link or an uploaded image.";
+}
+
 const createActivitySchema = z
   .object({
-    entityType: z.enum(["appointment", "job"]),
+    entityType: z.enum(["appointment", "job", "client"]),
     entityId: z.string().uuid(),
     kind: z.enum(["note", "media", "checklist_add", "checklist_toggle"]),
     body: z.string().trim().max(4000).optional(),
     label: z.string().trim().max(160).optional(),
-    url: z.string().trim().url().max(2000).optional(),
+    url: z.string().trim().max(MEDIA_URL_MAX_LENGTH).optional(),
     itemId: z.string().uuid().optional(),
     completed: z.boolean().optional(),
   })
@@ -72,7 +110,8 @@ const createActivitySchema = z
       ctx.addIssue({ code: "custom", message: "Note body is required." });
     }
     if (value.kind === "media") {
-      if (!value.url) ctx.addIssue({ code: "custom", message: "Media URL is required." });
+      const mediaReferenceError = getMediaReferenceError(value.url);
+      if (mediaReferenceError) ctx.addIssue({ code: "custom", message: mediaReferenceError });
       if (!value.label) ctx.addIssue({ code: "custom", message: "Media label is required." });
     }
     if (value.kind === "checklist_add") {
@@ -86,16 +125,30 @@ const createActivitySchema = z
         ctx.addIssue({ code: "custom", message: "Checklist completion state is required." });
       }
     }
+    if (value.entityType === "client" && value.kind !== "note" && value.kind !== "media") {
+      ctx.addIssue({ code: "custom", message: "Client activity only supports notes and media." });
+    }
   });
 
-async function assertEntityExists(req: Request, entityType: "appointment" | "job", entityId: string) {
+async function assertEntityExists(req: Request, entityType: "appointment" | "job" | "client", entityId: string) {
   const bid = businessId(req);
-  const [record] = await db
-    .select({ id: appointments.id })
-    .from(appointments)
-    .where(and(eq(appointments.id, entityId), eq(appointments.businessId, bid)))
-    .limit(1);
-  if (!record) throw new NotFoundError(entityType === "job" ? "Job not found." : "Appointment not found.");
+  const [record] =
+    entityType === "client"
+      ? await db
+          .select({ id: clients.id })
+          .from(clients)
+          .where(and(eq(clients.id, entityId), eq(clients.businessId, bid)))
+          .limit(1)
+      : await db
+          .select({ id: appointments.id })
+          .from(appointments)
+          .where(and(eq(appointments.id, entityId), eq(appointments.businessId, bid)))
+          .limit(1);
+  if (!record) {
+    throw new NotFoundError(
+      entityType === "job" ? "Job not found." : entityType === "client" ? "Client not found." : "Appointment not found."
+    );
+  }
 }
 
 function assertRequestPermission(req: Request, permission: PermissionKey) {
@@ -152,6 +205,8 @@ activityLogsRouter.post(
 
     if (parsed.data.entityType === "job") {
       assertRequestPermission(req, "jobs.write");
+    } else if (parsed.data.entityType === "client") {
+      assertRequestPermission(req, "customers.write");
     } else {
       assertRequestPermission(req, "appointments.write");
     }
