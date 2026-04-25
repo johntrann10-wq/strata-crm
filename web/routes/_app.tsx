@@ -781,6 +781,18 @@ const SidebarNav = memo(function SidebarNav({
               New appointment
             </Link>
           </Button>
+          {!nativeShellSession ? (
+            <Button
+              asChild
+              variant="outline"
+              className="w-full justify-start border-orange-300/30 bg-orange-400/14 text-orange-50 hover:bg-orange-400/22 hover:text-white"
+            >
+              <Link to="/billing" onClick={handleItemClick}>
+                <CreditCard className="h-4 w-4" />
+                Billing & subscription
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -860,7 +872,7 @@ const SidebarNav = memo(function SidebarNav({
       {((tenantBusinesses?.length ?? 0) > 1 || (locationRecords?.length ?? 0) > 1 || membershipRole) && (
         <div className="border-t border-white/8 px-4 py-4">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
-            Workspace
+            Business context
           </div>
           <div className="space-y-3">
             {(tenantBusinesses?.length ?? 0) > 1 && onBusinessChange ? (
@@ -1277,10 +1289,10 @@ function AppLayoutInner({
                     {showKeyboardShortcutHints ? <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span> : null}
                   </Button>
                   {!nativeShellSession ? (
-                    <Button asChild variant="outline" className="justify-start sm:w-auto">
+                    <Button asChild variant="outline" className="justify-start border-orange-200 bg-orange-50/80 text-orange-950 hover:bg-orange-100 sm:w-auto">
                       <Link to="/billing">
                         <CreditCard className="h-4 w-4" />
-                        {getBillingNavigationCopy(billingStatus).action}
+                        Billing & subscription
                       </Link>
                     </Button>
                   ) : null}

@@ -1322,7 +1322,7 @@ export default function CalendarPage() {
       }, 0),
     [selectedMonthAppointments, selectedMonthRange]
   );
-  const desktopMonthHeightClassName = "sm:h-[31rem] lg:h-[34rem] xl:h-[clamp(35rem,56dvh,42rem)]";
+  const desktopMonthHeightClassName = "sm:h-[33rem] lg:h-[clamp(36rem,58dvh,46rem)] xl:h-[clamp(38rem,62dvh,50rem)]";
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
     for (const appointment of selectedMonthAppointments) {
@@ -1690,7 +1690,7 @@ export default function CalendarPage() {
           <div
             className={cn(
               "min-h-0 flex-1 gap-3",
-              isMobileLayout ? "flex flex-col overflow-visible" : "grid overflow-hidden lg:grid-cols-[minmax(0,1fr)_24rem]"
+              isMobileLayout ? "flex flex-col overflow-visible" : "grid overflow-hidden lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_25rem]"
             )}
           >
             <div
@@ -1750,7 +1750,7 @@ export default function CalendarPage() {
                   (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
                 )}
               >
-                <div className="h-[23rem] overflow-hidden xl:h-[clamp(24rem,46dvh,34rem)]">
+                <div className="h-[clamp(36rem,calc(100dvh-15rem),58rem)] overflow-hidden">
                   <WeekView
                     currentDate={currentDate}
                     appointments={appointments}
