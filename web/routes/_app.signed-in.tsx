@@ -17,7 +17,6 @@ import {
   HomeUpcomingAttentionPanel,
   HomeWeeklyAppointmentOverviewCard,
 } from "@/components/dashboard/HomeDashboardOverview";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
@@ -248,6 +247,11 @@ export default function DashboardHomeRoute() {
     return formatDistanceToNowStrict(new Date(snapshot.generatedAt), { addSuffix: true });
   }, [snapshot?.generatedAt]);
   const featureEnabled = snapshot?.featureFlags.homeDashboardV2 ?? true;
+  const stableDashboardModePill = featureEnabled ? null : (
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+      Stable dashboard mode
+    </span>
+  );
 
   const pageError = error as Error | null;
   const safePageError = pageError ? new Error("Dashboard data is temporarily unavailable.") : null;
@@ -301,7 +305,7 @@ export default function DashboardHomeRoute() {
             </Link>
           </Button>
         }
-        secondaryAction={featureEnabled ? null : <Badge variant="outline" className="rounded-full bg-slate-50 px-3 py-2 text-xs text-slate-600">Stable dashboard mode</Badge>}
+        secondaryAction={stableDashboardModePill}
       />
 
       {staleSnapshotWarning ? (
