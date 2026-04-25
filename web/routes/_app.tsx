@@ -22,6 +22,7 @@ import {
   CalendarCheck2,
   Users,
   ClipboardList,
+  CreditCard,
   FileText,
   Receipt,
   Wrench,
@@ -188,6 +189,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
       { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", permission: "quotes.read", description: "Turn estimates into approved work faster." },
       { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", permission: "invoices.read", description: "Stay on top of collections, sends, and cash flow." },
       { icon: Receipt, label: "Finances", href: "/finances", end: false, permission: "payments.read", description: "Track revenue, expenses, and the health of the money flow." },
+      { icon: CreditCard, label: "Billing", href: "/billing", end: false, permission: "settings.read", description: "Manage the Strata subscription, payment method, and billing recovery." },
     ],
   },
   {
@@ -1509,6 +1511,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   );
   const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
   const allowWithoutSubscription =
+    location.pathname === "/billing" ||
+    location.pathname.startsWith("/billing/") ||
     location.pathname === "/subscribe" ||
     location.pathname.startsWith("/subscribe/") ||
     location.pathname === "/settings" ||

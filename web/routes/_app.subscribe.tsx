@@ -46,14 +46,6 @@ export default function SubscribePage() {
         const status = await api.billing.getStatus();
         if (cancelled) return;
         setBillingStatus(status);
-        if (
-          status &&
-          (hasFullBillingAccess(status.accessState) ||
-            (status.accessState == null && (status.status === "active" || status.status === "trialing")))
-        ) {
-          navigate("/signed-in", { replace: true });
-          return;
-        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Could not verify billing status.");
@@ -184,10 +176,10 @@ export default function SubscribePage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-primary" />
-            <CardTitle>Billing access</CardTitle>
+            <CardTitle>Billing &amp; subscription</CardTitle>
           </div>
           <CardDescription>
-            Keep the workspace available without interrupting setup. Billing actions live here when Stripe needs attention.
+            Manage the Strata subscription, payment method, and billing recovery from one direct web app path.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -213,6 +205,11 @@ export default function SubscribePage() {
                 {daysLeft == null
                   ? "Your 30-day Strata trial is active."
                   : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your 30-day trial.`}
+              </p>
+            ) : null}
+            {hasFullBillingAccess(billingStatus?.accessState) ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your workspace has full billing access. Use this page whenever you need to manage the subscription or payment method.
               </p>
             ) : null}
           </div>
