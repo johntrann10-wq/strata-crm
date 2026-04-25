@@ -240,8 +240,9 @@ export function WeekView({
         </div>
       </div>
 
-      <div className="hidden min-h-0 flex-1 overflow-x-auto overscroll-x-contain lg:block">
-        <div className="flex h-full min-w-[46rem] flex-col lg:min-w-0">
+      <div className="hidden min-h-0 flex-1 lg:flex lg:flex-col">
+        <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain">
+          <div className="flex h-full min-w-[52rem] flex-col lg:min-w-0">
       <div className="sticky top-0 z-10 grid grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm">
         <div className="border-r border-border/60 px-3 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Hours</p>
@@ -331,8 +332,6 @@ export function WeekView({
           </div>
         </div>
       ) : null}
-
-      <StaffWorkloadBar appointments={appointments} />
 
       <div id="week-scroll-container" className="app-native-scroll flex-1 overflow-y-auto">
         <div
@@ -470,6 +469,10 @@ export function WeekView({
           })}
         </div>
       </div>
+          </div>
+        </div>
+        <div className="shrink-0 border-t border-border/70 bg-muted/10">
+          <StaffWorkloadBar appointments={appointments} />
         </div>
       </div>
     </div>

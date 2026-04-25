@@ -1739,22 +1739,23 @@ export default function CalendarPage() {
           <div
             className={cn(
               "min-h-0 flex-1 gap-3",
-              isMobileLayout ? "flex flex-col overflow-visible" : "grid overflow-hidden lg:grid-cols-[minmax(0,1fr)_24rem]"
+              isMobileLayout ? "flex flex-col overflow-visible" : "flex flex-col overflow-visible"
             )}
           >
             <div
               className={cn(
                 "flex min-h-0 flex-col gap-3 overflow-hidden",
-                isMobileLayout && "h-[clamp(20rem,44dvh,23rem)] shrink-0"
+                isMobileLayout ? "shrink-0 overflow-visible" : "shrink-0"
               )}
             >
               <div
                 className={cn(
-                  "surface-panel h-full min-h-0 overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
+                  "surface-panel rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
+                  isMobileLayout ? "overflow-visible" : "h-full min-h-0 overflow-hidden",
                   (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
                 )}
               >
-                <div className={cn("overflow-hidden", isMobileLayout ? "h-full min-h-0" : desktopMonthHeightClassName)}>
+                <div className={cn(isMobileLayout ? "overflow-visible" : `overflow-hidden ${desktopMonthHeightClassName}`)}>
                   <MonthView
                     currentDate={visibleMonthDate}
                     selectedDate={selectedDate}
@@ -1777,7 +1778,7 @@ export default function CalendarPage() {
                 "min-h-0",
                 isMobileLayout
                   ? "surface-panel overflow-visible rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3"
-                  : "flex h-full min-h-[24rem] overflow-hidden lg:min-h-0"
+                  : "surface-panel flex min-h-[20rem] overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3"
               )}
             >
               {isMobileLayout ? dayInspectorPanel : <div className="flex min-h-0 flex-1">{dayInspectorPanel}</div>}
@@ -1799,7 +1800,7 @@ export default function CalendarPage() {
                   (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
                 )}
               >
-                <div className="h-[23rem] overflow-hidden xl:h-[clamp(24rem,46dvh,34rem)]">
+                <div className="h-[32rem] overflow-hidden xl:h-[clamp(34rem,62dvh,46rem)]">
                   <WeekView
                     currentDate={currentDate}
                     appointments={appointments}
