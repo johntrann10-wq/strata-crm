@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { isCalendarBlockAppointment } from "@/lib/calendarBlocks";
 import {
   getMultiDayDayKind,
   getMultiDayDayLabel,
@@ -538,7 +539,15 @@ function MobileWeekIndicators({
     <span className="mt-2 flex h-5 items-center justify-center gap-0.5" aria-label={`${uniqueAppointments.length} calendar items`}>
       {uniqueAppointments.map((appointment) => {
         const status = getStatusStyle(appointment.status);
-        return <span key={appointment.id} className={cn("block h-1.5 w-1.5 rounded-full", status.accent)} />;
+        return (
+          <span
+            key={appointment.id}
+            className={cn(
+              "block h-1.5 w-1.5 rounded-full",
+              isCalendarBlockAppointment(appointment) ? "bg-slate-500" : status.accent
+            )}
+          />
+        );
       })}
     </span>
   );
