@@ -70,7 +70,7 @@ export function QuickCreateMenu() {
           <CalendarPlus className="text-orange-500" />
           New appointment
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => go("/leads")}>
+        <DropdownMenuItem onSelect={() => go("/leads?compose=1")}>
           <PhoneCall className="text-blue-500" />
           New lead
         </DropdownMenuItem>

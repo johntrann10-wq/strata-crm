@@ -37,6 +37,7 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { EmptyState } from "../components/shared/EmptyState";
 import { triggerImpactFeedback } from "@/lib/nativeInteractions";
+import { getDateSearchAliases, smartSearchMatches } from "@/lib/smartSearch";
 import {
   buildLeadNotes,
   formatLeadSource,
@@ -182,7 +183,12 @@ function buildLeadSearchText(client: any, lead: ReturnType<typeof parseLeadRecor
     lead.summary,
     lead.vehicle,
     lead.source,
+    formatLeadSource(lead.source),
     lead.status,
+    formatLeadStatus(lead.status),
+    ...getDateSearchAliases(client.createdAt),
+    ...getDateSearchAliases(client.updatedAt),
+    ...getDateSearchAliases(lead.firstContactedAt),
   ]
     .filter(Boolean)
     .join(" ")
@@ -212,7 +218,7 @@ function filterLeadEntries(
     if (statusFilter === "active" && !ACTIVE_STATUSES.includes(entry.lead.status)) return false;
     if (statusFilter !== "active" && statusFilter !== "all" && entry.lead.status !== statusFilter) return false;
     if (sourceFilter !== "all" && entry.lead.source !== sourceFilter) return false;
-    if (query && !entry.searchableText.includes(query)) return false;
+    if (query && !smartSearchMatches([entry.searchableText], query)) return false;
     return true;
   });
 }
@@ -384,6 +390,8 @@ export default function LeadsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const submitModeRef = useRef<SubmitMode>("lead");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const leadRouteIntent = searchParams.toString();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -393,6 +401,19 @@ export default function LeadsPage() {
     media.addEventListener?.("change", sync);
     return () => media.removeEventListener?.("change", sync);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(leadRouteIntent);
+    const query = params.get("q");
+    if (query !== null) setSearchQuery(query);
+    if (params.get("compose") === "1" || params.get("new") === "1") {
+      setShowLeadComposer(true);
+    }
+    if (params.get("focus") !== "search") return;
+    const timer = window.setTimeout(() => searchInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(timer);
+  }, [leadRouteIntent]);
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
     select: { id: true, name: true, automationUncontactedLeadHours: true },
@@ -1036,7 +1057,13 @@ export default function LeadsPage() {
                 <div className="grid gap-3 rounded-[1.15rem] border border-border/70 bg-background/80 p-3.5">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead name, ask, contact, source, or vehicle" className="pl-9" />
+                    <Input
+                      ref={searchInputRef}
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search name, status, source, vehicle, date, or ask"
+                      className="pl-9"
+                    />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {isMobileLayout ? (

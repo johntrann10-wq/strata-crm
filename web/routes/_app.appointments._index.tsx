@@ -30,6 +30,7 @@ import {
 import { isCalendarBlockAppointment } from "@/lib/calendarBlocks";
 import { cn } from "@/lib/utils";
 import { triggerImpactFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
+import { getDateSearchAliases, smartSearchMatches } from "@/lib/smartSearch";
 
 type StaffRecord = {
   id: string;
@@ -146,6 +147,29 @@ function getAppointmentLabel(appointment: AppointmentRecord): string {
   if (clientName) return clientName;
   if (isCalendarBlockAppointment(appointment)) return "Blocked time";
   return "Internal block";
+}
+
+function getAppointmentSearchParts(appointment: AppointmentRecord): unknown[] {
+  const status = String(appointment.status ?? "").replace(/[_-]/g, " ");
+  const phase = getJobPhaseLabel(appointment.jobPhase);
+  return [
+    getAppointmentLabel(appointment),
+    getClientName(appointment),
+    appointment.client?.phone,
+    appointment.client?.email,
+    getVehicleLabel(appointment),
+    getTechName(appointment),
+    appointment.location?.name,
+    status,
+    phase,
+    appointment.notes,
+    appointment.internalNotes,
+    ...getDateSearchAliases(appointment.startTime),
+    ...getDateSearchAliases(appointment.endTime),
+    ...getDateSearchAliases(appointment.jobStartTime),
+    ...getDateSearchAliases(appointment.expectedCompletionTime),
+    ...getDateSearchAliases(appointment.pickupReadyTime),
+  ];
 }
 
 function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null {
@@ -394,6 +418,7 @@ export default function AppointmentsPage() {
   const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
   const [activeFilter, setActiveFilter] = useState<ScheduleFilter>("all");
   const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
@@ -402,6 +427,16 @@ export default function AppointmentsPage() {
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
   }, [currentLocationId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(location.search);
+    const query = params.get("q");
+    if (query !== null) setSearch(query);
+    if (params.get("focus") !== "search") return;
+    const timer = window.setTimeout(() => searchInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(timer);
+  }, [location.search]);
 
   const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn: 0 }), [currentDate]);
   const weekEnd = useMemo(() => endOfWeek(currentDate, { weekStartsOn: 0 }), [currentDate]);
@@ -466,24 +501,14 @@ export default function AppointmentsPage() {
   const records = useMemo(() => ((appointmentsData ?? []) as AppointmentRecord[]).filter(isOperationalAppointment), [appointmentsData]);
   const staffRecords = useMemo(() => ((staffRaw ?? []) as StaffRecord[]).filter(Boolean), [staffRaw]);
   const locationRecords = useMemo(() => ((locationsRaw ?? []) as LocationRecord[]).filter(Boolean), [locationsRaw]);
-  const searchTerm = search.trim().toLowerCase();
+  const searchTerm = search.trim();
 
   const filteredRecords = useMemo(() => {
     return records.filter((appointment) => {
       if (activeTechFilter !== "all" && appointment.assignedStaffId !== activeTechFilter) return false;
       if (!searchTerm) return true;
 
-      const haystack = [
-        getAppointmentLabel(appointment),
-        getClientName(appointment),
-        getVehicleLabel(appointment),
-        getTechName(appointment),
-        appointment.location?.name ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(searchTerm);
+      return smartSearchMatches(getAppointmentSearchParts(appointment), searchTerm);
     });
   }, [activeTechFilter, records, searchTerm]);
 
@@ -608,9 +633,10 @@ export default function AppointmentsPage() {
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                ref={searchInputRef}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Find a client, vehicle, job, or tech"
+                placeholder="Search name, time, vehicle, status, or tech"
                 className="h-9 rounded-lg pl-9 sm:h-10 sm:rounded-xl"
               />
             </div>

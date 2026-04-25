@@ -24,7 +24,9 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { useCommandPalette } from "@/components/shared/CommandPaletteContext";
 import { cn } from "@/lib/utils";
+import { triggerSelectionFeedback } from "@/lib/nativeInteractions";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
 import { formatDashboardCompactCurrency, formatDashboardCurrency } from "@/lib/homeDashboard";
 
@@ -71,9 +73,125 @@ function formatDashboardAxisCurrency(value: number) {
 }
 
 const DASHBOARD_SHORTCUTS_STORAGE_KEY = "strata.dashboard.shortcuts.v1";
-const DASHBOARD_SHORTCUT_KEYS = ["new_appointment", "new_quote", "new_invoice", "add_client"] as const;
+const DEFAULT_DASHBOARD_SHORTCUT_KEYS = ["new_appointment", "global_search", "search_appointments", "add_lead"] as const;
 
-type DashboardShortcutAction = HomeDashboardSnapshot["quickActions"][number];
+type DashboardShortcutAction = Omit<HomeDashboardSnapshot["quickActions"][number], "key" | "permission"> & {
+  key: string;
+  permission: string;
+  behavior?: "link" | "command";
+};
+
+type DashboardStaticShortcut = DashboardShortcutAction & {
+  isAvailable: (snapshot: HomeDashboardSnapshot | null | undefined, backendActions: DashboardShortcutAction[]) => boolean;
+};
+
+const DASHBOARD_STATIC_SHORTCUTS: DashboardStaticShortcut[] = [
+  {
+    key: "global_search",
+    label: "Search all",
+    description: "Open the command palette for clients, jobs, appointments, vehicles, quotes, and invoices.",
+    url: "#",
+    permission: "dashboard.read",
+    behavior: "command",
+    isAvailable: (snapshot) => Boolean(snapshot),
+  },
+  {
+    key: "search_appointments",
+    label: "Search appointments",
+    description: "Jump to schedule search for client names, times, vehicles, statuses, and techs.",
+    url: "/appointments?focus=search",
+    permission: "appointments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "search_leads",
+    label: "Search leads",
+    description: "Open the lead queue with search focused for status, source, vehicle, and customer lookups.",
+    url: "/leads?focus=search",
+    permission: "customers.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.clientVisibility || snapshot?.modulePermissions.pipeline || snapshot?.modulePermissions.conversion),
+  },
+  {
+    key: "add_lead",
+    label: "Add lead",
+    description: "Open the lead intake form without hunting through the lead queue.",
+    url: "/leads?compose=1",
+    permission: "customers.write",
+    isAvailable: (_snapshot, backendActions) => backendActions.some((action) => action.key === "add_client"),
+  },
+  {
+    key: "calendar_week",
+    label: "Week calendar",
+    description: "Open the calendar directly in the mobile-friendly week view.",
+    url: "/calendar?view=week",
+    permission: "appointments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "booking_requests",
+    label: "Booking requests",
+    description: "Review inbound booking requests and customer replies.",
+    url: "/appointments/requests",
+    permission: "appointments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "clients",
+    label: "Clients",
+    description: "Open customer records and contact history.",
+    url: "/clients",
+    permission: "customers.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.clientVisibility),
+  },
+  {
+    key: "vehicles",
+    label: "Vehicles",
+    description: "Jump to the vehicle list for VIN, plate, and service history lookups.",
+    url: "/vehicles",
+    permission: "vehicles.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.vehicleVisibility),
+  },
+  {
+    key: "jobs",
+    label: "Jobs",
+    description: "Open active job workflow and status tracking.",
+    url: "/jobs",
+    permission: "jobs.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "quotes",
+    label: "Quotes",
+    description: "Review estimates and approvals.",
+    url: "/quotes",
+    permission: "quotes.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.quoteVisibility),
+  },
+  {
+    key: "invoices",
+    label: "Invoices",
+    description: "Review invoice status, balances, and sends.",
+    url: "/invoices",
+    permission: "invoices.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.invoiceVisibility),
+  },
+  {
+    key: "finances",
+    label: "Finances",
+    description: "Open cash, payment, and collection visibility.",
+    url: "/finances",
+    permission: "payments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.paymentVisibility || snapshot?.modulePermissions.revenueCollections || snapshot?.modulePermissions.cash),
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    description: "Open workspace, team, and account settings.",
+    url: "/settings",
+    permission: "settings.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.settingsVisibility),
+  },
+];
 
 function loadStoredDashboardShortcuts(): string[] | null {
   if (typeof window === "undefined") return null;
@@ -86,6 +204,31 @@ function loadStoredDashboardShortcuts(): string[] | null {
   } catch {
     return null;
   }
+}
+
+function getAvailableDashboardShortcuts(snapshot: HomeDashboardSnapshot | null | undefined): DashboardShortcutAction[] {
+  const backendActions = ((snapshot?.quickActions ?? []) as DashboardShortcutAction[]).map((action) => ({
+    ...action,
+    behavior: "link" as const,
+  }));
+  const shortcuts = [...backendActions];
+
+  DASHBOARD_STATIC_SHORTCUTS.forEach((shortcut) => {
+    if (!shortcut.isAvailable(snapshot, backendActions)) return;
+    if (shortcuts.some((action) => action.key === shortcut.key)) return;
+    const { isAvailable: _isAvailable, ...action } = shortcut;
+    shortcuts.push(action);
+  });
+
+  return shortcuts;
+}
+
+function getDefaultDashboardShortcuts(availableActions: DashboardShortcutAction[]): DashboardShortcutAction[] {
+  const availableByKey = new Map(availableActions.map((action) => [action.key, action]));
+  const defaults = DEFAULT_DASHBOARD_SHORTCUT_KEYS
+    .map((key) => availableByKey.get(key))
+    .filter((action): action is DashboardShortcutAction => Boolean(action));
+  return defaults.length > 0 ? defaults : availableActions.slice(0, 4);
 }
 
 function WidgetErrorState({ title, error, onRetry }: { title: string; error?: Error | null; onRetry?: () => void }) {
@@ -1287,19 +1430,18 @@ export function HomeCompactQuickActions({
   error,
   onRetry,
 }: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
   const [customizing, setCustomizing] = useState(false);
   const [selectedShortcutKeys, setSelectedShortcutKeys] = useState<string[] | null>(() => loadStoredDashboardShortcuts());
-  const availableActions = useMemo(() => {
-    const allowedKeys = new Set<string>(DASHBOARD_SHORTCUT_KEYS);
-    return (snapshot?.quickActions ?? []).filter((action) => allowedKeys.has(action.key));
-  }, [snapshot?.quickActions]);
+  const availableActions = useMemo(() => getAvailableDashboardShortcuts(snapshot), [snapshot]);
+  const defaultActions = useMemo(() => getDefaultDashboardShortcuts(availableActions), [availableActions]);
   const visibleActions = useMemo(() => {
-    if (!selectedShortcutKeys) return availableActions;
+    if (!selectedShortcutKeys) return defaultActions;
     const availableByKey = new Map(availableActions.map((action) => [action.key, action]));
     return selectedShortcutKeys
       .map((key) => availableByKey.get(key))
       .filter((action): action is DashboardShortcutAction => Boolean(action));
-  }, [availableActions, selectedShortcutKeys]);
+  }, [availableActions, defaultActions, selectedShortcutKeys]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !selectedShortcutKeys) return;
@@ -1335,13 +1477,13 @@ export function HomeCompactQuickActions({
           <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/82 p-3">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {availableActions.map((action) => {
-                const activeKeys = selectedShortcutKeys ?? availableActions.map((item) => item.key);
+                const activeKeys = selectedShortcutKeys ?? defaultActions.map((item) => item.key);
                 const checked = activeKeys.includes(action.key);
                 return (
                   <label
                     key={action.key}
                     className={cn(
-                      "flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors",
+                      "flex min-h-[58px] cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
                       checked
                         ? "border-slate-300 bg-slate-950 text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -1351,7 +1493,7 @@ export function HomeCompactQuickActions({
                       type="checkbox"
                       checked={checked}
                       onChange={(event) => {
-                        const current = selectedShortcutKeys ?? availableActions.map((item) => item.key);
+                        const current = selectedShortcutKeys ?? defaultActions.map((item) => item.key);
                         if (event.target.checked) {
                           setSelectedShortcutKeys([...current.filter((key) => key !== action.key), action.key]);
                         } else {
@@ -1360,7 +1502,12 @@ export function HomeCompactQuickActions({
                       }}
                       className="h-4 w-4 accent-slate-950"
                     />
-                    <span>{action.label}</span>
+                    <span className="min-w-0">
+                      <span className="block font-semibold leading-tight">{action.label}</span>
+                      <span className={cn("mt-1 block text-[11px] font-medium leading-snug", checked ? "text-white/72" : "text-slate-500")}>
+                        {action.description}
+                      </span>
+                    </span>
                   </label>
                 );
               })}
@@ -1386,21 +1533,43 @@ export function HomeCompactQuickActions({
 
         <div className="grid gap-2 sm:flex sm:flex-wrap">
           {visibleActions.length > 0 ? (
-            visibleActions.map((action) => (
-              <Button
-                key={action.key}
-                asChild
-                variant={action.key === "new_appointment" ? "default" : "outline"}
-                className={cn(
-                  "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
-                  action.key === "new_appointment"
-                    ? "bg-slate-950 text-white hover:bg-slate-800"
-                    : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                <Link to={action.url}>{action.label}</Link>
-              </Button>
-            ))
+            visibleActions.map((action) => {
+              const primary = action.key === "new_appointment";
+              const className = cn(
+                "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
+                primary
+                  ? "bg-slate-950 text-white hover:bg-slate-800"
+                  : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50"
+              );
+
+              if (action.behavior === "command") {
+                return (
+                  <Button
+                    key={action.key}
+                    type="button"
+                    variant="outline"
+                    className={className}
+                    onClick={() => {
+                      void triggerSelectionFeedback();
+                      setCommandPaletteOpen(true);
+                    }}
+                  >
+                    {action.label}
+                  </Button>
+                );
+              }
+
+              return (
+                <Button
+                  key={action.key}
+                  asChild
+                  variant={primary ? "default" : "outline"}
+                  className={className}
+                >
+                  <Link to={action.url}>{action.label}</Link>
+                </Button>
+              );
+            })
           ) : (
             <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/72 px-3 py-3 text-sm text-slate-500">
               No shortcuts selected.
