@@ -185,9 +185,12 @@ body,
 
   .mobile-gallery-scroll {
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-    scroll-behavior: smooth;
+    backface-visibility: hidden;
+    contain: layout paint;
+    overscroll-behavior: contain;
+    scroll-behavior: auto;
     scrollbar-width: none;
+    transform: translateZ(0);
   }
 
   .mobile-gallery-scroll::-webkit-scrollbar {

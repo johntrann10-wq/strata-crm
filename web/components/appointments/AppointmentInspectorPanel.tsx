@@ -63,7 +63,7 @@ export type AppointmentInspectorRecord = {
   notes?: string | null;
   internalNotes?: string | null;
   location?: { name?: string | null } | null;
-  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null; phone?: string | null; email?: string | null } | null;
   vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
   assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
 };
@@ -156,6 +156,10 @@ function getStageLabel(appointment: AppointmentInspectorRecord): string {
 
 function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
   return LIFECYCLE_STATUS_LABELS[String(appointment.status ?? "")] ?? "Scheduled";
+}
+
+function getContactInsight(appointment: AppointmentInspectorRecord): string {
+  return appointment.client?.phone?.trim() || appointment.client?.email?.trim() || "No contact saved";
 }
 
 function getPaymentSummary(
@@ -797,12 +801,47 @@ export function AppointmentInspectorPanel({
           </div>
         ) : null}
 
-        <div className="grid gap-3 text-sm">
+        {minimalChrome ? (
+          <div className="relative overflow-hidden rounded-[1.65rem] border border-white/80 bg-[radial-gradient(circle_at_18%_0%,rgba(251,146,60,0.22),transparent_38%),linear-gradient(145deg,rgba(255,255,255,0.97),rgba(248,250,252,0.9))] p-4 shadow-[0_18px_42px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.82)] backdrop-blur-xl">
+            <div className="pointer-events-none absolute -right-10 -top-16 h-32 w-32 rounded-full bg-slate-950/10 blur-2xl" />
+            <div className="relative space-y-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">Appointment</p>
+                  <h3 className="mt-1 line-clamp-2 text-[1.05rem] font-semibold leading-6 tracking-[-0.03em] text-slate-950">
+                    {getAppointmentLabel(appointment)}
+                  </h3>
+                </div>
+                <span className="shrink-0 rounded-full border border-slate-200/80 bg-white/84 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 shadow-sm">
+                  {lifecycleLabel}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <MobileInsightTile icon={Clock3} label="Time" value={getTimingLabel(appointment)} />
+                <MobileInsightTile icon={CircleDollarSign} label={moneyStateLabel} value={getAmountLabel(appointment)} strong={totalAmount > 0} />
+                <MobileInsightTile icon={User} label="Client" value={getClientName(appointment)} />
+                <MobileInsightTile icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2 text-xs font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Stage</span>
+                  <span className="mt-1 block truncate text-slate-800">{getStageLabel(appointment)}</span>
+                </span>
+                <span className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2 text-xs font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Contact</span>
+                  <span className="mt-1 block truncate text-slate-800">{getContactInsight(appointment)}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={cn("grid gap-3 text-sm", minimalChrome && "grid-cols-2 gap-2.5")}>
           <div
             className={cn(
               "rounded-xl border border-border/60 bg-background/70 px-3 py-3",
               minimalChrome &&
-                "rounded-[1.35rem] border-white/75 bg-white/92 px-3.5 py-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-xl"
+                "col-span-2 rounded-[1.35rem] border-white/75 bg-white/92 px-3.5 py-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-xl"
             )}
           >
             <div className="flex items-start justify-between gap-3">
@@ -1538,6 +1577,28 @@ function MoneyTile({ label, value, polished = false }: { label: string; value: s
   );
 }
 
+function MobileInsightTile({
+  icon: Icon,
+  label,
+  value,
+  strong = false,
+}: {
+  icon: typeof Clock3;
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-white/70 bg-white/78 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <p className={cn("mt-1 line-clamp-2 text-sm leading-5 text-slate-800", strong && "font-semibold text-slate-950")}>{value}</p>
+    </div>
+  );
+}
+
 function MoneyBreakdownRow({
   label,
   value,
@@ -1573,10 +1634,10 @@ function InspectorRow({
       className={cn(
         "flex items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5",
         polished &&
-          "rounded-[1.15rem] border-white/72 bg-white/86 px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl"
+          "min-w-0 flex-col gap-2 rounded-[1.15rem] border-white/72 bg-white/86 px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl"
       )}
     >
-      <Icon className={cn("mt-0.5 h-4 w-4 text-muted-foreground", polished && "text-slate-500")} />
+      <Icon className={cn("mt-0.5 h-4 w-4 text-muted-foreground", polished && "mt-0 text-slate-500")} />
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
         <p className={cn("mt-1 line-clamp-2 break-words text-sm text-foreground", strong && "font-semibold")}>{value}</p>

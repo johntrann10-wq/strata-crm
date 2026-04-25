@@ -179,11 +179,22 @@ function useLongPressActions(onOpen: () => void) {
   };
 }
 
-const GALLERY_SWIPE_THRESHOLD_PX = 52;
-const GALLERY_SWIPE_LOCK_PX = 12;
-const GALLERY_FLICK_THRESHOLD_PX = 28;
-const GALLERY_FLICK_VELOCITY = 0.42;
-const GALLERY_SETTLE_MS = 210;
+const GALLERY_SWIPE_THRESHOLD_PX = 44;
+const GALLERY_SWIPE_LOCK_PX = 10;
+const GALLERY_FLICK_THRESHOLD_PX = 24;
+const GALLERY_FLICK_VELOCITY = 0.34;
+const GALLERY_SETTLE_MS = 270;
+
+function dampenGalleryOffset(offset: number, width: number, blockedAtEdge: boolean): number {
+  if (blockedAtEdge) {
+    return offset * 0.24;
+  }
+  const maxTravel = Math.max(width * 0.92, 1);
+  const clamped = Math.max(-maxTravel, Math.min(maxTravel, offset));
+  const progress = Math.min(Math.abs(clamped) / maxTravel, 1);
+  const eased = 1 - Math.pow(1 - progress, 0.82);
+  return Math.sign(clamped) * eased * maxTravel;
+}
 
 function MobileAppointmentGallery({
   appointments,
@@ -222,6 +233,9 @@ function MobileAppointmentGallery({
   const currentAppointment = appointments[selectedIndex] ?? null;
   const canGoPrevious = selectedIndex > 0;
   const canGoNext = selectedIndex >= 0 && selectedIndex < appointments.length - 1;
+  const galleryWidth = containerRef.current?.clientWidth ?? 390;
+  const dragProgress = Math.min(Math.abs(dragOffset) / Math.max(galleryWidth, 1), 1);
+  const incomingDirection = dragOffset < 0 ? "next" : dragOffset > 0 ? "previous" : null;
   const slideSlots = [
     { key: "previous", appointment: canGoPrevious ? appointments[selectedIndex - 1] : null },
     { key: "current", appointment: currentAppointment },
@@ -339,8 +353,9 @@ function MobileAppointmentGallery({
       if (gesture.lock !== "horizontal") return;
 
       event.preventDefault();
+      const width = containerRef.current?.clientWidth ?? window.innerWidth;
       const blockedAtEdge = (deltaX > 0 && !canGoPrevious) || (deltaX < 0 && !canGoNext);
-      setDragOffsetOnFrame(blockedAtEdge ? deltaX * 0.28 : deltaX);
+      setDragOffsetOnFrame(dampenGalleryOffset(deltaX, width, blockedAtEdge));
     },
     [canGoNext, canGoPrevious, setDragOffsetOnFrame, settling]
   );
@@ -395,7 +410,7 @@ function MobileAppointmentGallery({
 
   if (appointments.length === 0) {
     return (
-      <div className="h-full overflow-y-auto px-1 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="mobile-gallery-scroll h-full overflow-y-auto px-1 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
         <AppointmentInspectorPanel
           appointment={null}
           emptyTitle="Select an appointment"
@@ -410,11 +425,14 @@ function MobileAppointmentGallery({
   }
 
   return (
-    <div ref={containerRef} className="relative h-full min-h-0 overflow-hidden rounded-[1.8rem]">
+    <div
+      ref={containerRef}
+      className="relative h-full min-h-0 overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_18%_0%,rgba(251,146,60,0.18),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.28),rgba(15,23,42,0.05))]"
+    >
       <button
         type="button"
         onClick={onRequestClose}
-        className="absolute right-3 top-3 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/88 text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-colors hover:text-slate-950"
+        className="absolute right-3.5 top-3.5 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-500 shadow-[0_12px_28px_rgba(15,23,42,0.16)] backdrop-blur-xl transition-colors active:scale-95 hover:text-slate-950"
         aria-label="Close appointment inspector"
       >
         <X className="h-4 w-4" />
@@ -424,31 +442,36 @@ function MobileAppointmentGallery({
           <div
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute bottom-5 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/70 bg-white/82 px-2.5 py-1.5 shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl",
+              "pointer-events-none absolute bottom-4 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/70 bg-white/84 px-3 py-1.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] backdrop-blur-xl",
               dragging && "opacity-90"
             )}
           >
-            {appointments.map((appointment, index) => (
-              <span
-                key={appointment.id}
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-200",
-                  index === selectedIndex ? "w-5 bg-slate-950" : "w-1.5 bg-slate-300"
-                )}
-              />
-            ))}
+            <span className="text-[10px] font-semibold tabular-nums text-slate-500">
+              {selectedIndex + 1}/{appointments.length}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              {appointments.map((appointment, index) => (
+                <span
+                  key={appointment.id}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-300",
+                    index === selectedIndex ? "w-5 bg-slate-950" : "w-1.5 bg-slate-300"
+                  )}
+                />
+              ))}
+            </span>
           </div>
           <div
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-y-8 left-0 z-20 w-12 bg-gradient-to-r from-slate-950/10 to-transparent transition-opacity",
+              "pointer-events-none absolute inset-y-10 left-0 z-20 w-12 bg-gradient-to-r from-slate-950/12 to-transparent transition-opacity",
               canGoPrevious ? "opacity-100" : "opacity-0"
             )}
           />
           <div
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-y-8 right-0 z-20 w-12 bg-gradient-to-l from-slate-950/10 to-transparent transition-opacity",
+              "pointer-events-none absolute inset-y-10 right-0 z-20 w-12 bg-gradient-to-l from-slate-950/12 to-transparent transition-opacity",
               canGoNext ? "opacity-100" : "opacity-0"
             )}
           />
@@ -465,16 +488,26 @@ function MobileAppointmentGallery({
         {slideSlots.map(({ key, appointment }) => (
           <div
             key={`${key}-${appointment?.id ?? "edge"}`}
-            className="mobile-gallery-scroll h-full min-w-full overflow-y-auto overscroll-contain px-2.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3"
+            className="mobile-gallery-scroll h-full min-w-full overflow-y-auto overscroll-contain px-2.5 pb-[max(2.75rem,env(safe-area-inset-bottom))] pt-3"
             style={{ touchAction: "pan-y" }}
             aria-hidden={key !== "current"}
           >
             {appointment ? (
               <div
                 className={cn(
-                  "min-h-full pb-10 transition-[opacity,transform] duration-200",
-                  key === "current" ? "scale-100 opacity-100" : "scale-[0.985] opacity-75"
+                  "min-h-full pb-10 transition-[opacity,transform,filter] duration-300 ease-out",
+                  key === "current" ? "scale-100 opacity-100" : "scale-[0.965] opacity-55"
                 )}
+                style={{
+                  transform:
+                    key === "current"
+                      ? `scale(${1 - dragProgress * 0.018})`
+                      : key === incomingDirection
+                        ? `scale(${0.965 + dragProgress * 0.035})`
+                        : undefined,
+                  opacity: key === "current" ? 1 : key === incomingDirection ? 0.55 + dragProgress * 0.4 : undefined,
+                  filter: key === "current" || key === incomingDirection ? "none" : "saturate(0.92)",
+                }}
               >
                 <AppointmentInspectorPanel
                   appointment={appointment}
