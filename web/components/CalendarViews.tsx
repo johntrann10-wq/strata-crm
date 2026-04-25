@@ -775,7 +775,7 @@ export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
           <p className="text-xs text-muted-foreground">See booked time before reassigning or stacking work.</p>
         </div>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="ios-momentum-x ios-scrollbar-none flex gap-2 overflow-x-auto pb-1">
         {Array.from(staffMap.entries()).map(([id, { name, bookedMinutes, appointmentCount }]) => {
           const utilization = Math.min(bookedMinutes / 480, 1.0);
           const barColor =

@@ -2594,7 +2594,7 @@ export default function SettingsPage() {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-7 sm:overflow-visible">
+          <TabsList className="ios-momentum-x ios-scrollbar-none flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 sm:grid sm:grid-cols-7 sm:overflow-visible">
             <TabsTrigger
               value="profile"
               className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"

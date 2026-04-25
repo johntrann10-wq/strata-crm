@@ -223,7 +223,7 @@ export function DayView({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2.5">
+        <div className="ios-momentum-y flex-1 overflow-y-auto p-2.5">
           {visibleItemCount === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-5 text-center">
               <CalendarIcon className="h-10 w-10 text-muted-foreground" />
@@ -401,7 +401,7 @@ export function DayView({
         ) : null}
       </div>
 
-      <div id="day-scroll-container" className="flex-1 overflow-y-auto">
+      <div id="day-scroll-container" className="ios-momentum-y flex-1 overflow-y-auto">
         {onSiteOnlyJobs.length > 0 ? (
           <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
             <DaySection title="In Shop Today" count={onSiteOnlyJobs.length}>

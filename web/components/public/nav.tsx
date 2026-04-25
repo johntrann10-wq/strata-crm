@@ -77,7 +77,7 @@ const MobileNav = () => {
     <div className="md:hidden">
       <NavDrawer>
         {({ close }) => (
-          <nav className="flex max-h-[calc(100svh-4.5rem)] flex-col gap-3 overflow-y-auto px-4 pt-14 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <nav className="ios-momentum-y flex max-h-[calc(100svh-4.5rem)] flex-col gap-3 overflow-y-auto px-4 pt-14 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             {navigationItems.map((item) =>
               item.type === "section" ? (
                 <div key={item.title} className="rounded-2xl border border-border/70 bg-card/96 p-4 shadow-sm">
@@ -154,4 +154,3 @@ const DesktopNav = () => (
 // --------------------------------------------------------------------------------------
 // To extend: add to navigationItems. For custom rendering, edit MobileNav/DesktopNav.
 // --------------------------------------------------------------------------------------
-

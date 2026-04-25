@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { endOfWeek, format, isToday, startOfWeek } from "date-fns";
 import { Link, useOutletContext, useSearchParams } from "react-router";
-import { CalendarRange, ChevronLeft, ChevronRight, Inbox, Plus, Search } from "lucide-react";
+import { ArrowUpRight, CalendarRange, ChevronLeft, ChevronRight, Inbox, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,6 +27,7 @@ import {
   isMultiDayJob,
 } from "@/lib/calendarJobSpans";
 import { isCalendarBlockAppointment } from "@/lib/calendarBlocks";
+import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 import { cn } from "@/lib/utils";
 
 type StaffRecord = {
@@ -191,6 +192,17 @@ function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null
   const amount = getCalendarAppointmentAmount(appointment);
   if (amount <= 0) return null;
   return formatCurrency(amount);
+}
+
+function getScheduleAppointmentHref(appointment: AppointmentRecord, date: Date): string {
+  if (isCalendarBlockAppointment(appointment)) {
+    return `/calendar?view=week&date=${encodeURIComponent(format(date, "yyyy-MM-dd"))}`;
+  }
+  return `/appointments/${appointment.id}`;
+}
+
+function getScheduleAppointmentActionLabel(appointment: AppointmentRecord): string {
+  return isCalendarBlockAppointment(appointment) ? "Open calendar" : "Open appointment";
 }
 
 function buildAppointmentSearchText(appointment: AppointmentRecord): string {
@@ -362,6 +374,7 @@ export default function AppointmentsPage() {
   });
   const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
   const [inspectedDateKey, setInspectedDateKey] = useState<string | null>(null);
+  const [inspectedAppointmentId, setInspectedAppointmentId] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
@@ -469,6 +482,15 @@ export default function AppointmentsPage() {
     () => weekSnapshots.find((snapshot) => snapshot.date.toISOString() === inspectedDateKey) ?? null,
     [inspectedDateKey, weekSnapshots]
   );
+  const openDayInspector = (date: Date, appointmentId?: string) => {
+    void triggerNativeHaptic("light");
+    setInspectedDateKey(date.toISOString());
+    setInspectedAppointmentId(appointmentId ?? null);
+  };
+  const closeDayInspector = () => {
+    setInspectedDateKey(null);
+    setInspectedAppointmentId(null);
+  };
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
 
@@ -660,20 +682,22 @@ export default function AppointmentsPage() {
                   <WeeklyDaySection
                     key={snapshot.date.toISOString()}
                     snapshot={snapshot}
-                    onOpenDay={() => setInspectedDateKey(snapshot.date.toISOString())}
+                    onOpenDay={(appointmentId) => openDayInspector(snapshot.date, appointmentId)}
                   />
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && setInspectedDateKey(null)}>
+          <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && closeDayInspector()}>
             <DialogContent
-              className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:rounded-[1.5rem]"
+              className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:rounded-[1.5rem]"
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
-              {inspectedSnapshot ? <ScheduleDayInspector snapshot={inspectedSnapshot} /> : null}
+              {inspectedSnapshot ? (
+                <ScheduleDayInspector snapshot={inspectedSnapshot} selectedAppointmentId={inspectedAppointmentId} />
+              ) : null}
             </DialogContent>
           </Dialog>
         </div>
@@ -684,7 +708,7 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOpenDay: () => void }) {
+function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOpenDay: (appointmentId?: string) => void }) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
@@ -725,7 +749,7 @@ function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOp
                     key={`${group.label}-${appointment.id}`}
                     appointment={appointment}
                     referenceDate={snapshot.date}
-                    onOpenDay={onOpenDay}
+                    onOpenDay={() => onOpenDay(appointment.id)}
                   />
                 ))}
               </div>
@@ -789,7 +813,13 @@ function ScheduleBoardRow({
   );
 }
 
-function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
+function ScheduleDayInspector({
+  snapshot,
+  selectedAppointmentId,
+}: {
+  snapshot: DaySnapshot;
+  selectedAppointmentId: string | null;
+}) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
@@ -797,51 +827,141 @@ function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
     { label: "In shop", items: snapshot.inShop },
     { label: "Pickups", items: snapshot.pickups },
   ].filter((group) => group.items.length > 0);
+  const selectedAppointment = selectedAppointmentId
+    ? snapshot.jobs.find((appointment) => appointment.id === selectedAppointmentId) ?? null
+    : null;
+  const selectedGroupLabel =
+    selectedAppointment && groups.find((group) => group.items.some((appointment) => appointment.id === selectedAppointment.id))?.label;
+  const selectedCardRef = useRef<HTMLAnchorElement | null>(null);
+
+  useEffect(() => {
+    selectedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [selectedAppointmentId, snapshot.date]);
 
   return (
     <>
-      <DialogHeader className="border-b border-border/70 px-4 py-3 sm:px-5 sm:py-4">
-        <DialogTitle className="text-left">
-          {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
-        </DialogTitle>
-        <p className="text-xs text-muted-foreground sm:text-sm">
-          {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
-          {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
-        </p>
+      <DialogHeader className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95))] px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-start justify-between gap-3 pr-8">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Day inspector</p>
+            <DialogTitle className="mt-1 truncate text-left text-lg font-semibold tracking-tight sm:text-xl">
+              {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
+            </DialogTitle>
+          </div>
+          <div className="shrink-0 rounded-2xl border border-border/70 bg-background/85 px-3 py-2 text-right shadow-sm">
+            <p className="text-xs font-semibold text-foreground">
+              {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{dayRevenue > 0 ? formatCurrency(dayRevenue) : "No booked value"}</p>
+          </div>
+        </div>
       </DialogHeader>
-      <div className="max-h-[calc(88dvh-5rem)] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[calc(88dvh-5.5rem)] sm:space-y-4 sm:px-5 sm:py-4">
+
+      {selectedAppointment ? (
+        <div className="border-b border-border/70 bg-primary/[0.035] px-4 py-3 sm:px-5">
+          <div className="rounded-[1.25rem] border border-primary/18 bg-white/92 p-3.5 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                  Selected job{selectedGroupLabel ? ` - ${selectedGroupLabel}` : ""}
+                </p>
+                <h3 className="mt-1 break-words text-base font-semibold leading-5 text-foreground">
+                  {getAppointmentLabel(selectedAppointment)}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                  {joinMeta([
+                    getClientName(selectedAppointment) || "Internal",
+                    getVehicleLabel(selectedAppointment) || "No vehicle",
+                  ])}
+                </p>
+              </div>
+              <Button asChild size="sm" className="h-9 shrink-0 rounded-full">
+                <Link to={getScheduleAppointmentHref(selectedAppointment, snapshot.date)}>
+                  {getScheduleAppointmentActionLabel(selectedAppointment)}
+                  <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+
+            <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+              <InspectorMetric label="Time" value={getScheduleTimingLabel(selectedAppointment)} />
+              <InspectorMetric
+                label="Stage"
+                value={
+                  isMultiDayJob(selectedAppointment)
+                    ? getOperationalDayLabel(selectedAppointment, snapshot.date)
+                    : getJobPhaseLabel(selectedAppointment.jobPhase)
+                }
+              />
+              <InspectorMetric label="Value" value={getAppointmentMoneyLabel(selectedAppointment) ?? "No value"} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="ios-momentum-y max-h-[calc(92dvh-12rem)] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[calc(92dvh-12.5rem)] sm:space-y-4 sm:px-5 sm:py-4">
         {groups.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No jobs scheduled for this day.</div>
+          <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
+            No jobs scheduled for this day.
+          </div>
         ) : (
           groups.map((group) => (
             <div key={group.label} className="space-y-1.5 sm:space-y-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">{group.label}</div>
+              <div className="flex items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">
+                <span>{group.label}</span>
+                <span>{group.items.length}</span>
+              </div>
               <div className="space-y-1.5 sm:space-y-2">
                 {group.items.map((appointment) => (
+                  (() => {
+                    const selected = appointment.id === selectedAppointmentId;
+                    const appointmentHref = getScheduleAppointmentHref(appointment, snapshot.date);
+                    const appointmentActionLabel = getScheduleAppointmentActionLabel(appointment);
+                    return (
                   <Link
                     key={`${group.label}-${appointment.id}`}
-                    to={`/appointments/${appointment.id}`}
-                    className="block rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 transition-colors hover:bg-white sm:rounded-xl sm:px-3 sm:py-3"
+                    ref={selected ? selectedCardRef : undefined}
+                    to={appointmentHref}
+                    className={cn(
+                      "block rounded-xl border px-3 py-3 transition-colors active:scale-[0.99] sm:px-3.5",
+                      selected
+                        ? "border-primary/35 bg-primary/[0.055] shadow-[0_12px_28px_rgba(249,115,22,0.08)]"
+                        : "border-border/60 bg-white/92 hover:bg-white"
+                    )}
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 flex-1 break-words text-[13px] font-semibold text-foreground sm:text-sm">{getAppointmentLabel(appointment)}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-[13px] font-semibold leading-5 text-foreground sm:text-sm">
+                            {getAppointmentLabel(appointment)}
+                          </p>
+                          <p className="mt-0.5 break-words text-[11px] text-muted-foreground sm:text-sm">
+                            {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
+                          </p>
+                        </div>
                         {getAppointmentMoneyLabel(appointment) ? (
                           <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-xs">{getAppointmentMoneyLabel(appointment)}</span>
                         ) : null}
                       </div>
-                      <p className="break-words text-[11px] text-muted-foreground sm:text-sm">
-                        {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
-                      </p>
-                      <p className="break-words text-[11px] text-muted-foreground sm:text-sm">{getScheduleTimingLabel(appointment)}</p>
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
-                        <span className="rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
-                          {isMultiDayJob(appointment) ? getOperationalDayLabel(appointment, snapshot.date) : getJobPhaseLabel(appointment.jobPhase)}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {getScheduleTimingLabel(appointment)}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:text-[10px]">
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", getJobPhaseTone(appointment.jobPhase))} />
+                          {isMultiDayJob(appointment)
+                            ? getOperationalDayLabel(appointment, snapshot.date)
+                            : getJobPhaseLabel(appointment.jobPhase)}
+                        </span>
+                        <span className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          {appointmentActionLabel}
+                          <ArrowUpRight className="h-3 w-3" />
                         </span>
                       </div>
                     </div>
                   </Link>
+                    );
+                  })()
                 ))}
               </div>
             </div>
@@ -849,5 +969,14 @@ function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
         )}
       </div>
     </>
+  );
+}
+
+function InspectorMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/75 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-xs font-semibold text-foreground">{value}</p>
+    </div>
   );
 }

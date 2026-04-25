@@ -351,7 +351,7 @@ function NotificationCenter({
           <Badge variant="outline">{counts.calendar} calendar</Badge>
         </div>
       </div>
-      <div className="max-h-[24rem] overflow-y-auto px-3 py-3">
+      <div className="ios-momentum-y max-h-[24rem] overflow-y-auto px-3 py-3">
         {loading && notifications.length === 0 ? (
           <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
             Loading notifications...
@@ -748,7 +748,7 @@ const SidebarNav = memo(function SidebarNav({
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="ios-momentum-y flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-4">
           {visibleSections.map((section) => (
             <div key={section.id}>
@@ -1219,7 +1219,7 @@ function AppLayoutInner({
               </div>
             </div>
 
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="ios-momentum-x ios-scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
               {activeSectionItems.map((item) => (
                 <NavLink
                   key={item.href}

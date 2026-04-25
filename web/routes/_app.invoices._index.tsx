@@ -450,7 +450,7 @@ export default function InvoicesIndexPage() {
                     })}
           </div>
 
-          <div className="hidden overflow-x-auto md:block">
+          <div className="ios-momentum-x hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">

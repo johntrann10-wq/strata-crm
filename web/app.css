@@ -319,6 +319,63 @@ body,
   .text-balance {
     text-wrap: balance;
   }
+
+  .app-native-scroll,
+  .ios-momentum-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-behavior: smooth;
+  }
+
+  .ios-momentum-y {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    scroll-behavior: smooth;
+  }
+
+  .ios-momentum-x {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+  }
+
+  .ios-snap-x {
+    scroll-snap-type: x proximity;
+  }
+
+  .ios-scrollbar-none,
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .ios-scrollbar-none::-webkit-scrollbar,
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ios-touch-pan-y {
+    touch-action: pan-y;
+  }
+
+  .ios-swipe-transition {
+    transition-property: opacity, transform;
+    transition-duration: 240ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-native-scroll,
+    .ios-momentum-scroll,
+    .ios-momentum-y,
+    .ios-momentum-x {
+      scroll-behavior: auto;
+    }
+
+    .ios-swipe-transition {
+      transition-duration: 1ms;
+    }
+  }
 }
 
 html[data-mobile-shell="true"] body {

@@ -50,7 +50,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
           Related
         </p>
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="ios-momentum-x flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {[0, 1, 2].map((i) => (
             <div
               key={i}
@@ -78,7 +78,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
           </p>
         </div>
       </div>
-      <div className="flex max-w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="ios-momentum-x ios-snap-x flex max-w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scrollbar-hide">
         {records.map((record) => {
           const { icon: Icon, colorClass } = typeConfig[record.type];
           return (

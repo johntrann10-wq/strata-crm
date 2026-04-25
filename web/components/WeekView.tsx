@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { cn } from "@/lib/utils";
 import {
   getMultiDayDayKind,
+  getMultiDayDayLabel,
+  getMultiDayDayShortLabel,
   getMultiDayDayTone,
-  getJobSpanEnd,
-  getJobSpanStart,
+  getOperationalDayLabel,
   hasLaborOnDay,
   hasPresenceOnDay,
   isMultiDayJob,
@@ -16,7 +17,6 @@ import {
   TOTAL_HEIGHT,
   TIME_HOURS,
   DAY_NAMES,
-  clampSlotMinutes,
   isSameDay,
   formatHour,
   getWeekDays,
@@ -24,7 +24,10 @@ import {
   AppointmentBlock,
   StaffWorkloadBar,
   activeDragDurationMs,
+  getCalendarAppointmentAmount,
 } from "./CalendarViews";
+import { NativeContextActions } from "@/components/mobile/NativeContextActions";
+import { triggerNativeFeedback } from "@/lib/nativeInteractions";
 
 interface WeekViewProps {
   currentDate: Date;
@@ -32,9 +35,23 @@ interface WeekViewProps {
   onSlotClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
   onDayClick?: (date: Date) => void;
+  onWeekNavigate?: (direction: -1 | 1) => void;
   onReschedule?: (appointmentId: string, newStart: Date, newEnd: Date | null) => void;
   conflictIds?: Set<string>;
 }
+
+type MobileWeekSwipeGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  axis: "pending" | "horizontal" | "vertical";
+  captured: boolean;
+};
+
+const MOBILE_WEEK_SWIPE_INTENT_PX = 12;
+const MOBILE_WEEK_SWIPE_THRESHOLD_PX = 36;
+const MOBILE_WEEK_MIN_TRANSITION_PX = 180;
+const MOBILE_WEEK_MAX_TRANSITION_PX = 360;
 
 export function WeekView({
   currentDate,
@@ -42,12 +59,23 @@ export function WeekView({
   onSlotClick,
   onApptClick,
   onDayClick,
+  onWeekNavigate,
   onReschedule,
   conflictIds,
 }: WeekViewProps) {
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
   const today = useMemo(() => new Date(), []);
   const [dragOverInfo, setDragOverInfo] = useState<{ dayIndex: number; hour: number; minute: number } | null>(null);
+  const [mobileWeekSwipeOffset, setMobileWeekSwipeOffset] = useState(0);
+  const [mobileWeekSwipeAnimating, setMobileWeekSwipeAnimating] = useState(false);
+  const [focusedDayIndex, setFocusedDayIndex] = useState(() =>
+    Math.max(0, getWeekDays(currentDate).findIndex((day) => isSameDay(day, currentDate)))
+  );
+  const mobileWeekSwipeRef = useRef<MobileWeekSwipeGesture | null>(null);
+  const mobileWeekTouchRef = useRef<MobileWeekSwipeGesture | null>(null);
+  const mobileWeekTransitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const mobileWeekSettleTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const suppressMobileDayTapRef = useRef(false);
 
   useEffect(() => {
     const container = document.getElementById("week-scroll-container");
@@ -60,12 +88,276 @@ export function WeekView({
     }
   }, []);
 
-  const getSnappedTimeFromY = (yOffset: number): { hour: number; minute: number } => {
-    const clampedMinutes = clampSlotMinutes((yOffset / HOUR_HEIGHT) * 60);
-    return {
-      hour: START_HOUR + Math.floor(clampedMinutes / 60),
-      minute: clampedMinutes % 60,
+  useEffect(() => {
+    const currentIndex = weekDays.findIndex((day) => isSameDay(day, currentDate));
+    const todayIndex = weekDays.findIndex((day) => isSameDay(day, today));
+    setFocusedDayIndex(currentIndex >= 0 ? currentIndex : Math.max(0, todayIndex));
+  }, [currentDate, today, weekDays]);
+
+  useEffect(() => {
+    return () => {
+      if (mobileWeekTransitionTimeoutRef.current) {
+        window.clearTimeout(mobileWeekTransitionTimeoutRef.current);
+      }
+      if (mobileWeekSettleTimeoutRef.current) {
+        window.clearTimeout(mobileWeekSettleTimeoutRef.current);
+      }
     };
+  }, []);
+
+  const clearMobileWeekTransitionTimers = () => {
+    if (mobileWeekTransitionTimeoutRef.current) {
+      window.clearTimeout(mobileWeekTransitionTimeoutRef.current);
+      mobileWeekTransitionTimeoutRef.current = null;
+    }
+    if (mobileWeekSettleTimeoutRef.current) {
+      window.clearTimeout(mobileWeekSettleTimeoutRef.current);
+      mobileWeekSettleTimeoutRef.current = null;
+    }
+  };
+
+  const getMobileWeekTransitionDistance = () => {
+    if (typeof window === "undefined") return 220;
+    return Math.min(
+      MOBILE_WEEK_MAX_TRANSITION_PX,
+      Math.max(MOBILE_WEEK_MIN_TRANSITION_PX, Math.round(window.innerWidth * 0.72))
+    );
+  };
+
+  const clampMobileWeekDrag = (offset: number) => {
+    const transitionDistance = getMobileWeekTransitionDistance();
+    return Math.max(-transitionDistance, Math.min(transitionDistance, offset));
+  };
+
+  const resetSuppressedDayTap = () => {
+    window.setTimeout(() => {
+      suppressMobileDayTapRef.current = false;
+    }, 120);
+  };
+
+  const runMobileWeekTransition = (direction: -1 | 1) => {
+    if (!onWeekNavigate) return;
+    clearMobileWeekTransitionTimers();
+    const transitionDistance = getMobileWeekTransitionDistance();
+    triggerNativeFeedback("light");
+    setMobileWeekSwipeAnimating(true);
+    setMobileWeekSwipeOffset(direction === 1 ? -transitionDistance : transitionDistance);
+
+    mobileWeekTransitionTimeoutRef.current = window.setTimeout(() => {
+      onWeekNavigate(direction);
+      setMobileWeekSwipeAnimating(false);
+      setMobileWeekSwipeOffset(direction === 1 ? transitionDistance : -transitionDistance);
+
+      mobileWeekSettleTimeoutRef.current = window.setTimeout(() => {
+        setMobileWeekSwipeAnimating(true);
+        setMobileWeekSwipeOffset(0);
+        mobileWeekTransitionTimeoutRef.current = window.setTimeout(() => {
+          setMobileWeekSwipeAnimating(false);
+        }, 210);
+      }, 20);
+    }, 150);
+  };
+
+  const startMobileWeekTouch = (clientX: number, clientY: number) => {
+    if (!onWeekNavigate) return;
+    clearMobileWeekTransitionTimers();
+    setMobileWeekSwipeAnimating(false);
+    mobileWeekSwipeRef.current = null;
+    mobileWeekTouchRef.current = {
+      pointerId: -1,
+      startX: clientX,
+      startY: clientY,
+      axis: "pending",
+      captured: false,
+    };
+  };
+
+  const moveMobileWeekTouch = (clientX: number, clientY: number, preventDefault: () => void) => {
+    const gesture = mobileWeekTouchRef.current;
+    if (!gesture) return;
+
+    const dx = clientX - gesture.startX;
+    const dy = clientY - gesture.startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    if (gesture.axis === "pending") {
+      if (absX < MOBILE_WEEK_SWIPE_INTENT_PX && absY < MOBILE_WEEK_SWIPE_INTENT_PX) return;
+      if (absY > absX) {
+        gesture.axis = "vertical";
+        return;
+      }
+      if (absX > absY + 6) {
+        gesture.axis = "horizontal";
+        gesture.captured = true;
+        suppressMobileDayTapRef.current = true;
+      }
+    }
+
+    if (gesture.axis !== "horizontal") return;
+    preventDefault();
+    setMobileWeekSwipeOffset(clampMobileWeekDrag(dx * 0.86));
+  };
+
+  const finishMobileWeekTouch = (clientX: number, clientY: number) => {
+    const gesture = mobileWeekTouchRef.current;
+    if (!gesture) return;
+
+    const dx = clientX - gesture.startX;
+    const dy = clientY - gesture.startY;
+    const axis = gesture.axis;
+    mobileWeekTouchRef.current = null;
+
+    if (axis !== "horizontal") {
+      setMobileWeekSwipeOffset(0);
+      return;
+    }
+
+    resetSuppressedDayTap();
+    const shouldNavigate =
+      Math.abs(dx) >= MOBILE_WEEK_SWIPE_THRESHOLD_PX && Math.abs(dx) > Math.abs(dy) * 1.08;
+    if (!shouldNavigate) {
+      setMobileWeekSwipeAnimating(true);
+      setMobileWeekSwipeOffset(0);
+      mobileWeekTransitionTimeoutRef.current = window.setTimeout(() => {
+        setMobileWeekSwipeAnimating(false);
+      }, 180);
+      return;
+    }
+
+    runMobileWeekTransition(dx < 0 ? 1 : -1);
+  };
+
+  const cancelMobileWeekTouch = () => {
+    mobileWeekTouchRef.current = null;
+    setMobileWeekSwipeAnimating(true);
+    setMobileWeekSwipeOffset(0);
+    mobileWeekTransitionTimeoutRef.current = window.setTimeout(() => {
+      setMobileWeekSwipeAnimating(false);
+    }, 180);
+  };
+
+  const handleMobileWeekPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!onWeekNavigate) return;
+    if (event.pointerType === "touch") return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (mobileWeekTouchRef.current) return;
+    clearMobileWeekTransitionTimers();
+    setMobileWeekSwipeAnimating(false);
+    mobileWeekSwipeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      axis: "pending",
+      captured: false,
+    };
+  };
+
+  const handleMobileWeekPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = mobileWeekSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    if (gesture.axis === "pending") {
+      if (absX < MOBILE_WEEK_SWIPE_INTENT_PX && absY < MOBILE_WEEK_SWIPE_INTENT_PX) return;
+      if (absY > absX) {
+        gesture.axis = "vertical";
+        return;
+      }
+      if (absX > absY + 8) {
+        gesture.axis = "horizontal";
+        gesture.captured = true;
+        suppressMobileDayTapRef.current = true;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+    }
+
+    if (gesture.axis !== "horizontal") return;
+    event.preventDefault();
+    setMobileWeekSwipeOffset(clampMobileWeekDrag(dx * 0.86));
+  };
+
+  const finishMobileWeekSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = mobileWeekSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    const axis = gesture.axis;
+    const captured = gesture.captured;
+    mobileWeekSwipeRef.current = null;
+
+    if (captured && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (axis !== "horizontal") {
+      setMobileWeekSwipeOffset(0);
+      return;
+    }
+
+    resetSuppressedDayTap();
+    const shouldNavigate =
+      Math.abs(dx) >= MOBILE_WEEK_SWIPE_THRESHOLD_PX && Math.abs(dx) > Math.abs(dy) * 1.08;
+    if (!shouldNavigate) {
+      setMobileWeekSwipeAnimating(true);
+      setMobileWeekSwipeOffset(0);
+      mobileWeekTransitionTimeoutRef.current = window.setTimeout(() => {
+        setMobileWeekSwipeAnimating(false);
+      }, 180);
+      return;
+    }
+
+    runMobileWeekTransition(dx < 0 ? 1 : -1);
+  };
+
+  const handleMobileWeekTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    startMobileWeekTouch(touch.clientX, touch.clientY);
+  };
+
+  const handleMobileWeekTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    moveMobileWeekTouch(touch.clientX, touch.clientY, () => event.preventDefault());
+  };
+
+  const handleMobileWeekTouchEnd = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    finishMobileWeekTouch(touch.clientX, touch.clientY);
+  };
+
+  const cancelMobileWeekSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = mobileWeekSwipeRef.current;
+    if (gesture?.captured && event.currentTarget.hasPointerCapture(gesture.pointerId)) {
+      event.currentTarget.releasePointerCapture(gesture.pointerId);
+    }
+    mobileWeekSwipeRef.current = null;
+    setMobileWeekSwipeAnimating(true);
+    setMobileWeekSwipeOffset(0);
+    mobileWeekTransitionTimeoutRef.current = window.setTimeout(() => {
+      setMobileWeekSwipeAnimating(false);
+    }, 180);
+  };
+
+  const getSnappedTimeFromY = (yOffset: number): { hour: number; minute: number } => {
+    const totalMinutesFromStart = (yOffset / HOUR_HEIGHT) * 60;
+    const rawHour = Math.floor(totalMinutesFromStart / 60) + START_HOUR;
+    const rawMinute = Math.floor(totalMinutesFromStart % 60);
+    let snappedMinute = Math.round(rawMinute / 15) * 15;
+    let finalHour = rawHour;
+    if (snappedMinute >= 60) {
+      finalHour += 1;
+      snappedMinute = 0;
+    }
+    finalHour = Math.max(START_HOUR, Math.min(19, finalHour));
+    return { hour: finalHour, minute: snappedMinute };
   };
 
   const nowLineTop = useMemo(() => {
@@ -106,20 +398,229 @@ export function WeekView({
     return lanes.slice(0, 2);
   }, [multiDayJobs, weekDays]);
 
+  const daySummaries = useMemo(
+    () =>
+      weekDays.map((day) => {
+        const labor = appointments
+          .filter((apt) => hasLaborOnDay(apt, day))
+          .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        const onsiteOnly = appointments
+          .filter((apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day) && !hasLaborOnDay(apt, day))
+          .sort((a, b) => getJobSortTime(a).getTime() - getJobSortTime(b).getTime());
+        const totalValue = labor.reduce((sum, apt) => sum + getCalendarAppointmentAmount(apt), 0);
+        return {
+          day,
+          labor,
+          onsiteOnly,
+          totalItems: labor.length + onsiteOnly.length,
+          conflictCount: labor.filter((apt) => conflictIds?.has(apt.id)).length,
+          totalValue,
+        };
+      }),
+    [appointments, conflictIds, weekDays]
+  );
+  const focusedSummary = daySummaries[focusedDayIndex] ?? daySummaries[0];
+  const weekTotalItems = daySummaries.reduce((sum, summary) => sum + summary.totalItems, 0);
+  const weekTotalValue = daySummaries.reduce((sum, summary) => sum + summary.totalValue, 0);
+  const mobileWeekMotionStyle = {
+    transform: `translate3d(${mobileWeekSwipeOffset}px, 0, 0)`,
+    opacity: Math.max(0.76, 1 - Math.min(Math.abs(mobileWeekSwipeOffset) / 420, 0.24)),
+  };
+  const mobileWeekMotionClassName = cn(
+    "will-change-transform",
+    mobileWeekSwipeAnimating && "ios-swipe-transition"
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
-      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain">
+      <div className="flex min-h-0 flex-1 flex-col md:hidden">
+        <div className="shrink-0 border-b border-border/70 bg-white/92 px-3 py-3 backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week agenda</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {formatMobileDate(weekDays[0])} - {formatMobileDate(weekDays[6])}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/65 bg-muted/20 px-3 py-2 text-right">
+              <p className="text-[11px] font-semibold text-foreground">{weekTotalItems} items</p>
+              <p className="text-[10px] text-muted-foreground">{formatCompactCurrency(weekTotalValue)}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 overflow-hidden rounded-[1.35rem]">
+            <div
+              data-week-date-strip="true"
+              className={cn(
+                "ios-touch-pan-y grid select-none grid-cols-7 gap-1.5",
+                mobileWeekMotionClassName
+              )}
+              style={mobileWeekMotionStyle}
+              role="group"
+              aria-label="Swipe week dates for previous or next week"
+              onPointerDown={handleMobileWeekPointerDown}
+              onPointerMove={handleMobileWeekPointerMove}
+              onPointerUp={finishMobileWeekSwipe}
+              onPointerCancel={cancelMobileWeekSwipe}
+              onTouchStart={handleMobileWeekTouchStart}
+              onTouchMove={handleMobileWeekTouchMove}
+              onTouchEnd={handleMobileWeekTouchEnd}
+              onTouchCancel={cancelMobileWeekTouch}
+            >
+              {daySummaries.map((summary, index) => {
+                const selected = index === focusedDayIndex;
+                const isToday = isSameDay(summary.day, today);
+                return (
+                  <button
+                    key={summary.day.toISOString()}
+                    type="button"
+                    data-week-day-card="true"
+                    data-selected={selected ? "true" : "false"}
+                    className={cn(
+                      "min-w-0 rounded-2xl border px-1.5 py-2 text-center transition-all",
+                      selected
+                        ? "border-primary/45 bg-primary/[0.08] shadow-sm"
+                        : "border-border/60 bg-white/78 active:bg-muted/30",
+                      isToday && !selected && "border-primary/25"
+                    )}
+                    onClick={() => {
+                      if (suppressMobileDayTapRef.current) return;
+                      setFocusedDayIndex(index);
+                      onDayClick?.(summary.day);
+                    }}
+                    aria-pressed={selected}
+                  >
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{DAY_NAMES[index]}</p>
+                    <span
+                      className={cn(
+                        "mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold",
+                        selected ? "bg-primary text-primary-foreground" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-foreground"
+                      )}
+                    >
+                      {summary.day.getDate()}
+                    </span>
+                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">
+                      {summary.totalItems}
+                    </p>
+                    {summary.conflictCount > 0 ? (
+                      <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full bg-rose-500" aria-label={`${summary.conflictCount} conflicts`} />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="mt-2 text-center text-[10px] font-medium text-muted-foreground">
+            Swipe across the day cards to move to the next or previous week.
+          </p>
+        </div>
+
+        <div className="ios-momentum-y min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          {focusedSummary ? (
+            <div className={cn("space-y-3", mobileWeekMotionClassName)} style={mobileWeekMotionStyle}>
+              <div className="rounded-[1.35rem] border border-border/70 bg-white/88 p-3.5 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      {focusedSummary.day.toLocaleDateString("en-US", { weekday: "long" })}
+                    </p>
+                    <p className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                      {focusedSummary.day.toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm active:scale-[0.98]"
+                    onClick={() => {
+                      const slot = new Date(focusedSummary.day);
+                      slot.setHours(9, 0, 0, 0);
+                      onSlotClick(slot);
+                    }}
+                  >
+                    Add 9 AM
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <WeekMetric label="Booked" value={String(focusedSummary.labor.length)} />
+                  <WeekMetric label="On site" value={String(focusedSummary.onsiteOnly.length)} />
+                  <WeekMetric label="Value" value={formatCompactCurrency(focusedSummary.totalValue)} />
+                </div>
+              </div>
+
+              {focusedSummary.labor.length === 0 && focusedSummary.onsiteOnly.length === 0 ? (
+                <button
+                  type="button"
+                  className="w-full rounded-[1.35rem] border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground"
+                  onClick={() => {
+                    const slot = new Date(focusedSummary.day);
+                    slot.setHours(9, 0, 0, 0);
+                    onSlotClick(slot);
+                  }}
+                >
+                  No appointments on this day. Tap to create one.
+                </button>
+              ) : null}
+
+              {focusedSummary.labor.length > 0 ? (
+                <MobileWeekGroup title="Scheduled work">
+                  {focusedSummary.labor.map((appointment) => (
+                    <MobileWeekAppointmentCard
+                      key={appointment.id}
+                      appointment={appointment}
+                      currentDate={focusedSummary.day}
+                      conflict={conflictIds?.has(appointment.id)}
+                      onOpen={() => onApptClick(appointment)}
+                    />
+                  ))}
+                </MobileWeekGroup>
+              ) : null}
+
+              {focusedSummary.onsiteOnly.length > 0 ? (
+                <MobileWeekGroup title="In shop / multi-day">
+                  {focusedSummary.onsiteOnly.map((appointment) => (
+                    <MobileWeekAppointmentCard
+                      key={`${appointment.id}-onsite`}
+                      appointment={appointment}
+                      currentDate={focusedSummary.day}
+                      mode="onsite"
+                      conflict={conflictIds?.has(appointment.id)}
+                      onOpen={() => onApptClick(appointment)}
+                    />
+                  ))}
+                </MobileWeekGroup>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="ios-momentum-x hidden min-h-0 flex-1 overflow-x-auto overscroll-x-contain md:block">
         <div className="flex h-full min-w-[46rem] flex-col md:min-w-0">
-      <div className="sticky top-0 z-10 grid grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm">
+      <div
+        className={cn(
+          "ios-touch-pan-y sticky top-0 z-10 grid select-none grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm",
+          mobileWeekMotionClassName
+        )}
+        style={mobileWeekMotionStyle}
+        data-week-date-strip="wide"
+        role="group"
+        aria-label="Swipe week dates for previous or next week"
+        onPointerDown={handleMobileWeekPointerDown}
+        onPointerMove={handleMobileWeekPointerMove}
+        onPointerUp={finishMobileWeekSwipe}
+        onPointerCancel={cancelMobileWeekSwipe}
+        onTouchStart={handleMobileWeekTouchStart}
+        onTouchMove={handleMobileWeekTouchMove}
+        onTouchEnd={handleMobileWeekTouchEnd}
+        onTouchCancel={cancelMobileWeekTouch}
+      >
         <div className="border-r border-border/60 px-3 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Hours</p>
         </div>
         {weekDays.map((day, di) => {
           const isToday = isSameDay(day, today);
           const bookedCount = appointments.filter((apt) => hasLaborOnDay(apt, day)).length;
-          const onSiteCount = appointments.filter(
-            (apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day) && !hasLaborOnDay(apt, day)
-          ).length;
+          const onSiteCount = appointments.filter((apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day)).length;
           const dayConflictCount = appointments.filter(
             (apt) => hasLaborOnDay(apt, day) && conflictIds?.has(apt.id)
           ).length;
@@ -187,11 +688,11 @@ export function WeekView({
                       getMultiDayDayTone(getMultiDayDayKind(apt, weekDays[startIndex] ?? currentDate))
                     )}
                   >
-                    On site
+                    {getMultiDayDayShortLabel(getMultiDayDayKind(apt, weekDays[startIndex] ?? currentDate))}
                   </span>
                   <span className="truncate font-medium text-foreground">{apt.title || apt.vehicle?.model || apt.client?.lastName || "Job"}</span>
                   <span className="hidden truncate rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground md:inline-flex">
-                    {`${getJobSpanStart(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} drop-off -> ${getJobSpanEnd(apt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} pickup`}
+                    {`${weekDays[startIndex]?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? ""} to ${weekDays[endIndex]?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? ""}`}
                   </span>
                 </button>
               ))
@@ -202,7 +703,7 @@ export function WeekView({
 
       <StaffWorkloadBar appointments={appointments} />
 
-      <div id="week-scroll-container" className="flex-1 overflow-y-auto">
+      <div id="week-scroll-container" className="ios-momentum-y flex-1 overflow-y-auto">
         <div
           className="grid grid-cols-[68px_repeat(7,minmax(0,1fr))] relative"
           style={{ height: TOTAL_HEIGHT }}
@@ -343,4 +844,157 @@ export function WeekView({
       </div>
     </div>
   );
+}
+
+function WeekMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-muted/20 px-2 py-2">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function MobileWeekGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function MobileWeekAppointmentCard({
+  appointment,
+  currentDate,
+  conflict,
+  mode = "timed",
+  onOpen,
+}: {
+  appointment: ApptRecord;
+  currentDate: Date;
+  conflict?: boolean;
+  mode?: "timed" | "onsite";
+  onOpen: () => void;
+}) {
+  const amount = getCalendarAppointmentAmount(appointment);
+  const timeLabel =
+    mode === "onsite"
+      ? getMultiDayDayLabel(getMultiDayDayKind(appointment, currentDate)) || "On site"
+      : formatAppointmentTimeRange(appointment);
+  const title = getAppointmentTitle(appointment);
+  const clientLabel = getClientLabel(appointment);
+  const vehicleLabel = getVehicleLabel(appointment);
+
+  return (
+    <NativeContextActions
+      label={title}
+      actions={[
+        { label: "Open appointment", detail: timeLabel, onSelect: onOpen },
+        {
+          label: "New appointment this day",
+          detail: currentDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+          href: `/appointments/new?date=${toDayKey(currentDate)}&from=${encodeURIComponent(`/calendar?view=week&date=${toDayKey(currentDate)}`)}`,
+        },
+      ]}
+    >
+      <button
+        type="button"
+        className={cn(
+          "w-full rounded-[1.25rem] border bg-white/92 px-3.5 py-3 text-left shadow-sm transition-colors active:scale-[0.99]",
+          conflict ? "border-rose-200 bg-rose-50/65" : "border-border/65 hover:bg-white"
+        )}
+        onClick={onOpen}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={cn(
+              "flex w-[4.4rem] shrink-0 flex-col items-center justify-center rounded-2xl border px-2 py-2 text-center",
+              conflict ? "border-rose-200 bg-white text-rose-700" : "border-primary/15 bg-primary/[0.06] text-primary"
+            )}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-[0.1em]">{mode === "onsite" ? "Job" : "Time"}</span>
+            <span className="mt-1 text-[11px] font-semibold leading-4">{timeLabel}</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 flex-1 text-sm font-semibold leading-5 text-foreground">{title}</p>
+              {amount > 0 ? (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  {formatCompactCurrency(amount)}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{clientLabel}</p>
+            {vehicleLabel ? <p className="mt-0.5 truncate text-xs text-muted-foreground/90">{vehicleLabel}</p> : null}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full border border-border/65 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                {getOperationalDayLabel(appointment, currentDate)}
+              </span>
+              {conflict ? (
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-rose-700">
+                  Conflict
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </button>
+    </NativeContextActions>
+  );
+}
+
+function getJobSortTime(appointment: ApptRecord) {
+  return new Date(appointment.jobStartTime ?? appointment.startTime);
+}
+
+function getAppointmentTitle(appointment: ApptRecord) {
+  if (appointment.title?.trim()) return appointment.title.trim();
+  const clientLabel = getClientLabel(appointment);
+  if (clientLabel !== "Internal") return clientLabel;
+  return "Appointment";
+}
+
+function getClientLabel(appointment: ApptRecord) {
+  return appointment.client
+    ? [appointment.client.firstName, appointment.client.lastName].filter(Boolean).join(" ").trim() || "Client"
+    : "Internal";
+}
+
+function getVehicleLabel(appointment: ApptRecord) {
+  return appointment.vehicle
+    ? [appointment.vehicle.year, appointment.vehicle.make, appointment.vehicle.model].filter(Boolean).join(" ")
+    : "";
+}
+
+function formatAppointmentTimeRange(appointment: ApptRecord) {
+  const start = new Date(appointment.startTime);
+  const end = appointment.endTime ? new Date(appointment.endTime) : null;
+  return end ? `${formatShortTime(start)}-${formatShortTime(end)}` : formatShortTime(start);
+}
+
+function formatShortTime(date: Date) {
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" ", "");
+}
+
+function formatMobileDate(date: Date | undefined) {
+  if (!date) return "";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatCompactCurrency(value: number) {
+  if (value <= 0) return "$0";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: value >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function toDayKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }

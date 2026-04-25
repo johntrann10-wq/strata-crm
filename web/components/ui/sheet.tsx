@@ -147,7 +147,7 @@ function SheetContent({
         ref={contentRef}
         data-slot="sheet-content"
         className={cn(
-          "native-sheet-shell bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 overflow-y-auto overscroll-y-contain transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          "ios-momentum-y native-sheet-shell bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 overflow-y-auto overscroll-y-contain transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-[min(92vw,24rem)] border-l border-border/80 pb-[max(1rem,env(safe-area-inset-bottom))] sm:w-[24rem]",
           side === "left" &&

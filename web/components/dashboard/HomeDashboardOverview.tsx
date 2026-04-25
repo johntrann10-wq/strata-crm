@@ -370,7 +370,7 @@ export function HomeWeeklyAppointmentOverviewCard({
         ) : (
           <>
             <div className="hidden lg:block">
-              <div className="-mx-1 overflow-x-auto px-1 pb-2">
+              <div className="ios-momentum-x -mx-1 overflow-x-auto px-1 pb-2">
                 <div className="grid min-w-[1470px] grid-cols-7 gap-3 2xl:min-w-0">
                   {overview.days.map((day) => {
                     const isActive = day.date === activeDay.date;
@@ -608,7 +608,7 @@ export function HomeWeeklyAppointmentOverviewCard({
                       {activeDay.previewItems.length} items
                     </span>
                   </div>
-                  <div className="mt-3 space-y-2.5 lg:max-h-[340px] lg:overflow-y-auto lg:pr-1">
+                  <div className="ios-momentum-y mt-3 space-y-2.5 lg:max-h-[340px] lg:overflow-y-auto lg:pr-1">
                   {activeDay.previewItems.length === 0 ? (
                     <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/80 px-3 py-4 text-sm text-slate-500">
                       No jobs queued for this day yet.
@@ -732,7 +732,7 @@ export function HomeUpcomingAttentionPanel({
               </span>
             </div>
           </div>
-          <div className="divide-y divide-slate-200/75 lg:max-h-[535px] lg:overflow-y-auto">
+          <div className="ios-momentum-y divide-y divide-slate-200/75 lg:max-h-[535px] lg:overflow-y-auto">
             {scheduleItems.length === 0 && queueItems.length === 0 ? (
               <div className="px-4 py-6 text-sm text-slate-500">No upcoming jobs or urgent action items in this view.</div>
             ) : (
@@ -1193,7 +1193,7 @@ export function HomeBottomPanels({
         activityItems.length === 0 ? (
           <EmptyState icon={History} title="No activity yet" description="Appointments, payments, and quote changes will show here as the business runs." />
         ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 lg:max-h-[360px] lg:overflow-y-auto">
+          <div className="ios-momentum-y overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 lg:max-h-[360px] lg:overflow-y-auto">
             {activityItems.map((item) => (
               <div key={item.id} className="border-b border-slate-200/70 p-3.5 last:border-b-0">
                 <div className="flex items-start justify-between gap-3">
@@ -1227,7 +1227,7 @@ export function HomeBottomPanels({
         receivablesItems.length === 0 ? (
           <EmptyState icon={Landmark} title="No overdue balances or deposit misses" description="Overdue invoices and missing deposits will surface here when they need attention." />
         ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 lg:max-h-[360px] lg:overflow-y-auto">
+          <div className="ios-momentum-y overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 lg:max-h-[360px] lg:overflow-y-auto">
             {receivablesItems.map((item) => (
               <Link key={item.id} to={item.ctaUrl} className="native-touch-surface block border-b border-slate-200/70 p-3.5 transition-colors last:border-b-0 hover:bg-amber-50/45">
                 <div className="flex items-start justify-between gap-3">
@@ -1259,7 +1259,7 @@ export function HomeBottomPanels({
         followUpItems.length === 0 ? (
           <EmptyState icon={ClipboardList} title="No lead or quote follow-up gaps" description="Leads and quote follow-ups are under control right now." />
         ) : (
-          <div className="overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 lg:max-h-[360px] lg:overflow-y-auto">
+          <div className="ios-momentum-y overflow-hidden rounded-[1rem] border border-slate-200/80 bg-white/92 lg:max-h-[360px] lg:overflow-y-auto">
             {followUpItems.map((item) => (
               <Link key={item.id} to={item.ctaUrl} className="native-touch-surface flex items-start justify-between gap-3 border-b border-slate-200/70 p-3.5 transition-colors last:border-b-0 hover:bg-amber-50/45">
                 <div className="min-w-0">

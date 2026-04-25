@@ -353,7 +353,7 @@ function FinancesContent() {
 
       <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
         <DialogContent
-          className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]"
+          className="ios-momentum-y max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <div className="p-6">
@@ -602,7 +602,7 @@ function ExpenseLedger({
                   ))}
           </div>
 
-          <div className="mt-4 hidden overflow-x-auto md:block">
+          <div className="ios-momentum-x mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
@@ -835,7 +835,7 @@ function InvoiceLedger({
         ))}
       </div>
 
-      <div className="hidden overflow-x-auto md:block">
+      <div className="ios-momentum-x hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/30">

@@ -73,7 +73,7 @@ function ProgressIndicator({ step }: { step: number }) {
 
   return (
     <div className="mb-8">
-      <div className="flex items-center gap-3 overflow-x-auto pb-1">
+      <div className="ios-momentum-x flex items-center gap-3 overflow-x-auto pb-1">
         {steps.map((item, index) => (
           <div key={item.id} className="flex shrink-0 items-center gap-3">
             <div className={cn("flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold", item.id <= step ? "bg-orange-500 text-white" : "bg-[#2a2a2a] text-[#6b7280]")}>

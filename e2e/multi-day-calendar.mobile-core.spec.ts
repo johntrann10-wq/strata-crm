@@ -28,6 +28,42 @@ async function openCalendarAtMarch2026(page: import("@playwright/test").Page) {
 }
 
 test.describe("Multi-day job calendar QA - mobile", () => {
+  test("mobile week date cards swipe between adjacent weeks", async ({ page }) => {
+    test.setTimeout(120000);
+    await mockMultiDayApp(page);
+    await signIn(page);
+
+    await page.goto("/calendar?view=week&date=2026-03-31");
+    await expect(page.getByText("Week agenda")).toBeVisible();
+    await expect(page.getByText("Mar 29 - Apr 4")).toBeVisible();
+
+    const dateStrip = page.locator('[data-week-date-strip="true"]');
+    await expect(dateStrip).toBeVisible();
+    const stripBox = await dateStrip.boundingBox();
+    if (!stripBox) throw new Error("Expected mobile week date strip to render.");
+
+    const centerY = stripBox.y + stripBox.height / 2;
+    await page.mouse.move(stripBox.x + stripBox.width * 0.82, centerY);
+    await page.mouse.down();
+    await page.mouse.move(stripBox.x + stripBox.width * 0.18, centerY, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.getByText("Apr 5 - Apr 11")).toBeVisible();
+    await expect(page).toHaveURL(/view=week/);
+    await expect(page).toHaveURL(/date=2026-04-07/);
+
+    const nextStripBox = await dateStrip.boundingBox();
+    if (!nextStripBox) throw new Error("Expected mobile week date strip after next-week swipe.");
+    const nextCenterY = nextStripBox.y + nextStripBox.height / 2;
+    await page.mouse.move(nextStripBox.x + nextStripBox.width * 0.18, nextCenterY);
+    await page.mouse.down();
+    await page.mouse.move(nextStripBox.x + nextStripBox.width * 0.82, nextCenterY, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.getByText("Mar 29 - Apr 4")).toBeVisible();
+    await expect(page).toHaveURL(/date=2026-03-31/);
+  });
+
   test("mobile month stays stable and selected-day panels stay usable under dense multi-day data", async ({ page }) => {
     test.setTimeout(120000);
     await mockMultiDayApp(page);
@@ -43,17 +79,15 @@ test.describe("Multi-day job calendar QA - mobile", () => {
 
     await expect(monthGrid).toBeVisible();
     await expect(selectedPanel).toBeVisible();
-    await expect(page.getByText("Wrap Titan 5d").first()).toBeVisible();
-    await expect(page.getByText("PPF Carrera 3d").first()).toBeVisible();
-
     const before = {
       grid: await monthGrid.boundingBox(),
       panel: await selectedPanel.boundingBox(),
     };
 
-    await page.getByRole("button", { name: /Open Tuesday, March 31/i }).click();
+    await page.getByRole("button", { name: /Open Tuesday, March 31/i }).click({ position: { x: 12, y: 12 } });
     await expect(page.getByText("Selected date")).toBeVisible();
-    await expect(page.getByRole("complementary").getByText("Interior Detail")).toBeVisible();
+    await expect(selectedPanel.getByText("Interior Detail")).toBeVisible();
+    await expect(selectedPanel.getByText("PPF Carrera 3d")).toBeVisible();
 
     const afterDense = {
       grid: await monthGrid.boundingBox(),

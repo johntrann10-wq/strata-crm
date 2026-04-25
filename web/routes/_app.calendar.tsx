@@ -21,6 +21,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import {
   type ApptRecord,
   ConflictBanner,
+  getMonthGrid,
   MonthView,
   WeekView,
   detectConflicts,
@@ -44,7 +45,6 @@ import {
 } from "@/lib/calendarJobSpans";
 import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
-import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -87,15 +87,6 @@ function InlineMetricPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MobileInlineStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-white/86 px-2.5 py-1 text-[11px] shadow-sm">
-      <span className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground">{value}</span>
-    </div>
-  );
-}
-
 type InspectorSwipeGesture = {
   pointerId: number;
   startX: number;
@@ -132,8 +123,7 @@ function AgendaPreviewRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "native-touch-surface flex w-full items-start gap-3 rounded-[1.2rem] border border-border/60 bg-white/88 px-3 py-3 text-left transition-all hover:bg-white/96",
-        "[-webkit-touch-callout:none] touch-manipulation",
+        "flex w-full items-start gap-3 rounded-2xl border border-border/60 bg-white/82 px-3 py-3 text-left transition-colors hover:bg-white",
         selected && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
       )}
     >
@@ -195,8 +185,6 @@ function parseOptionalDateInput(value: string | null): Date | null {
   const parsed = parseDateInput(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
-
-const CALENDAR_FETCH_LIMIT = 1000;
 
 function combineDateAndTime(dateValue: string, timeValue: string): Date {
   const [hours, minutes] = timeValue.split(":").map(Number);
@@ -309,7 +297,6 @@ export default function CalendarPage() {
     if (internalSync) {
       if (internalSync.view === view && internalSync.date === requestedKey) {
         lastInternalUrlSyncRef.current = null;
-        return;
       }
       return;
     }
@@ -333,9 +320,9 @@ export default function CalendarPage() {
 
     if (visibleMonthKey !== requestedMonthKey) {
       setVisibleMonthDate(requestedMonthAnchor);
-    }
-    if (toLocalDateString(selectedDate) !== requestedKey) {
-      setSelectedDate(requestedDate);
+      if (toLocalDateString(selectedDate) !== requestedKey) {
+        setSelectedDate(requestedDate);
+      }
     }
   }, [currentDate, requestedDate, selectedDate, view, visibleMonthDate]);
 
@@ -353,20 +340,13 @@ export default function CalendarPage() {
   );
 
   const { queryStart, queryEnd } = useMemo(() => {
-    if (view === "month") {
-      return {
-        queryStart: new Date(visibleDate.getFullYear(), visibleDate.getMonth() - 1, 1, 0, 0, 0, 0),
-        queryEnd: new Date(visibleDate.getFullYear(), visibleDate.getMonth() + 2, 0, 23, 59, 59, 999),
-      };
-    }
-
     const monthStart = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1);
     const monthEnd = new Date(visibleDate.getFullYear(), visibleDate.getMonth() + 1, 0, 23, 59, 59, 999);
     return {
       queryStart: viewStart.getTime() < monthStart.getTime() ? viewStart : monthStart,
       queryEnd: viewEnd.getTime() > monthEnd.getTime() ? viewEnd : monthEnd,
     };
-  }, [view, viewEnd, viewStart, visibleDate]);
+  }, [visibleDate, viewEnd, viewStart]);
 
   const { startGte, startLte } = useMemo(
     () => ({ startGte: queryStart.toISOString(), startLte: queryEnd.toISOString() }),
@@ -413,7 +393,7 @@ export default function CalendarPage() {
       vehicle: { id: true, make: true, model: true, year: true },
       assignedStaff: { id: true, firstName: true, lastName: true },
     },
-    first: CALENDAR_FETCH_LIMIT,
+    first: 500,
   });
 
   const [{ data: locationsRaw }] = useFindMany(api.location, {
@@ -478,7 +458,7 @@ export default function CalendarPage() {
   const [{ fetching: rescheduling }, runReschedule] = useAction(api.appointment.update);
   const [{ fetching: creatingBlock }, createAppointment] = useAction(api.appointment.create);
   const [{ fetching: updatingBlock }, updateAppointment] = useAction(api.appointment.update);
-  const [{ fetching: unblockingBlock }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
+  const [{ fetching: unblockingBlock }, deleteAppointment] = useAction(api.appointment.delete);
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
     selectorSelectTriggerClassName("h-11 w-full [font-variant-numeric:tabular-nums]");
@@ -532,6 +512,14 @@ export default function CalendarPage() {
     });
   }
 
+  function handleWeekSwipeNavigate(direction: -1 | 1) {
+    setCurrentDate((date) => {
+      const next = navigateDate(date, "week", direction);
+      setSelectedDate(next);
+      return next;
+    });
+  }
+
   function handleToday() {
     const today = new Date();
     if (view === "month") {
@@ -544,7 +532,6 @@ export default function CalendarPage() {
 
   function handleViewChange(nextView: "month" | "week") {
     if (nextView === view) return;
-    void triggerNativeHaptic("light");
     if (nextView === "week") {
       setCurrentDate(selectedDate);
     } else {
@@ -584,7 +571,6 @@ export default function CalendarPage() {
   }
 
   function handleApptClick(apt: ApptRecord) {
-    void triggerNativeHaptic("light");
     if (isCalendarBlockAppointment(apt)) {
       setSelectedBlock(apt);
       return;
@@ -594,7 +580,6 @@ export default function CalendarPage() {
   }
 
   function handleNewAppointment() {
-    void triggerNativeHaptic("light");
     const targetDate = view === "month" ? selectedDate : currentDate;
     const iso = toLocalDateString(targetDate);
     navigate(`/appointments/new?date=${encodeURIComponent(iso)}${
@@ -603,7 +588,6 @@ export default function CalendarPage() {
   }
 
   function handleOpenBlockDialog() {
-    void triggerNativeHaptic("light");
     const targetDate = view === "month" ? selectedDate : currentDate;
     const selectedDate = toLocalDateString(targetDate);
     setEditingBlockId(null);
@@ -634,7 +618,12 @@ export default function CalendarPage() {
   }
 
   async function handleUnblock(block: ApptRecord) {
-    const result = await updateAppointmentStatus({ id: block.id, status: "cancelled" } as any);
+    if (!isCalendarBlockAppointment(block)) {
+      toast.error("Only blocked time can be removed from this menu.");
+      return;
+    }
+
+    const result = await deleteAppointment({ id: block.id } as any);
     if (result.error) {
       toast.error("Could not remove block: " + result.error.message);
       return;
@@ -809,6 +798,15 @@ export default function CalendarPage() {
       }, 0),
     [selectedMonthAppointments, selectedMonthRange]
   );
+  const mobileMonthWeekCount = useMemo(
+    () =>
+      getMonthGrid(visibleMonthDate, {
+        trimTrailingFullNextMonthWeek: true,
+      }).length,
+    [visibleMonthDate]
+  );
+  const mobileMonthHeightClassName =
+    mobileMonthWeekCount >= 6 ? "h-[25.5rem]" : mobileMonthWeekCount === 5 ? "h-[21.75rem]" : "h-[18rem]";
   const desktopMonthHeightClassName = "sm:h-[31rem] lg:h-[34rem] xl:h-[clamp(35rem,56dvh,42rem)]";
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
@@ -864,7 +862,6 @@ export default function CalendarPage() {
     setInspectorSwipeAnimating(true);
     setSelectedAppointmentId(inspectorAppointments[nextIndex].id);
     setInspectorSwipeOffset(0);
-    void triggerNativeHaptic("light");
     return true;
   }
 
@@ -952,24 +949,17 @@ export default function CalendarPage() {
       role="complementary"
       aria-label="Day inspector"
       aria-labelledby={dayInspectorTitleId}
-      className="native-foreground-panel flex h-full min-h-0 flex-col overflow-hidden"
+      className="flex h-full min-h-0 flex-col overflow-hidden"
     >
-        <div
-          className={cn(
-            "sticky top-0 z-10 flex flex-wrap items-start justify-between border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.92))]",
-            isMobileLayout ? "gap-2 px-2.5 pb-2 pt-2.5" : "gap-3 px-3 pb-3 pt-3"
-          )}
-        >
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
           <div className="space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
-            <h3 id={dayInspectorTitleId} className={cn("truncate font-semibold text-foreground", isMobileLayout ? "text-sm" : "text-base")}>
-              {formatPanelDate(inspectorDate)}
-            </h3>
+            <h3 id={dayInspectorTitleId} className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
           </div>
           {isMobileLayout ? (
-            <div className="flex flex-wrap gap-1.5 text-xs">
-              <MobileInlineStat label="Jobs" value={String(selectedDayAgendaItems.length)} />
-              <MobileInlineStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
+            <div className="flex flex-wrap gap-2 text-xs">
+              <InlineMetricPill label="Revenue" value={formatCurrency(selectedDayRevenue)} />
+              <InlineMetricPill label="Jobs" value={String(selectedDayAgendaItems.length)} />
             </div>
           ) : (
             <div className="flex flex-wrap gap-2 text-xs">
@@ -991,28 +981,28 @@ export default function CalendarPage() {
             </div>
           )}
       </div>
-      <div className={cn("min-h-0 flex-1", isMobileLayout ? "px-2.5 pb-2.5 pt-2.5" : "px-3 pb-3 pt-3")}>
+      <div className="mt-3 min-h-0 flex-1">
         <div className="grid h-full min-h-0 gap-3 grid-cols-1">
           <div
             className={cn(
-              "flex h-full min-h-0 flex-col overflow-hidden rounded-[1.3rem] border border-border/60 bg-white/82 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]",
-              isMobileLayout ? "min-h-[14.25rem] p-2" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
+              "flex h-full min-h-0 flex-col overflow-hidden rounded-[1.3rem] border border-border/60 bg-white/72",
+              isMobileLayout ? "min-h-[18.5rem] p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
             )}
           >
-            <div className={cn("flex items-center justify-between gap-3", isMobileLayout ? "mb-2" : "mb-3")}>
+            <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Selected date
+                {view === "month" ? "Selected date" : "Today plan"}
               </p>
-              <span className={cn("rounded-full border border-border/70 bg-background font-medium text-muted-foreground", isMobileLayout ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]")}>
+              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
                 {selectedDayAgendaItems.length}
               </span>
             </div>
             {selectedDayAgendaItems.length > 0 ? (
               <div
                 className={cn(
-                  "min-h-0 flex-1 space-y-2 overflow-y-auto scroll-pb-8 pb-2",
+                  "ios-momentum-y min-h-0 flex-1 space-y-2 overflow-y-auto scroll-pb-8 pb-2",
                   isMobileLayout
-                    ? "touch-pan-y overscroll-contain px-0.5 pb-3 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
+                    ? "touch-pan-y overscroll-contain px-1 pb-4 pr-0.5 pt-0.5"
                     : "pr-1 pt-0.5"
                 )}
               >
@@ -1030,7 +1020,7 @@ export default function CalendarPage() {
               </div>
             ) : (
               <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
-                <p className="text-sm font-medium text-foreground">No appointments on this date</p>
+                <p className="text-sm font-medium text-foreground">No appointments on this {view === "month" ? "date" : "day"}</p>
                 {view === "month" && busiestMonthDay ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
@@ -1046,78 +1036,68 @@ export default function CalendarPage() {
 
   return (
     <div className="page-content flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="page-section flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden sm:gap-3">
-        <div className={cn("surface-panel shrink-0 overflow-hidden", isMobileLayout ? "rounded-[1.15rem]" : "rounded-[1.35rem] sm:rounded-[1.7rem]")}>
-          <div
-            className={cn(
-              "bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))]",
-              isMobileLayout ? "px-2.5 py-2" : "border-b border-white/60 px-4 py-3 sm:px-5"
-            )}
-          >
-            <div className={cn("flex flex-col", isMobileLayout ? "gap-2.5" : "gap-3 xl:flex-row xl:items-center xl:justify-between")}>
-              <div className={cn("flex min-w-0 flex-1 flex-col", isMobileLayout ? "gap-2" : "gap-3")}>
-                <div className={cn("flex flex-wrap items-center", isMobileLayout ? "gap-1.5" : "gap-2")}>
-                  <h1 className={cn("font-semibold tracking-[-0.02em] text-foreground", isMobileLayout ? "text-sm" : "text-lg sm:text-xl")}>
+      <div className="page-section flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        <div className="surface-panel shrink-0 overflow-hidden rounded-[1.7rem]">
+          <div className="border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
                     {getHeaderTitle(visibleDate, view)}
                   </h1>
                   {activeLocationName ? (
-                    <span className={cn("inline-flex items-center gap-1.5 text-muted-foreground", isMobileLayout ? "text-[11px]" : "text-sm")}>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5" />
                       {activeLocationName}
                     </span>
                   ) : null}
                 </div>
 
-                <div className={cn(isMobileLayout ? "grid gap-2" : "flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center")}>
-                  <div className={selectorShellClassName(isMobileLayout ? "w-full justify-between" : "w-full sm:w-auto sm:justify-start")}>
-                    <Button variant="ghost" size="icon" className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-8 w-8")} onClick={handlePrev} aria-label="Previous">
+                <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+                  <div className={selectorShellClassName("w-full justify-between sm:w-auto sm:justify-start")}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handlePrev} aria-label="Previous">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button
                       variant={isToday ? "default" : "secondary"}
                       size="sm"
-                      className={cn("rounded-full", isMobileLayout ? "h-6.5 px-3 text-[11px]" : "h-8 px-4")}
+                      className="h-8 rounded-full px-4"
                       onClick={handleToday}
                     >
                       Today
                     </Button>
-                    <Button variant="ghost" size="icon" className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-8 w-8")} onClick={handleNext} aria-label="Next">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleNext} aria-label="Next">
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
 
-                  {availableViews.length > 1 ? (
-                    <div className={selectorShellClassName(isMobileLayout ? "w-full flex-nowrap" : "w-full sm:w-auto")}>
-                      {availableViews.map((calendarView) => (
-                        <button
-                          key={calendarView}
-                          type="button"
-                          onClick={() => handleViewChange(calendarView)}
-                          className={selectorPillButtonClassName(
-                            view === calendarView,
-                            cn("shrink-0 capitalize", isMobileLayout ? "min-h-8 flex-1 px-3 py-1.5 text-xs" : "px-4 py-1.5 text-sm")
-                          )}
-                        >
-                          {calendarView === "month" ? "Month" : "Week"}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                  <div className={selectorShellClassName("w-full sm:w-auto")}>
+                    {availableViews.map((calendarView) => (
+                      <button
+                        key={calendarView}
+                        type="button"
+                        onClick={() => handleViewChange(calendarView)}
+                        className={selectorPillButtonClassName(view === calendarView, "min-h-8 flex-1 shrink-0 px-4 py-1.5 text-sm capitalize sm:flex-none")}
+                      >
+                        {calendarView === "month" ? "Month" : "Week"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className={cn("flex", isMobileLayout ? "gap-2" : "flex-col gap-2 sm:flex-row xl:shrink-0")}>
-                <Button className={cn("rounded-2xl px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")} onClick={handleNewAppointment}>
+              <div className="flex flex-col gap-2 sm:flex-row xl:shrink-0">
+                <Button className="h-10 rounded-2xl px-4" onClick={handleNewAppointment}>
                   <Plus className="mr-2 h-4 w-4" />
-                  {isMobileLayout ? "New" : "New appointment"}
+                  New appointment
                 </Button>
                 <Button
                   variant="outline"
-                  className={cn("rounded-2xl border-border/70 bg-white/82 px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")}
+                  className="h-10 rounded-2xl border-border/70 bg-white/82 px-4"
                   onClick={handleOpenBlockDialog}
                 >
                   <Ban className="mr-2 h-4 w-4" />
-                  {isMobileLayout ? "Block" : "Block time"}
+                  Block time
                 </Button>
               </div>
             </div>
@@ -1154,56 +1134,34 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        {view === "month" ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
           <div
             className={cn(
-              "min-h-0 flex-1 gap-3 overflow-hidden",
-              isMobileLayout ? "grid grid-rows-[minmax(0,1.45fr)_minmax(13.5rem,0.85fr)]" : "grid lg:grid-cols-[minmax(0,1fr)_24rem]"
+              "surface-panel shrink-0 overflow-hidden rounded-[1.7rem] p-3",
+              (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
             )}
           >
-            <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
-              <div
-                className={cn(
-                  "surface-panel min-h-0 overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
-                  (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
-                )}
-              >
-                <div className={cn("overflow-hidden", isMobileLayout ? "h-full min-h-0" : desktopMonthHeightClassName)}>
-                  <MonthView
-                    currentDate={visibleMonthDate}
-                    selectedDate={selectedDate}
-                    selectedAppointmentId={selectedAppointmentId}
-                    appointments={appointments}
-                    onDayClick={handleDayClick}
-                    onApptClick={handleApptClick}
-                    conflictIds={activeConflicts}
-                    isMobileLayout={isMobileLayout}
-                  />
-                </div>
-              </div>
-              <div className={cn("flex shrink-0 justify-start", isMobileLayout && "hidden")}>
-                <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
-              </div>
-            </div>
-
             <div
               className={cn(
-                "min-h-0 overflow-hidden",
-                isMobileLayout ? "surface-panel rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3" : "flex h-full min-h-[24rem] lg:min-h-0"
+                "overflow-hidden",
+                view === "month"
+                  ? `${mobileMonthHeightClassName} ${desktopMonthHeightClassName}`
+                  : "h-[clamp(31rem,68dvh,42rem)] sm:h-[clamp(32rem,64dvh,44rem)] xl:h-[clamp(34rem,62dvh,46rem)]"
               )}
             >
-              {isMobileLayout ? dayInspectorPanel : <div className="flex min-h-0 flex-1">{dayInspectorPanel}</div>}
-            </div>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-            <div
-              className={cn(
-                "surface-panel min-h-0 overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
-                (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
-              )}
-            >
-              <div className={cn("overflow-hidden", isMobileLayout ? "h-full min-h-0" : "h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]")}>
+              {view === "month" ? (
+                <MonthView
+                  currentDate={visibleMonthDate}
+                  selectedDate={selectedDate}
+                  selectedAppointmentId={selectedAppointmentId}
+                  appointments={appointments}
+                  onDayClick={handleDayClick}
+                  onApptClick={handleApptClick}
+                  conflictIds={activeConflicts}
+                  isMobileLayout={isMobileLayout}
+                />
+              ) : null}
+              {view === "week" ? (
                 <WeekView
                   currentDate={currentDate}
                   appointments={appointments}
@@ -1213,13 +1171,31 @@ export default function CalendarPage() {
                     setSelectedDate(date);
                     setCurrentDate(date);
                   }}
+                  onWeekNavigate={handleWeekSwipeNavigate}
                   onReschedule={handleReschedule}
                   conflictIds={activeConflicts}
                 />
-              </div>
+              ) : null}
             </div>
           </div>
-        )}
+
+          {view === "month" ? (
+            <div className="flex shrink-0 justify-start">
+              <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
+            </div>
+          ) : null}
+
+          {view === "month" ? (
+            <div
+              className={cn(
+                "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
+                isMobileLayout ? "h-[26rem] min-h-[26rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
+              )}
+            >
+              {dayInspectorPanel}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <Sheet
@@ -1231,12 +1207,6 @@ export default function CalendarPage() {
       >
         <SheetContent
           side={isMobileLayout ? "bottom" : "right"}
-          swipeToClose
-          showHandle={false}
-          onSwipeClose={() => {
-            setIsAppointmentInspectorOpen(false);
-            setSelectedAppointmentId(null);
-          }}
           className={cn(
             "gap-0 !border-0 !bg-transparent !shadow-none p-2 [&>button]:right-5 [&>button]:top-5 [&>button]:z-30 [&>button]:rounded-full [&>button]:bg-white/85 [&>button]:backdrop-blur-xl",
             isMobileLayout
@@ -1246,7 +1216,7 @@ export default function CalendarPage() {
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-white/75 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.91))] shadow-[0_28px_80px_rgba(15,23,42,0.26),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-2xl">
             <div className="flex shrink-0 justify-center pt-3">
-              <span aria-hidden="true" className="native-sheet-handle" />
+              <span aria-hidden="true" className="h-1.5 w-12 rounded-full bg-slate-300/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]" />
             </div>
             <div className="shrink-0 border-b border-white/65 px-5 pb-3 pt-2 text-left">
               <div className="flex items-start justify-between gap-3">
@@ -1291,7 +1261,7 @@ export default function CalendarPage() {
               </SheetDescription>
             </div>
             <div
-              className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-4 touch-pan-y"
+              className="ios-momentum-y min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-4 touch-pan-y"
               onPointerDown={handleInspectorSwipePointerDown}
               onPointerMove={handleInspectorSwipePointerMove}
               onPointerUp={handleInspectorSwipePointerUp}
@@ -1300,7 +1270,7 @@ export default function CalendarPage() {
               <div
                 className={cn(
                   "min-h-full will-change-transform",
-                  inspectorSwipeAnimating ? "transition-[opacity,transform] duration-200 ease-out" : "transition-none"
+                  inspectorSwipeAnimating ? "ios-swipe-transition" : "transition-none"
                 )}
                 style={
                   isMobileLayout
@@ -1318,7 +1288,7 @@ export default function CalendarPage() {
                     emptyDescription={
                       view === "month"
                         ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
-                        : "Choose a job from the week board to inspect money, customer, vehicle, timing, and stage."
+                        : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
                     }
                     compact={isMobileLayout}
                     presentation="floating"

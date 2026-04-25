@@ -895,7 +895,7 @@ function AppointmentRequestsContent() {
               </p>
             </div>
           </CardHeader>
-          <CardContent className="px-0 lg:max-h-[calc(100vh-16rem)] lg:overflow-y-auto">
+          <CardContent className="ios-momentum-y px-0 lg:max-h-[calc(100vh-16rem)] lg:overflow-y-auto">
             {listLoading ? (
               <div className="space-y-3 px-5 py-5 sm:px-6">
                 {Array.from({ length: 4 }).map((_, index) => (
