@@ -249,6 +249,7 @@ export default function CalendarPage() {
   const inspectorSwipeRef = useRef<InspectorSwipeGesture | null>(null);
   const layoutInitializedRef = useRef(false);
   const lastInternalUrlSyncRef = useRef<{ view: "month" | "week"; date: string } | null>(null);
+  const pendingLocalViewRef = useRef<"month" | "week" | null>(null);
 
   useEffect(() => {
     const nextView =
@@ -257,6 +258,14 @@ export default function CalendarPage() {
         : requestedView === "week" || requestedView === "day"
           ? "week"
           : null;
+    const pendingLocalView = pendingLocalViewRef.current;
+    if (pendingLocalView) {
+      if (nextView === pendingLocalView || !nextView) {
+        pendingLocalViewRef.current = null;
+      } else {
+        return;
+      }
+    }
     if (!nextView || nextView === view) return;
     setView(nextView);
   }, [requestedView, view]);
@@ -532,6 +541,7 @@ export default function CalendarPage() {
 
   function handleViewChange(nextView: "month" | "week") {
     if (nextView === view) return;
+    pendingLocalViewRef.current = nextView;
     if (nextView === "week") {
       setCurrentDate(selectedDate);
     } else {
