@@ -4,6 +4,7 @@
  */
 export function pathAllowsMissingBusiness(pathname: string): boolean {
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) return true;
+  if (pathname === "/billing" || pathname.startsWith("/billing/")) return true;
   if (pathname === "/subscribe" || pathname.startsWith("/subscribe/")) return true;
   if (pathname === "/profile" || pathname.startsWith("/profile/")) return true;
   return false;
