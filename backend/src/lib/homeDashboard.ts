@@ -599,6 +599,17 @@ function toMoneyNumber(value: MoneyLike): number {
   return Number.isFinite(parsed) ? Number(parsed) : 0;
 }
 
+function toValidDate(value: Date | string | null | undefined) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 function getDashboardAppointmentAmount(
   row: Pick<
     AppointmentDashboardRow,
@@ -1932,22 +1943,22 @@ export function buildMonthlyRevenueChart(params: {
   });
 
   const indexByDate = new Map(days.map((day, index) => [day.date, index]));
-  const addBooked = (dateLike: Date | string | null, amount: MoneyLike) => {
-    const date = coerceValidDate(dateLike);
+  const addBooked = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
     if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.bookedRevenue += toMoneyNumber(amount);
   };
-  const addCollected = (dateLike: Date | string | null, amount: number) => {
-    const date = coerceValidDate(dateLike);
+  const addCollected = (dateLike: Date | string | null | undefined, amount: number) => {
+    const date = toValidDate(dateLike);
     if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.collectedRevenue += amount;
   };
-  const addExpense = (dateLike: Date | string | null, amount: MoneyLike) => {
-    const date = coerceValidDate(dateLike);
+  const addExpense = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
     if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
@@ -2325,7 +2336,7 @@ function isIgnorableDashboardPreferencesSchemaError(error: unknown) {
   return (
     code === "42P07" ||
     code === "42710" ||
-    message.includes('relation "dashboard_preferences" already exists') ||
+    message.includes("relation \"dashboard_preferences\" already exists") ||
     (code === "23505" &&
       constraint === "pg_type_typname_nsp_index" &&
       detail.includes("dashboard_preferences"))

@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_ALLOW_RELATIVE_API?: string;
   readonly VITE_GA_MEASUREMENT_ID?: string;
   readonly VITE_CLARITY_PROJECT_ID?: string;
+  readonly VITE_APP_RETURN_PATH?: string;
+  readonly VITE_APP_URL_SCHEME?: string;
 }
 
 interface ImportMeta {
