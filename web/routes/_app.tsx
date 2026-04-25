@@ -102,6 +102,22 @@ type BillingStatus = {
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
+function shouldUseCompactLandscapeShell() {
+  if (typeof window === "undefined") return false;
+
+  const supportsMatchMedia = typeof window.matchMedia === "function";
+  const coarsePointer = supportsMatchMedia ? window.matchMedia("(pointer: coarse)").matches : false;
+  const landscape = supportsMatchMedia
+    ? window.matchMedia("(orientation: landscape)").matches
+    : window.innerWidth > window.innerHeight;
+  const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+  const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+  const shortestSide = Math.min(viewportWidth, viewportHeight, window.innerWidth, window.innerHeight);
+  const tightPhoneViewport = viewportHeight <= 560 || shortestSide < 520;
+
+  return (isNativeShell() || coarsePointer) && landscape && tightPhoneViewport;
+}
+
 export type AuthOutletContext = RootOutletContext & {
   user: any;
   refreshUser: () => Promise<void>;
@@ -980,9 +996,7 @@ function AppLayoutInner({
     const root = document.documentElement;
 
     const updateShellMode = () => {
-      const shouldForceCompactShell =
-        isNativeShell() &&
-        window.matchMedia("(pointer: coarse) and (orientation: landscape) and (max-height: 500px)").matches;
+      const shouldForceCompactShell = shouldUseCompactLandscapeShell();
       setForceCompactMobileShell(shouldForceCompactShell);
       if (shouldForceCompactShell) {
         root.setAttribute("data-compact-landscape", "true");
@@ -994,10 +1008,12 @@ function AppLayoutInner({
     updateShellMode();
     window.addEventListener("resize", updateShellMode);
     window.addEventListener("orientationchange", updateShellMode);
+    window.visualViewport?.addEventListener("resize", updateShellMode);
 
     return () => {
       window.removeEventListener("resize", updateShellMode);
       window.removeEventListener("orientationchange", updateShellMode);
+      window.visualViewport?.removeEventListener("resize", updateShellMode);
       root.removeAttribute("data-compact-landscape");
     };
   }, []);

@@ -252,14 +252,64 @@ html[data-compact-landscape="true"] {
   font-size: 14px;
 }
 
+html[data-compact-landscape="true"],
+html[data-compact-landscape="true"] body {
+  min-height: 100dvh;
+}
+
 html[data-compact-landscape="true"] body {
   line-height: 1.35;
 }
 
+html[data-compact-landscape="true"] .app-mobile-shell-header {
+  flex: 0 0 auto;
+  min-height: 0;
+  border-bottom-color: hsl(var(--border) / 0.55);
+}
+
+html[data-compact-landscape="true"] .app-mobile-shell-header .app-mobile-shell-header-inner {
+  min-height: calc(2.25rem + env(safe-area-inset-top, 0px));
+  gap: 0.3rem;
+  padding-top: max(0.3rem, env(safe-area-inset-top, 0px));
+  padding-right: max(0.55rem, env(safe-area-inset-right, 0px));
+  padding-bottom: 0.35rem;
+  padding-left: max(0.55rem, env(safe-area-inset-left, 0px));
+}
+
+html[data-compact-landscape="true"] .app-mobile-shell-header .app-mobile-shell-menu-button {
+  height: 2rem;
+  width: 2rem;
+}
+
+html[data-compact-landscape="true"] .app-mobile-shell-header .app-mobile-shell-title {
+  font-size: 0.78rem;
+  line-height: 1.05rem;
+}
+
+html[data-compact-landscape="true"] .app-mobile-shell-header .app-mobile-shell-subtitle {
+  display: none;
+}
+
+html[data-compact-landscape="true"] .app-mobile-shell-header .app-mobile-shell-actions {
+  gap: 0.15rem;
+}
+
+html[data-compact-landscape="true"] .app-mobile-shell-header .app-mobile-shell-avatar {
+  transform: scale(0.84);
+}
+
+html[data-compact-landscape="true"] .app-native-scroll {
+  min-height: 0;
+  max-height: calc(100dvh - 2.75rem - env(safe-area-inset-top, 0px));
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+
 html[data-compact-landscape="true"] .page-content {
   padding-top: 0.5rem !important;
-  padding-right: 0.7rem !important;
-  padding-left: 0.7rem !important;
+  padding-right: max(0.7rem, env(safe-area-inset-right, 0px)) !important;
+  padding-left: max(0.7rem, env(safe-area-inset-left, 0px)) !important;
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.45rem) !important;
 }
 
@@ -284,6 +334,33 @@ html[data-compact-landscape="true"] [class*="fixed inset-x-0 bottom-0 z-40"] but
 html[data-compact-landscape="true"] .surface-panel,
 html[data-compact-landscape="true"] .app-page-header {
   border-radius: 0.95rem;
+}
+
+html[data-compact-landscape="true"] .app-page-header .app-page-header-shell {
+  padding: 0.65rem 0.8rem;
+}
+
+html[data-compact-landscape="true"] .app-page-header .app-page-header-layout {
+  gap: 0.55rem;
+}
+
+html[data-compact-landscape="true"] .app-page-header .app-page-header-back {
+  margin-bottom: 0.45rem;
+  padding: 0.28rem 0.6rem;
+  font-size: 0.55rem;
+}
+
+html[data-compact-landscape="true"] .app-page-header .app-page-header-copy {
+  gap: 0.35rem;
+}
+
+html[data-compact-landscape="true"] .app-page-header .app-page-header-title {
+  font-size: 1.02rem;
+  line-height: 1.25rem;
+}
+
+html[data-compact-landscape="true"] .app-page-header .app-page-header-subtitle {
+  display: none;
 }
 
 html[data-compact-landscape="true"] .mobile-support-card {
