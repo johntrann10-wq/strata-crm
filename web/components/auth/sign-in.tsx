@@ -113,7 +113,7 @@ export const SignInComponent = (props: {
 
           {isNativeShellSession ? (
             <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-left text-[12px] text-slate-700">
-              Apple and email sign-in stay fully in-app on iPhone and iPad. Google uses a secure browser sheet and should return straight back into Strata when you finish.
+              Use Apple, Google, or email with the same Strata account. Google opens a secure browser sheet and returns to Strata when finished.
             </div>
           ) : null}
 

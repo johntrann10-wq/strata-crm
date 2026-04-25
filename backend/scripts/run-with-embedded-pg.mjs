@@ -13,8 +13,9 @@ import pg from "pg";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.join(__dirname, "..");
 const isEphemeral = process.env.EMBEDDED_PG_EPHEMERAL === "1";
+const ephemeralRootDir = isEphemeral ? fs.mkdtempSync(path.join(os.tmpdir(), "strata-embedded-pg-")) : null;
 const dataDir = isEphemeral
-  ? fs.mkdtempSync(path.join(os.tmpdir(), "strata-embedded-pg-"))
+  ? path.join(ephemeralRootDir, "data")
   : process.env.EMBEDDED_PG_DATABASE_DIR || path.join(backendRoot, ".pgdata");
 const sqlPath = path.join(__dirname, "init-schema.sql");
 
@@ -57,8 +58,8 @@ async function main() {
   const stop = async () => {
     server.kill();
     await embedded.stop();
-    if (isEphemeral) {
-      fs.rmSync(dataDir, { recursive: true, force: true });
+    if (ephemeralRootDir) {
+      fs.rmSync(ephemeralRootDir, { recursive: true, force: true });
     }
     process.exit(0);
   };
@@ -70,6 +71,9 @@ async function main() {
 }
 
 main().catch((err) => {
+  if (ephemeralRootDir) {
+    fs.rmSync(ephemeralRootDir, { recursive: true, force: true });
+  }
   console.error(err);
   process.exit(1);
 });

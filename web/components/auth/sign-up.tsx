@@ -120,7 +120,7 @@ export const SignUpComponent = (props: {
 
             {isNativeShellSession ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-left text-[12px] text-slate-700">
-                Account creation stays entirely inside the app on iPhone and iPad. Use Apple or email to start here. If you already have a Google-based account, use sign in instead.
+                Use Apple or email to start securely on iPhone and iPad. If you already have a Google-based account, use sign in instead.
               </div>
             ) : null}
 
@@ -168,7 +168,7 @@ export const SignUpComponent = (props: {
             <div className="space-y-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Email and password</p>
-                <p className="mt-1 text-[13px] text-muted-foreground">Create your account without leaving the app.</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">Enter the work email you want linked to Strata.</p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

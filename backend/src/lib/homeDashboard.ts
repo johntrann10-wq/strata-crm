@@ -266,7 +266,6 @@ export type HomeDashboardWeeklyOverviewDay = {
     title: string;
     clientName: string;
     vehicleLabel: string;
-    status: "upcoming" | "inProgress" | "completed" | "cancelled";
     startTime: string;
     url: string;
   }>;
@@ -602,6 +601,17 @@ function toMoneyNumber(value: MoneyLike): number {
   return Number.isFinite(parsed) ? Number(parsed) : 0;
 }
 
+function toValidDate(value: Date | string | null | undefined) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 function getDashboardAppointmentAmount(
   row: Pick<
     AppointmentDashboardRow,
@@ -624,39 +634,24 @@ function getDashboardAppointmentAmount(
     adminFeeRate: toMoneyNumber(row.adminFeeRate),
     applyAdminFee: row.applyAdminFee === true,
   });
-  const explicitAdminFeeAmount = Math.max(0, toMoneyNumber(row.adminFeeAmount));
-  const explicitTaxAmount = Math.max(0, toMoneyNumber(row.taxAmount));
 
   const adminFeeAmount =
     row.applyAdminFee === true
-      ? explicitAdminFeeAmount > 0
-        ? explicitAdminFeeAmount
+      ? row.adminFeeAmount != null
+        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
         : computed.adminFeeAmount
       : 0;
   const taxableSubtotal = subtotal + adminFeeAmount;
   const taxAmount =
     row.applyTax === true
-      ? explicitTaxAmount > 0
-        ? explicitTaxAmount
+      ? row.taxAmount != null
+        ? Math.max(0, toMoneyNumber(row.taxAmount))
         : Number(((taxableSubtotal * Math.max(0, toMoneyNumber(row.taxRate))) / 100).toFixed(2))
       : 0;
   const computedTotal = Math.max(0, Number((taxableSubtotal + taxAmount).toFixed(2)));
-  const hasStructuredAmountInputs =
-    subtotal > 0 ||
-    row.applyTax === true ||
-    row.applyAdminFee === true ||
-    explicitTaxAmount > 0 ||
-    explicitAdminFeeAmount > 0 ||
-    toMoneyNumber(row.taxRate) > 0 ||
-    toMoneyNumber(row.adminFeeRate) > 0;
 
-  if (hasStructuredAmountInputs && computedTotal > 0) {
-    return computedTotal;
-  }
-  if (storedTotal > 0) {
-    return Number(storedTotal.toFixed(2));
-  }
-  return computedTotal;
+  if (computedTotal > 0) return computedTotal;
+  return storedTotal;
 }
 
 function safeParseMetadata(metadata: string | null | undefined): Record<string, unknown> {
@@ -676,12 +671,6 @@ function getActivityLogEffectivePaidAt(metadata: string | null | undefined, fall
     if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
   }
   return fallback;
-}
-
-function coerceValidDate(value: Date | string | null | undefined) {
-  if (!value) return null;
-  const candidate = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(candidate.getTime()) ? null : candidate;
 }
 
 function isCarryoverPaymentRow(row: {
@@ -875,17 +864,16 @@ export function getDashboardModulePermissions(permissions: PermissionKey[] = [])
   const has = (permission: PermissionKey) => permissions.includes(permission);
   return {
     today: has("appointments.read"),
-    // Treat cash widgets as true finance visibility, not generic invoice lookup access.
-    cash: has("payments.read"),
+    cash: has("payments.read") || has("invoices.read"),
     conversion: has("customers.read") || has("quotes.read"),
     todaySchedule: has("appointments.read"),
     actionQueue: true,
     pipeline: has("customers.read") || has("quotes.read") || has("appointments.read") || has("invoices.read"),
-    revenueCollections: has("payments.read"),
+    revenueCollections: has("payments.read") || has("invoices.read"),
     recentActivity: true,
     automations: has("settings.read"),
     businessHealth: true,
-    goals: has("payments.read"),
+    goals: has("payments.read") || has("invoices.read"),
     teamVisibility: has("team.read"),
     clientVisibility: has("customers.read"),
     vehicleVisibility: has("vehicles.read"),
@@ -1370,8 +1358,8 @@ export function buildQuickActions(
     actions.push({
       key: "search_appointments",
       label: "Search appointments",
-      description: "Find work by client, vehicle, technician, day, or time.",
-      url: "/appointments?filter=all",
+      description: "Find appointments by client, vehicle, service, or time.",
+      url: "/appointments?focus=search",
       permission: "appointments.read",
     });
   }
@@ -1379,8 +1367,8 @@ export function buildQuickActions(
     actions.push({
       key: "search_leads",
       label: "Search leads",
-      description: "Find leads by name, service, vehicle, source, or status.",
-      url: "/leads?status=active",
+      description: "Find inbound leads by name, phone, service, or status.",
+      url: "/leads?focus=search",
       permission: "customers.read",
     });
   }
@@ -1884,7 +1872,6 @@ export function buildWeeklyAppointmentOverview(params: {
           make: row.vehicleMake,
           model: row.vehicleModel,
         }),
-        status: getAppointmentOverviewStatus(row.status),
         startTime: row.startTime.toISOString(),
         url: buildAppPath(`/appointments/${row.id}`),
       });
@@ -1954,22 +1941,22 @@ export function buildMonthlyRevenueChart(params: {
   });
 
   const indexByDate = new Map(days.map((day, index) => [day.date, index]));
-  const addBooked = (dateLike: Date | string | null, amount: MoneyLike) => {
-    const date = coerceValidDate(dateLike);
+  const addBooked = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
     if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.bookedRevenue += toMoneyNumber(amount);
   };
-  const addCollected = (dateLike: Date | string | null, amount: number) => {
-    const date = coerceValidDate(dateLike);
+  const addCollected = (dateLike: Date | string | null | undefined, amount: number) => {
+    const date = toValidDate(dateLike);
     if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.collectedRevenue += amount;
   };
-  const addExpense = (dateLike: Date | string | null, amount: MoneyLike) => {
-    const date = coerceValidDate(dateLike);
+  const addExpense = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
     if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
@@ -2347,7 +2334,7 @@ function isIgnorableDashboardPreferencesSchemaError(error: unknown) {
   return (
     code === "42P07" ||
     code === "42710" ||
-    message.includes('relation "dashboard_preferences" already exists') ||
+    message.includes("relation \"dashboard_preferences\" already exists") ||
     (code === "23505" &&
       constraint === "pg_type_typname_nsp_index" &&
       detail.includes("dashboard_preferences"))
@@ -2943,8 +2930,7 @@ async function loadReactivationRows(
       and(
         eq(clients.businessId, business.id),
         eq(clients.marketingOptIn, true),
-        sql`${lastVisits.lastVisit} is not null`,
-        lte(lastVisits.lastVisit, cutoff),
+        or(sql`${lastVisits.lastVisit} is null`, lte(lastVisits.lastVisit, cutoff)),
         sql`not exists (
           select 1 from ${activityLogs}
           where ${activityLogs.businessId} = ${business.id}

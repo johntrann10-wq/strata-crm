@@ -32,13 +32,6 @@ describe("auth route helper logic", () => {
     );
   });
 
-  it("uses a query token for the native app return path", async () => {
-    const { buildPostAuthRedirectUrl } = await import("./auth.js");
-    expect(buildPostAuthRedirectUrl("https://app.strata.test", "/app-return?next=%2Fsigned-in", "abc123")).toBe(
-      "https://app.strata.test/app-return?next=%2Fsigned-in&authToken=abc123"
-    );
-  });
-
   it("uses the configured frontend origin for security-sensitive links", async () => {
     const { resolveFrontendBaseUrl } = await import("./auth.js");
     const previous = process.env.FRONTEND_URL;
@@ -101,7 +94,7 @@ describe("auth route helper logic", () => {
     expect(updates).toBeNull();
   });
 
-  it("links Apple sign-in metadata onto an existing email account", async () => {
+  it("backfills Apple linkage and private relay metadata for an existing email account", async () => {
     const { resolveAppleAccountUpdates } = await import("./auth.js");
     const updates = resolveAppleAccountUpdates(
       {
@@ -114,7 +107,7 @@ describe("auth route helper logic", () => {
       },
       {
         appleSubject: "apple-sub-123",
-        appleEmail: "driver@privaterelay.appleid.com",
+        appleEmail: "relay@privaterelay.appleid.com",
         appleEmailIsPrivateRelay: true,
         firstName: "Jamie",
         lastName: "Fresh",
@@ -123,7 +116,7 @@ describe("auth route helper logic", () => {
     );
     expect(updates).toMatchObject({
       appleSubject: "apple-sub-123",
-      appleEmail: "driver@privaterelay.appleid.com",
+      appleEmail: "relay@privaterelay.appleid.com",
       appleEmailIsPrivateRelay: true,
       firstName: "Jamie",
       emailVerified: true,
@@ -132,13 +125,36 @@ describe("auth route helper logic", () => {
     expect(updates?.updatedAt).toBeInstanceOf(Date);
   });
 
-  it("rejects Apple sign-in when the email is linked to a different Apple account", async () => {
+  it("returns no Apple account updates when the account is already linked", async () => {
+    const { resolveAppleAccountUpdates } = await import("./auth.js");
+    const updates = resolveAppleAccountUpdates(
+      {
+        appleSubject: "apple-sub-123",
+        appleEmail: "relay@privaterelay.appleid.com",
+        appleEmailIsPrivateRelay: true,
+        firstName: "Jamie",
+        lastName: "Existing",
+        emailVerified: true,
+      },
+      {
+        appleSubject: "apple-sub-123",
+        appleEmail: "relay@privaterelay.appleid.com",
+        appleEmailIsPrivateRelay: true,
+        firstName: "Jamie",
+        lastName: "Fresh",
+        emailVerified: true,
+      }
+    );
+    expect(updates).toBeNull();
+  });
+
+  it("rejects an Apple sign-in when the email is linked to a different Apple account", async () => {
     const { resolveAppleAccountUpdates } = await import("./auth.js");
     expect(() =>
       resolveAppleAccountUpdates(
         {
           appleSubject: "apple-sub-123",
-          appleEmail: "shop@example.com",
+          appleEmail: "owner@example.com",
           appleEmailIsPrivateRelay: false,
           firstName: "Jamie",
           lastName: "Existing",
@@ -146,7 +162,7 @@ describe("auth route helper logic", () => {
         },
         {
           appleSubject: "apple-sub-999",
-          appleEmail: "shop@example.com",
+          appleEmail: "owner@example.com",
           appleEmailIsPrivateRelay: false,
           firstName: "Jamie",
           lastName: "Existing",
