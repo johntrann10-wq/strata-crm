@@ -1102,7 +1102,7 @@ function BillingTab({
                     {billingStatus === null ? "Loading billing" : subscriptionActionLabel}
                   </Button>
                   <Button asChild variant="outline" className="w-full justify-center bg-white/80">
-                    <Link to="/subscribe">Open subscription page</Link>
+                    <Link to="/subscribe">Subscribe</Link>
                   </Button>
                 </div>
               </div>
