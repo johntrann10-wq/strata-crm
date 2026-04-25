@@ -524,8 +524,8 @@ export function AppointmentBlock({
   const endDecimal = Math.min(end.getHours() + end.getMinutes() / 60, END_HOUR);
 
   const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
-  const height = Math.max((endDecimal - startDecimal) * HOUR_HEIGHT, 42);
   const isWeekLayout = layout === "week";
+  const height = Math.max((endDecimal - startDecimal) * HOUR_HEIGHT, isWeekLayout ? 56 : 42);
 
   const style = getStatusStyle(apt.status);
   const isBlock = isCalendarBlockAppointment(apt);
@@ -610,8 +610,8 @@ export function AppointmentBlock({
             </span>
           </div>
           <div className="min-w-0">
-            <p className="line-clamp-1 text-[11px] font-semibold leading-tight">{customerLabel}</p>
-            <p className="mt-0.5 line-clamp-1 text-[10px] font-medium leading-tight text-muted-foreground">{apptLabel(apt)}</p>
+            <p className="line-clamp-1 text-xs font-semibold leading-tight">{customerLabel}</p>
+            <p className="mt-0.5 line-clamp-1 text-[11px] font-medium leading-tight text-muted-foreground">{apptLabel(apt)}</p>
             {!dense && vehicleLabel ? (
               <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground/85">{vehicleLabel}</p>
             ) : null}
@@ -684,14 +684,16 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   const orderedAppointments = [...appointments].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
+  const visibleDots = orderedAppointments.slice(0, 6);
+  const extraCount = Math.max(0, orderedAppointments.length - visibleDots.length);
   const countLabel = orderedAppointments.some((apt) => isCalendarBlockAppointment(apt))
     ? `${appointments.length} item${appointments.length === 1 ? "" : "s"}`
     : `${appointments.length} appt${appointments.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="pointer-events-none min-w-0 overflow-visible space-y-1 pb-0.5 sm:pb-1">
-      <div className="grid min-h-[8px] grid-cols-6 items-center gap-1 overflow-visible sm:min-h-[12px] sm:grid-cols-8">
-        {orderedAppointments.map((apt) => {
+    <div className="pointer-events-none min-w-0 overflow-hidden space-y-1 pb-0.5 sm:pb-1">
+      <div className="flex h-4 min-w-0 flex-wrap items-center gap-1 overflow-hidden sm:h-5">
+        {visibleDots.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
             <span
@@ -703,6 +705,11 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
             />
           );
         })}
+        {extraCount > 0 ? (
+          <span className="rounded-full bg-muted px-1 text-[8px] font-semibold leading-4 text-muted-foreground sm:text-[9px]">
+            +{extraCount}
+          </span>
+        ) : null}
       </div>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
         {countLabel}

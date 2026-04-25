@@ -35,7 +35,7 @@ interface WeekViewProps {
   currentDate: Date;
   appointments: ApptRecord[];
   onSlotClick: (date: Date) => void;
-  onApptClick: (apt: ApptRecord) => void;
+  onApptClick: (apt: ApptRecord, dayContext?: Date) => void;
   onDayClick?: (date: Date) => void;
   onWeekNavigate?: (direction: -1 | 1) => void;
   onReschedule?: (appointmentId: string, newStart: Date, newEnd: Date | null) => void;
@@ -48,6 +48,13 @@ type MobileWeekSwipeGesture = {
   startY: number;
   axis: "pending" | "horizontal" | "vertical";
   captured: boolean;
+};
+
+type PositionedWeekAppointment = {
+  appointment: ApptRecord;
+  leftCss: string;
+  widthCss: string;
+  zIndex: number;
 };
 
 const MOBILE_WEEK_SWIPE_INTENT_PX = 12;
@@ -404,6 +411,14 @@ export function WeekView({
     () => weekDays.map((day) => getWeekDaySummary(day, appointments, conflictIds)),
     [appointments, conflictIds, weekDays]
   );
+  const positionedDayAppointments = useMemo(() => {
+    const map = new Map<string, PositionedWeekAppointment[]>();
+    weekDays.forEach((day) => {
+      const dayAppts = appointments.filter((apt) => hasLaborOnDay(apt, day));
+      map.set(toDayKey(day), getPositionedWeekAppointments(dayAppts));
+    });
+    return map;
+  }, [appointments, weekDays]);
   const mobileWeekPages = useMemo(
     () =>
       [-1, 0, 1].map((offset) => {
@@ -585,7 +600,7 @@ export function WeekView({
                       appointment={appointment}
                       currentDate={focusedSummary.day}
                       conflict={conflictIds?.has(appointment.id)}
-                      onOpen={() => onApptClick(appointment)}
+                      onOpen={() => onApptClick(appointment, focusedSummary.day)}
                     />
                   ))}
                 </MobileWeekGroup>
@@ -600,7 +615,7 @@ export function WeekView({
                       currentDate={focusedSummary.day}
                       mode="onsite"
                       conflict={conflictIds?.has(appointment.id)}
-                      onOpen={() => onApptClick(appointment)}
+                      onOpen={() => onApptClick(appointment, focusedSummary.day)}
                     />
                   ))}
                 </MobileWeekGroup>
@@ -690,7 +705,7 @@ export function WeekView({
                 <button
                   key={`${apt.id}-span`}
                   type="button"
-                  onClick={() => onApptClick(apt)}
+                  onClick={() => onApptClick(apt, weekDays[startIndex] ?? currentDate)}
                   className="absolute flex h-6 items-center gap-1.5 overflow-hidden rounded-full border border-border/60 bg-background/95 px-2.5 text-left text-[10px] shadow-sm"
                   style={{
                     top: `${laneIndex * 28 + 6}px`,
@@ -739,7 +754,7 @@ export function WeekView({
           </div>
 
           {weekDays.map((day, di) => {
-            const dayAppts = appointments.filter((apt) => hasLaborOnDay(apt, day));
+            const dayAppts = positionedDayAppointments.get(toDayKey(day)) ?? [];
             const isTodayColumn = isSameDay(day, today);
 
           return (
@@ -837,17 +852,20 @@ export function WeekView({
                   </div>
                 ) : null}
 
-                {dayAppts.map((apt) => (
+                {dayAppts.map(({ appointment, leftCss, widthCss, zIndex }) => (
                   <AppointmentBlock
-                    key={apt.id}
-                    apt={apt}
+                    key={appointment.id}
+                    apt={appointment}
                     dayContext={day}
                     layout="week"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onApptClick(apt);
+                      onApptClick(appointment, day);
                     }}
-                    isConflict={conflictIds?.has(apt.id)}
+                    isConflict={conflictIds?.has(appointment.id)}
+                    leftCss={leftCss}
+                    widthCss={widthCss}
+                    zIndex={zIndex}
                   />
                 ))}
 
@@ -970,6 +988,72 @@ function MobileWeekAppointmentCard({
       </button>
     </NativeContextActions>
   );
+}
+
+function getPositionedWeekAppointments(dayAppointments: ApptRecord[]): PositionedWeekAppointment[] {
+  const sorted = [...dayAppointments].sort((a, b) => {
+    const startDiff = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+    if (startDiff !== 0) return startDiff;
+    const aEnd = a.endTime ? new Date(a.endTime).getTime() : new Date(a.startTime).getTime() + 3600000;
+    const bEnd = b.endTime ? new Date(b.endTime).getTime() : new Date(b.startTime).getTime() + 3600000;
+    return aEnd - bEnd;
+  });
+
+  const gutter = 4;
+  const horizontalInset = 4;
+  const positioned: PositionedWeekAppointment[] = [];
+  let index = 0;
+
+  while (index < sorted.length) {
+    const cluster: ApptRecord[] = [];
+    let clusterEnd = 0;
+
+    while (index < sorted.length) {
+      const appointment = sorted[index];
+      const startMs = new Date(appointment.startTime).getTime();
+      const endMs = appointment.endTime ? new Date(appointment.endTime).getTime() : startMs + 3600000;
+
+      if (cluster.length === 0 || startMs < clusterEnd) {
+        cluster.push(appointment);
+        clusterEnd = Math.max(clusterEnd, endMs);
+        index += 1;
+        continue;
+      }
+      break;
+    }
+
+    const lanes: Array<Array<{ startMs: number; endMs: number }>> = [];
+    const laneAssignments = new Map<string, number>();
+
+    for (const appointment of cluster) {
+      const startMs = new Date(appointment.startTime).getTime();
+      const endMs = appointment.endTime ? new Date(appointment.endTime).getTime() : startMs + 3600000;
+      let laneIndex = lanes.findIndex((lane) => lane[lane.length - 1]!.endMs <= startMs);
+
+      if (laneIndex === -1) {
+        laneIndex = lanes.length;
+        lanes.push([]);
+      }
+
+      lanes[laneIndex]!.push({ startMs, endMs });
+      laneAssignments.set(appointment.id, laneIndex);
+    }
+
+    const maxColumns = Math.max(lanes.length, 1);
+    const widthCss = `calc((100% - ${horizontalInset * 2}px - ${(maxColumns - 1) * gutter}px) / ${maxColumns})`;
+
+    for (const appointment of cluster) {
+      const laneIndex = laneAssignments.get(appointment.id) ?? 0;
+      positioned.push({
+        appointment,
+        leftCss: `calc(${horizontalInset}px + (${laneIndex} * (${widthCss} + ${gutter}px)))`,
+        widthCss,
+        zIndex: 20 + laneIndex,
+      });
+    }
+  }
+
+  return positioned;
 }
 
 function getWeekDaySummary(day: Date, appointments: ApptRecord[], conflictIds?: Set<string>) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type TouchEvent } from "react";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
@@ -580,10 +580,16 @@ export default function CalendarPage() {
     }`);
   }
 
-  function handleApptClick(apt: ApptRecord) {
+  function handleApptClick(apt: ApptRecord, dayContext?: Date) {
     if (isCalendarBlockAppointment(apt)) {
       setSelectedBlock(apt);
       return;
+    }
+    const inspectorDay = dayStart(dayContext ?? getJobSpanStart(apt));
+    setSelectedDate(inspectorDay);
+    setCurrentDate(inspectorDay);
+    if (view === "month") {
+      setVisibleMonthDate(toMonthAnchor(inspectorDay));
     }
     setSelectedAppointmentId(apt.id);
     setIsAppointmentInspectorOpen(true);
@@ -875,25 +881,24 @@ export default function CalendarPage() {
     return true;
   }
 
-  function handleInspectorSwipePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!isMobileLayout || inspectorAppointmentCount <= 1 || event.pointerType === "mouse") return;
-    if (isCalendarSwipeInteractiveTarget(event.target)) return;
+  function beginInspectorSwipe(clientX: number, clientY: number, pointerId: number) {
+    if (!isMobileLayout || inspectorAppointmentCount <= 1) return;
     inspectorSwipeRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
+      pointerId,
+      startX: clientX,
+      startY: clientY,
       axis: "pending",
       captured: false,
     };
     setInspectorSwipeAnimating(false);
   }
 
-  function handleInspectorSwipePointerMove(event: PointerEvent<HTMLDivElement>) {
+  function updateInspectorSwipe(clientX: number, clientY: number, preventDefault?: () => void) {
     const gesture = inspectorSwipeRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture) return;
 
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
+    const deltaX = clientX - gesture.startX;
+    const deltaY = clientY - gesture.startY;
     const absX = Math.abs(deltaX);
     const absY = Math.abs(deltaY);
 
@@ -904,36 +909,104 @@ export default function CalendarPage() {
       }
       if (absX <= Math.max(absY * 1.35, 18)) return;
       gesture.axis = "horizontal";
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        gesture.captured = true;
-      } catch {
-        gesture.captured = false;
-      }
     }
 
     if (gesture.axis !== "horizontal") return;
-    event.preventDefault();
+    preventDefault?.();
 
     const direction = deltaX < 0 ? 1 : -1;
     const canMove = direction === 1 ? canSwipeToNextAppointment : canSwipeToPreviousAppointment;
     const resistedOffset = canMove ? deltaX : deltaX * 0.24;
-    setInspectorSwipeOffset(Math.max(-96, Math.min(96, resistedOffset)));
+    setInspectorSwipeOffset(Math.max(-112, Math.min(112, resistedOffset)));
   }
 
-  function handleInspectorSwipePointerUp(event: PointerEvent<HTMLDivElement>) {
+  function finishInspectorSwipe(clientX: number, clientY: number) {
     const gesture = inspectorSwipeRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture) return;
 
-    if (gesture.axis === "horizontal" && Math.abs(inspectorSwipeOffset) >= 52) {
-      const direction = inspectorSwipeOffset < 0 ? 1 : -1;
+    const deltaX = clientX - gesture.startX;
+    const deltaY = clientY - gesture.startY;
+    const direction = deltaX < 0 ? 1 : -1;
+    const canMove = direction === 1 ? canSwipeToNextAppointment : canSwipeToPreviousAppointment;
+    const shouldChangeAppointment =
+      gesture.axis === "horizontal" &&
+      canMove &&
+      Math.abs(deltaX) >= 52 &&
+      Math.abs(deltaX) > Math.abs(deltaY) * 1.1;
+
+    if (shouldChangeAppointment) {
       selectInspectorAppointmentByDirection(direction);
     }
 
     releaseInspectorSwipe();
   }
 
-  function handleInspectorSwipePointerCancel() {
+  function handleInspectorSwipePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!isMobileLayout || inspectorAppointmentCount <= 1 || event.pointerType === "touch" || event.pointerType === "mouse") return;
+    if (isCalendarSwipeInteractiveTarget(event.target)) return;
+    beginInspectorSwipe(event.clientX, event.clientY, event.pointerId);
+  }
+
+  function handleInspectorSwipePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const gesture = inspectorSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    if (gesture.axis === "pending") {
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+      if (absX > Math.max(absY * 1.35, 18)) {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          gesture.captured = true;
+        } catch {
+          gesture.captured = false;
+        }
+      }
+    }
+    updateInspectorSwipe(event.clientX, event.clientY, () => event.preventDefault());
+  }
+
+  function handleInspectorSwipePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const gesture = inspectorSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const captured = gesture.captured;
+    finishInspectorSwipe(event.clientX, event.clientY);
+    if (captured && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function handleInspectorSwipePointerCancel(event: PointerEvent<HTMLDivElement>) {
+    const gesture = inspectorSwipeRef.current;
+    if (gesture?.captured && event.currentTarget.hasPointerCapture(gesture.pointerId)) {
+      event.currentTarget.releasePointerCapture(gesture.pointerId);
+    }
+    releaseInspectorSwipe();
+  }
+
+  function handleInspectorSwipeTouchStart(event: TouchEvent<HTMLDivElement>) {
+    if (event.touches.length !== 1) return;
+    if (isCalendarSwipeInteractiveTarget(event.target)) return;
+    const touch = event.touches[0];
+    beginInspectorSwipe(touch.clientX, touch.clientY, -1);
+  }
+
+  function handleInspectorSwipeTouchMove(event: TouchEvent<HTMLDivElement>) {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    updateInspectorSwipe(touch.clientX, touch.clientY, () => event.preventDefault());
+  }
+
+  function handleInspectorSwipeTouchEnd(event: TouchEvent<HTMLDivElement>) {
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    finishInspectorSwipe(touch.clientX, touch.clientY);
+  }
+
+  function handleInspectorSwipeTouchCancel() {
     releaseInspectorSwipe();
   }
 
@@ -1030,7 +1103,7 @@ export default function CalendarPage() {
                     kind={kind}
                     selected={selectedAppointmentId === appointment.id}
                     currentDate={inspectorDate}
-                    onClick={() => handleApptClick(appointment)}
+                    onClick={() => handleApptClick(appointment, inspectorDate)}
                   />
                 ))}
                 {isMobileLayout ? <div aria-hidden="true" className="h-6 shrink-0" /> : null}
@@ -1206,7 +1279,7 @@ export default function CalendarPage() {
             <div
               className={cn(
                 "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "h-[42dvh] max-h-[20rem] min-h-[12rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
+                isMobileLayout ? "h-[clamp(13rem,36dvh,18rem)] max-h-[18rem] min-h-0 p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
               )}
             >
               {dayInspectorPanel}
@@ -1311,6 +1384,10 @@ export default function CalendarPage() {
               onPointerMove={handleInspectorSwipePointerMove}
               onPointerUp={handleInspectorSwipePointerUp}
               onPointerCancel={handleInspectorSwipePointerCancel}
+              onTouchStart={handleInspectorSwipeTouchStart}
+              onTouchMove={handleInspectorSwipeTouchMove}
+              onTouchEnd={handleInspectorSwipeTouchEnd}
+              onTouchCancel={handleInspectorSwipeTouchCancel}
             >
               <div
                 className={cn(
