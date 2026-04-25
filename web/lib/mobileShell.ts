@@ -17,6 +17,14 @@ type NativeAppUrlListenerHandle = {
   remove: () => Promise<void> | void;
 };
 
+type WindowWithCapacitor = Window & {
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+    platform?: string;
+  };
+};
+
 function stripTrailingSlash(path: string): string {
   return path.length > 1 ? path.replace(/\/+$/, "") || "/" : path;
 }
@@ -28,7 +36,36 @@ function normalizeAppPath(input: string | null | undefined, fallback: string): s
   return stripTrailingSlash(trimmed);
 }
 
-export function isNativeShell(): boolean {
+function getCapacitorBridge(): WindowWithCapacitor["Capacitor"] | null {
+  if (typeof window === "undefined") return null;
+  return (window as WindowWithCapacitor).Capacitor ?? null;
+}
+
+export function getCapacitorPlatform(): string | null {
+  const capacitor = getCapacitorBridge();
+  if (!capacitor) return null;
+  const platform = capacitor.getPlatform?.() ?? capacitor.platform ?? null;
+  return typeof platform === "string" && platform.trim() ? platform.toLowerCase() : null;
+}
+
+export function isCapacitorNativeApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const capacitor = getCapacitorBridge();
+  if (!capacitor) return window.location.protocol === "capacitor:";
+  if (capacitor.isNativePlatform?.() === true) return true;
+  const platform = getCapacitorPlatform();
+  return platform === "ios" || platform === "android" || window.location.protocol === "capacitor:";
+}
+
+export function isNativeIOSApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const platform = getCapacitorPlatform();
+  if (platform === "ios") return true;
+  if (!isCapacitorNativeApp()) return false;
+  return /\b(iPad|iPhone|iPod)\b/i.test(window.navigator.userAgent);
+}
+
+export function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") return false;
   const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
   try {
@@ -36,7 +73,19 @@ export function isNativeShell(): boolean {
   } catch {
     // Ignore restricted-environment matchMedia failures.
   }
-  return navigatorWithStandalone.standalone === true || typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined";
+  return navigatorWithStandalone.standalone === true;
+}
+
+export function isNativeShell(): boolean {
+  return isCapacitorNativeApp() || isStandaloneWebApp();
+}
+
+export function shouldShowWebBillingSurface(): boolean {
+  return !isNativeIOSApp();
+}
+
+export function canOpenExternalPaymentProvider(): boolean {
+  return !isNativeIOSApp();
 }
 
 export function getAppReturnPath(): string {

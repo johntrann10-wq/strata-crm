@@ -7,7 +7,7 @@ import { CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { getBillingAccessLabel, getTrialDaysLeft, hasFullBillingAccess, type BillingAccessState } from "../lib/billingAccess";
 import type { AuthOutletContext } from "./_app";
 import type { BillingActivationMilestone, BillingPromptState } from "../lib/billingPrompts";
-import { isNativeShell } from "@/lib/mobileShell";
+import { canOpenExternalPaymentProvider, shouldShowWebBillingSurface } from "@/lib/mobileShell";
 
 type BillingStatus = {
   status: string | null;
@@ -61,7 +61,7 @@ function getPrimaryBillingAction(status: BillingStatus | null): {
 }
 
 export default function SubscribePage() {
-  const nativeShellSession = isNativeShell();
+  const nativeShellSession = !shouldShowWebBillingSurface();
   const { membershipRole } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -101,6 +101,7 @@ export default function SubscribePage() {
 
   const handleOpenBillingPortal = async () => {
     if (!canManageBilling || !primaryAction) return;
+    if (!canOpenExternalPaymentProvider()) return;
     setError(null);
     setNotice(null);
     if (!primaryAction.configured) {

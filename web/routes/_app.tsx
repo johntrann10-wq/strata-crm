@@ -75,7 +75,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
-import { isNativeShell } from "@/lib/mobileShell";
+import { canOpenExternalPaymentProvider, isNativeShell, shouldShowWebBillingSurface } from "@/lib/mobileShell";
 import { triggerImpactFeedback, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 import { useKeyboardShortcutHints } from "@/hooks/useKeyboardShortcutHints";
 
@@ -265,9 +265,9 @@ function shouldShowNavItem(
   item: AppNavItem,
   enabledModules: Set<string>,
   permissions: Set<string>,
-  nativeShellSession: boolean
+  showWebBillingSurface: boolean
 ): boolean {
-  if (nativeShellSession && item.hideInNative) return false;
+  if (!showWebBillingSurface && item.hideInNative) return false;
   if (item.module && !enabledModules.has(item.module)) return false;
   if (item.permission && !permissions.has(item.permission)) return false;
   return true;
@@ -545,7 +545,7 @@ function BillingStatusBanner({
   }, [billingPrompt?.stage, billingPrompt?.visible, dismissedLocally]);
 
   if (!billingStatus) return null;
-  if (isNativeShell()) return null;
+  if (!shouldShowWebBillingSurface()) return null;
 
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
 
@@ -564,6 +564,7 @@ function BillingStatusBanner({
 
   const handleContinue = async () => {
     if (!canManageBilling || !billingPrompt) return;
+    if (!canOpenExternalPaymentProvider()) return;
     const promptStage = billingPrompt.stage;
     if (promptStage === "none") return;
     setOpeningPortal(true);
@@ -713,6 +714,7 @@ const SidebarNav = memo(function SidebarNav({
 }) {
   const location = useLocation();
   const nativeShellSession = isNativeShell();
+  const showWebBillingSurface = shouldShowWebBillingSurface();
   const billingCopy = useMemo(() => getBillingNavigationCopy(billingStatus ?? null), [billingStatus]);
   const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
   const handleItemClick = useCallback(() => {
@@ -732,7 +734,7 @@ const SidebarNav = memo(function SidebarNav({
     .map((section) => ({
       ...section,
       items: section.items.filter(
-        (item) => shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)
+        (item) => shouldShowNavItem(item, enabledModules, permissions, showWebBillingSurface)
       ),
     }))
     .filter((section) => section.items.length > 0);
@@ -978,10 +980,11 @@ function AppLayoutInner({
     [locations]
   );
   const nativeShellSession = isNativeShell();
+  const showWebBillingSurface = shouldShowWebBillingSurface();
   const activeNavEntry = useMemo(() => {
     for (const section of navSections) {
       for (const item of section.items) {
-        if (!shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)) continue;
+        if (!shouldShowNavItem(item, enabledModules, permissions, showWebBillingSurface)) continue;
         if (isNavItemActive(location.pathname, item)) {
           return { item, section };
         }
@@ -991,7 +994,7 @@ function AppLayoutInner({
       .map((section) => ({
         ...section,
         items: section.items.filter(
-          (item) => shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)
+          (item) => shouldShowNavItem(item, enabledModules, permissions, showWebBillingSurface)
         ),
       }))
       .find((section) => section.items.length > 0);
@@ -1004,13 +1007,13 @@ function AppLayoutInner({
       item: { icon: Settings, label: "Profile", href: "/profile", end: false, description: "Manage your account." },
       section: { id: "setup" as const, label: "Account", items: [] },
     };
-  }, [enabledModules, nativeShellSession, permissions, location.pathname]);
+  }, [enabledModules, showWebBillingSurface, permissions, location.pathname]);
   const activeSectionItems = useMemo(
     () =>
       activeNavEntry.section.items.filter(
-        (item) => shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)
+        (item) => shouldShowNavItem(item, enabledModules, permissions, showWebBillingSurface)
       ),
-    [activeNavEntry.section.items, enabledModules, nativeShellSession, permissions]
+    [activeNavEntry.section.items, enabledModules, showWebBillingSurface, permissions]
   );
   const activeLocationName = useMemo(
     () => locationRecords.find((entry) => entry.id === currentLocationId)?.name?.trim() || null,

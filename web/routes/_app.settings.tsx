@@ -91,7 +91,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
-import { isNativeShell } from "../lib/mobileShell";
+import { canOpenExternalPaymentProvider, isNativeIOSApp, shouldShowWebBillingSurface } from "../lib/mobileShell";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
@@ -882,6 +882,10 @@ function BillingTab({
   }, [searchParams, setSearchParams, setBillingStatus, setBillingPortalLoading]);
 
   const handleManageSubscription = async () => {
+    if (!canOpenExternalPaymentProvider()) {
+      toast.message("Subscription changes are available from the web dashboard.");
+      return;
+    }
     setBillingPortalLoading(true);
     try {
       const result =
@@ -918,6 +922,10 @@ function BillingTab({
   };
 
   const handleStripeConnect = async () => {
+    if (!canOpenExternalPaymentProvider()) {
+      toast.message("Stripe setup is available from the web dashboard.");
+      return;
+    }
     setStripeConnectLoading(true);
     try {
       const result = await api.billing.createConnectOnboardingLink();
@@ -934,6 +942,10 @@ function BillingTab({
   };
 
   const handleOpenStripeDashboard = async () => {
+    if (!canOpenExternalPaymentProvider()) {
+      toast.message("Stripe dashboard access is available from the web dashboard.");
+      return;
+    }
     setStripeDashboardLoading(true);
     try {
       const result = await api.billing.createConnectDashboardLink();
@@ -982,7 +994,8 @@ function BillingTab({
   };
 
   const isActive = hasFullBillingAccess(billingStatus?.accessState);
-  const nativeShellSession = isNativeShell();
+  const showWebBillingSurface = shouldShowWebBillingSurface();
+  const nativeShellSession = !showWebBillingSurface;
   const billingAccessLabel = nativeShellSession
     ? isActive
       ? "Workspace active"
@@ -1199,6 +1212,7 @@ function BillingTab({
           onContinue={() => {
             const promptStage = billingPrompt?.stage;
             if (!promptStage || promptStage === "none") return;
+            if (!canOpenExternalPaymentProvider()) return;
             void (async () => {
               setBillingPortalLoading(true);
               try {
@@ -1437,7 +1451,7 @@ export default function SettingsPage() {
     message: "Not checked yet.",
     checkedAt: null,
   });
-  const nativeShellSession = isNativeShell();
+  const nativeShellSession = isNativeIOSApp();
   const hasFullBillingWorkspaceAccess = billingStatus !== null && hasFullBillingAccess(billingStatus.accessState);
   const integrationsBlockedByBilling = billingStatus !== null && !hasFullBillingAccess(billingStatus.accessState);
   const canLoadIntegrationData = Boolean(businessId) && activeTab === "integrations" && hasFullBillingWorkspaceAccess;
