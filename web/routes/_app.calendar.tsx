@@ -676,6 +676,18 @@ function mobileDateInputClassName(isMobileLayout: boolean) {
   );
 }
 
+function shouldUseMobileCalendarLayout(): boolean {
+  if (typeof window === "undefined") return false;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const shortestSide = Math.min(width, height);
+  const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+
+  // Phone landscape can exceed the usual mobile width breakpoint, but it should
+  // still use the mobile inspector/gallery so scrolling and swipe behavior stay consistent.
+  return width < 768 || (coarsePointer && shortestSide < 768);
+}
+
 export default function CalendarPage() {
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
@@ -728,8 +740,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     const check = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobileLayout(mobile);
+      setIsMobileLayout(shouldUseMobileCalendarLayout());
       if (!layoutInitializedRef.current) {
         setView(initialView ?? "month");
         layoutInitializedRef.current = true;
@@ -737,7 +748,13 @@ export default function CalendarPage() {
     };
     check();
     window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    window.visualViewport?.addEventListener("resize", check);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.removeEventListener("orientationchange", check);
+      window.visualViewport?.removeEventListener("resize", check);
+    };
   }, [initialView]);
 
   useEffect(() => {
@@ -1818,7 +1835,7 @@ export default function CalendarPage() {
           className={cn(
             "grid max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]",
             isMobileLayout
-              ? "h-[min(86dvh,46rem)] grid-rows-[minmax(0,1fr)] !border-0 !bg-transparent !p-0 !shadow-none"
+              ? "h-[min(92dvh,46rem)] grid-rows-[minmax(0,1fr)] !border-0 !bg-transparent !p-0 !shadow-none"
               : "grid-rows-[auto_minmax(0,1fr)]"
           )}
         >
