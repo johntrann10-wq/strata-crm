@@ -775,7 +775,7 @@ export function AppointmentInspectorPanel({
   return (
     <>
       <Card className={cn("border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]", minimalChrome && "!border-0 !bg-transparent !shadow-none")}>
-        <CardContent className={cn(minimalChrome ? "space-y-3 !p-0" : compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
+        <CardContent className={cn(minimalChrome ? "space-y-3.5 !p-0" : compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
         {!minimalChrome ? (
           <div className="space-y-1">
             <div className="flex items-start justify-between gap-3">
@@ -798,7 +798,13 @@ export function AppointmentInspectorPanel({
         ) : null}
 
         <div className="grid gap-3 text-sm">
-          <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+          <div
+            className={cn(
+              "rounded-xl border border-border/60 bg-background/70 px-3 py-3",
+              minimalChrome &&
+                "rounded-[1.35rem] border-white/75 bg-white/92 px-3.5 py-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-xl"
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Money</p>
@@ -809,8 +815,8 @@ export function AppointmentInspectorPanel({
               </span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <MoneyTile label="Collected" value={collectedAmount > 0 ? formatCurrency(collectedAmount) : "-"} />
-              <MoneyTile label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : totalAmount > 0 ? "Paid" : "-"} />
+              <MoneyTile label="Collected" value={collectedAmount > 0 ? formatCurrency(collectedAmount) : "-"} polished={minimalChrome} />
+              <MoneyTile label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : totalAmount > 0 ? "Paid" : "-"} polished={minimalChrome} />
             </div>
             {showFinancialBreakdown ? (
               <div className="mt-3 space-y-2 border-t border-border/50 pt-3 text-xs">
@@ -833,16 +839,22 @@ export function AppointmentInspectorPanel({
               </div>
             ) : null}
           </div>
-          <InspectorRow icon={User} label="Customer" value={getClientName(appointment)} />
-          <InspectorRow icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} />
-          <InspectorRow icon={Clock3} label="Timing" value={getTimingLabel(appointment)} />
-          <InspectorRow icon={Wrench} label="Stage" value={getStageLabel(appointment)} />
-          <InspectorRow icon={MapPin} label="Location" value={appointment.location?.name ?? "No location"} />
-          <InspectorRow icon={Wrench} label="Assigned tech" value={getTechName(appointment)} />
+          <InspectorRow icon={User} label="Customer" value={getClientName(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={Clock3} label="Timing" value={getTimingLabel(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={Wrench} label="Stage" value={getStageLabel(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={MapPin} label="Location" value={appointment.location?.name ?? "No location"} polished={minimalChrome} />
+          <InspectorRow icon={Wrench} label="Assigned tech" value={getTechName(appointment)} polished={minimalChrome} />
         </div>
 
         {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
-          <div className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
+          <div
+            className={cn(
+              "space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3",
+              minimalChrome &&
+                "rounded-[1.35rem] border-white/75 bg-white/90 p-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.07),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-xl"
+            )}
+          >
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Quick controls</p>
               {!compact ? <p className="text-xs text-muted-foreground">Move the job forward without leaving the board.</p> : null}
@@ -1090,7 +1102,13 @@ export function AppointmentInspectorPanel({
           )}
         </div>
         ) : (
-          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+          <div
+            className={cn(
+              "rounded-xl border border-border/60 bg-background/70 p-3",
+              minimalChrome &&
+                "rounded-[1.35rem] border-white/75 bg-white/90 p-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.07),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-xl"
+            )}
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Services</p>
@@ -1506,9 +1524,14 @@ export function AppointmentInspectorPanel({
   );
 }
 
-function MoneyTile({ label, value }: { label: string; value: string }) {
+function MoneyTile({ label, value, polished = false }: { label: string; value: string; polished?: boolean }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-background/80 px-2.5 py-2">
+    <div
+      className={cn(
+        "rounded-lg border border-border/60 bg-background/80 px-2.5 py-2",
+        polished && "rounded-2xl border-white/70 bg-white/78 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
+      )}
+    >
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
       <p className="mt-1 line-clamp-2 break-words text-sm font-semibold text-foreground">{value}</p>
     </div>
@@ -1537,15 +1560,23 @@ function InspectorRow({
   label,
   value,
   strong = false,
+  polished = false,
 }: {
   icon: typeof Clock3;
   label: string;
   value: string;
   strong?: boolean;
+  polished?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
-      <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5",
+        polished &&
+          "rounded-[1.15rem] border-white/72 bg-white/86 px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.055),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-xl"
+      )}
+    >
+      <Icon className={cn("mt-0.5 h-4 w-4 text-muted-foreground", polished && "text-slate-500")} />
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
         <p className={cn("mt-1 line-clamp-2 break-words text-sm text-foreground", strong && "font-semibold")}>{value}</p>

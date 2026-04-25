@@ -183,6 +183,17 @@ body,
     overscroll-behavior-y: auto;
   }
 
+  .mobile-gallery-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+  }
+
+  .mobile-gallery-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   .page-content {
     @apply mx-auto max-w-7xl px-2.5 py-2.5 sm:px-6 sm:py-6 lg:px-8 lg:py-8;
   }

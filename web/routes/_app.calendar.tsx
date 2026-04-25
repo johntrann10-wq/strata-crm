@@ -179,8 +179,11 @@ function useLongPressActions(onOpen: () => void) {
   };
 }
 
-const GALLERY_SWIPE_THRESHOLD_PX = 58;
+const GALLERY_SWIPE_THRESHOLD_PX = 52;
 const GALLERY_SWIPE_LOCK_PX = 12;
+const GALLERY_FLICK_THRESHOLD_PX = 28;
+const GALLERY_FLICK_VELOCITY = 0.42;
+const GALLERY_SETTLE_MS = 210;
 
 function MobileAppointmentGallery({
   appointments,
@@ -201,9 +204,14 @@ function MobileAppointmentGallery({
   const touchRef = useRef<{
     startX: number;
     startY: number;
+    startAt: number;
+    lastX: number;
+    lastAt: number;
     lock: "horizontal" | "vertical" | null;
   } | null>(null);
   const settleTimerRef = useRef<number | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const pendingDragOffsetRef = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
@@ -225,6 +233,9 @@ function MobileAppointmentGallery({
       if (settleTimerRef.current != null) {
         window.clearTimeout(settleTimerRef.current);
       }
+      if (dragFrameRef.current != null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+      }
     };
   }, []);
 
@@ -233,19 +244,34 @@ function MobileAppointmentGallery({
     setDragging(false);
     setSettling(false);
     touchRef.current = null;
+    pendingDragOffsetRef.current = 0;
   }, [selectedAppointmentId]);
+
+  const setDragOffsetOnFrame = useCallback((nextOffset: number) => {
+    pendingDragOffsetRef.current = nextOffset;
+    if (dragFrameRef.current != null) return;
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      setDragOffset(pendingDragOffsetRef.current);
+      dragFrameRef.current = null;
+    });
+  }, []);
 
   const settleBackToCurrent = useCallback(() => {
     if (settleTimerRef.current != null) {
       window.clearTimeout(settleTimerRef.current);
     }
+    if (dragFrameRef.current != null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingDragOffsetRef.current = 0;
     setDragging(false);
     setSettling(true);
     setDragOffset(0);
     settleTimerRef.current = window.setTimeout(() => {
       setSettling(false);
       settleTimerRef.current = null;
-    }, 140);
+    }, GALLERY_SETTLE_MS);
   }, []);
 
   const moveToIndex = useCallback(
@@ -260,6 +286,11 @@ function MobileAppointmentGallery({
       if (settleTimerRef.current != null) {
         window.clearTimeout(settleTimerRef.current);
       }
+      if (dragFrameRef.current != null) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      pendingDragOffsetRef.current = direction === "next" ? -width : width;
       setSettling(true);
       setDragOffset(direction === "next" ? -width : width);
       settleTimerRef.current = window.setTimeout(() => {
@@ -269,7 +300,7 @@ function MobileAppointmentGallery({
         setDragging(false);
         setSettling(false);
         settleTimerRef.current = null;
-      }, 170);
+      }, GALLERY_SETTLE_MS);
     },
     [appointments, onSelectAppointment, settleBackToCurrent]
   );
@@ -278,8 +309,10 @@ function MobileAppointmentGallery({
     if (settling) return;
     const touch = event.touches[0];
     if (!touch) return;
-    touchRef.current = { startX: touch.clientX, startY: touch.clientY, lock: null };
-    setDragging(true);
+    const now = performance.now();
+    touchRef.current = { startX: touch.clientX, startY: touch.clientY, startAt: now, lastX: touch.clientX, lastAt: now, lock: null };
+    pendingDragOffsetRef.current = 0;
+    setDragging(false);
     setDragOffset(0);
   }, [settling]);
 
@@ -293,23 +326,31 @@ function MobileAppointmentGallery({
       const deltaY = touch.clientY - gesture.startY;
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
+      const now = performance.now();
+
+      gesture.lastX = touch.clientX;
+      gesture.lastAt = now;
 
       if (!gesture.lock && Math.max(absX, absY) > GALLERY_SWIPE_LOCK_PX) {
         gesture.lock = absX > absY * 1.25 ? "horizontal" : "vertical";
+        if (gesture.lock === "horizontal") setDragging(true);
       }
 
       if (gesture.lock !== "horizontal") return;
 
       event.preventDefault();
       const blockedAtEdge = (deltaX > 0 && !canGoPrevious) || (deltaX < 0 && !canGoNext);
-      setDragOffset(blockedAtEdge ? deltaX * 0.28 : deltaX);
+      setDragOffsetOnFrame(blockedAtEdge ? deltaX * 0.28 : deltaX);
     },
-    [canGoNext, canGoPrevious, settling]
+    [canGoNext, canGoPrevious, setDragOffsetOnFrame, settling]
   );
 
   const handleTouchEnd = useCallback(() => {
     const gesture = touchRef.current;
     touchRef.current = null;
+    const finalOffset = pendingDragOffsetRef.current || dragOffset;
+    const swipeDuration = gesture ? Math.max(1, gesture.lastAt - gesture.startAt) : 1;
+    const swipeVelocity = gesture ? (gesture.lastX - gesture.startX) / swipeDuration : 0;
 
     if (!gesture || gesture.lock !== "horizontal") {
       setDragging(false);
@@ -317,12 +358,20 @@ function MobileAppointmentGallery({
       return;
     }
 
-    if (dragOffset <= -GALLERY_SWIPE_THRESHOLD_PX && canGoNext) {
+    if (
+      canGoNext &&
+      (finalOffset <= -GALLERY_SWIPE_THRESHOLD_PX ||
+        (finalOffset <= -GALLERY_FLICK_THRESHOLD_PX && swipeVelocity <= -GALLERY_FLICK_VELOCITY))
+    ) {
       moveToIndex(selectedIndex + 1, "next");
       return;
     }
 
-    if (dragOffset >= GALLERY_SWIPE_THRESHOLD_PX && canGoPrevious) {
+    if (
+      canGoPrevious &&
+      (finalOffset >= GALLERY_SWIPE_THRESHOLD_PX ||
+        (finalOffset >= GALLERY_FLICK_THRESHOLD_PX && swipeVelocity >= GALLERY_FLICK_VELOCITY))
+    ) {
       moveToIndex(selectedIndex - 1, "previous");
       return;
     }
@@ -334,6 +383,15 @@ function MobileAppointmentGallery({
     touchRef.current = null;
     settleBackToCurrent();
   }, [settleBackToCurrent]);
+
+  const trackStyle: CSSProperties = {
+    transform: `translate3d(calc(-100% + ${dragOffset}px), 0, 0)`,
+    transition: dragging
+      ? "none"
+      : settling
+        ? `transform ${GALLERY_SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`
+        : "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+  };
 
   if (appointments.length === 0) {
     return (
@@ -352,22 +410,53 @@ function MobileAppointmentGallery({
   }
 
   return (
-    <div ref={containerRef} className="relative h-full min-h-0 overflow-hidden">
+    <div ref={containerRef} className="relative h-full min-h-0 overflow-hidden rounded-[1.8rem]">
       <button
         type="button"
         onClick={onRequestClose}
-        className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/82 text-slate-500 shadow-[0_8px_20px_rgba(15,23,42,0.10)] backdrop-blur transition-colors hover:text-slate-950"
+        className="absolute right-3 top-3 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/80 bg-white/88 text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-colors hover:text-slate-950"
         aria-label="Close appointment inspector"
       >
         <X className="h-4 w-4" />
       </button>
+      {appointments.length > 1 ? (
+        <>
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute bottom-5 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/70 bg-white/82 px-2.5 py-1.5 shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl",
+              dragging && "opacity-90"
+            )}
+          >
+            {appointments.map((appointment, index) => (
+              <span
+                key={appointment.id}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-200",
+                  index === selectedIndex ? "w-5 bg-slate-950" : "w-1.5 bg-slate-300"
+                )}
+              />
+            ))}
+          </div>
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-8 left-0 z-20 w-12 bg-gradient-to-r from-slate-950/10 to-transparent transition-opacity",
+              canGoPrevious ? "opacity-100" : "opacity-0"
+            )}
+          />
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-8 right-0 z-20 w-12 bg-gradient-to-l from-slate-950/10 to-transparent transition-opacity",
+              canGoNext ? "opacity-100" : "opacity-0"
+            )}
+          />
+        </>
+      ) : null}
       <div
-        className={cn(
-          "flex h-full min-h-0 will-change-transform",
-          settling && "transition-transform duration-150 ease-out",
-          !dragging && !settling && "transition-transform duration-200 ease-out"
-        )}
-        style={{ transform: `translate3d(calc(-100% + ${dragOffset}px), 0, 0)` }}
+        className="flex h-full min-h-0 will-change-transform"
+        style={trackStyle}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -376,20 +465,27 @@ function MobileAppointmentGallery({
         {slideSlots.map(({ key, appointment }) => (
           <div
             key={`${key}-${appointment?.id ?? "edge"}`}
-            className="h-full min-w-full overflow-y-auto overscroll-contain px-1 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 [-webkit-overflow-scrolling:touch]"
+            className="mobile-gallery-scroll h-full min-w-full overflow-y-auto overscroll-contain px-2.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3"
             style={{ touchAction: "pan-y" }}
             aria-hidden={key !== "current"}
           >
             {appointment ? (
-              <AppointmentInspectorPanel
-                appointment={appointment}
-                emptyTitle="Select an appointment"
-                emptyDescription={emptyDescription}
-                compact
-                minimalChrome
-                onAppointmentChange={onAppointmentChange}
-                onRequestClose={onRequestClose}
-              />
+              <div
+                className={cn(
+                  "min-h-full pb-10 transition-[opacity,transform] duration-200",
+                  key === "current" ? "scale-100 opacity-100" : "scale-[0.985] opacity-75"
+                )}
+              >
+                <AppointmentInspectorPanel
+                  appointment={appointment}
+                  emptyTitle="Select an appointment"
+                  emptyDescription={emptyDescription}
+                  compact
+                  minimalChrome
+                  onAppointmentChange={onAppointmentChange}
+                  onRequestClose={onRequestClose}
+                />
+              </div>
             ) : (
               <div className="h-full rounded-[1.35rem]" />
             )}
