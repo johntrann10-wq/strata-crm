@@ -77,13 +77,23 @@ export function WeekView({
   const mobileWeekTransitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const mobileWeekSettleTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const mobileWeekCarouselScrollTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const mobileWeekCarouselSuppressScrollRef = useRef(false);
+  const mobileWeekCarouselUserScrollRef = useRef(false);
   const mobileWeekCarouselNavigatingRef = useRef(false);
   const suppressMobileDayTapRef = useRef(false);
 
   const centerMobileWeekCarousel = (behavior: ScrollBehavior = "auto") => {
     const container = mobileWeekCarouselRef.current;
     if (!container) return;
+    mobileWeekCarouselSuppressScrollRef.current = true;
+    if (mobileWeekCarouselScrollTimeoutRef.current) {
+      window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
+      mobileWeekCarouselScrollTimeoutRef.current = null;
+    }
     container.scrollTo({ left: container.clientWidth, behavior });
+    window.setTimeout(() => {
+      mobileWeekCarouselSuppressScrollRef.current = false;
+    }, behavior === "smooth" ? 320 : 80);
   };
 
   useEffect(() => {
@@ -370,13 +380,20 @@ export function WeekView({
   const navigateFromMobileWeekCarousel = (direction: -1 | 1) => {
     if (!onWeekNavigate || mobileWeekCarouselNavigatingRef.current) return;
     mobileWeekCarouselNavigatingRef.current = true;
+    mobileWeekCarouselUserScrollRef.current = false;
     triggerNativeFeedback("light");
     onWeekNavigate(direction);
+  };
+
+  const beginMobileWeekCarouselInteraction = () => {
+    mobileWeekCarouselUserScrollRef.current = true;
+    mobileWeekCarouselSuppressScrollRef.current = false;
   };
 
   const handleMobileWeekCarouselScroll = () => {
     const container = mobileWeekCarouselRef.current;
     if (!container || !onWeekNavigate || mobileWeekCarouselNavigatingRef.current) return;
+    if (mobileWeekCarouselSuppressScrollRef.current || !mobileWeekCarouselUserScrollRef.current) return;
 
     if (mobileWeekCarouselScrollTimeoutRef.current) {
       window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
@@ -397,6 +414,7 @@ export function WeekView({
         return;
       }
 
+      mobileWeekCarouselUserScrollRef.current = false;
       centerMobileWeekCarousel("smooth");
     }, 90);
   };
@@ -505,6 +523,13 @@ export function WeekView({
             className="ios-momentum-x ios-scrollbar-none -mx-3 mt-3 overflow-x-auto overscroll-x-contain scroll-smooth snap-x snap-mandatory px-3"
             role="group"
             aria-label="Swipe week dates for previous or next week"
+            onPointerDown={beginMobileWeekCarouselInteraction}
+            onTouchStart={beginMobileWeekCarouselInteraction}
+            onWheel={(event) => {
+              if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+                beginMobileWeekCarouselInteraction();
+              }
+            }}
             onScroll={handleMobileWeekCarouselScroll}
           >
             <div
