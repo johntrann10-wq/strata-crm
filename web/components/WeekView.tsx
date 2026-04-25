@@ -73,9 +73,18 @@ export function WeekView({
   );
   const mobileWeekSwipeRef = useRef<MobileWeekSwipeGesture | null>(null);
   const mobileWeekTouchRef = useRef<MobileWeekSwipeGesture | null>(null);
+  const mobileWeekCarouselRef = useRef<HTMLDivElement | null>(null);
   const mobileWeekTransitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const mobileWeekSettleTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const mobileWeekCarouselScrollTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const mobileWeekCarouselNavigatingRef = useRef(false);
   const suppressMobileDayTapRef = useRef(false);
+
+  const centerMobileWeekCarousel = (behavior: ScrollBehavior = "auto") => {
+    const container = mobileWeekCarouselRef.current;
+    if (!container) return;
+    container.scrollTo({ left: container.clientWidth, behavior });
+  };
 
   useEffect(() => {
     const container = document.getElementById("week-scroll-container");
@@ -102,8 +111,20 @@ export function WeekView({
       if (mobileWeekSettleTimeoutRef.current) {
         window.clearTimeout(mobileWeekSettleTimeoutRef.current);
       }
+      if (mobileWeekCarouselScrollTimeoutRef.current) {
+        window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const frame = window.requestAnimationFrame(() => {
+      centerMobileWeekCarousel("auto");
+      mobileWeekCarouselNavigatingRef.current = false;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentDate]);
 
   const clearMobileWeekTransitionTimers = () => {
     if (mobileWeekTransitionTimeoutRef.current) {
@@ -346,6 +367,40 @@ export function WeekView({
     }, 180);
   };
 
+  const navigateFromMobileWeekCarousel = (direction: -1 | 1) => {
+    if (!onWeekNavigate || mobileWeekCarouselNavigatingRef.current) return;
+    mobileWeekCarouselNavigatingRef.current = true;
+    triggerNativeFeedback("light");
+    onWeekNavigate(direction);
+  };
+
+  const handleMobileWeekCarouselScroll = () => {
+    const container = mobileWeekCarouselRef.current;
+    if (!container || !onWeekNavigate || mobileWeekCarouselNavigatingRef.current) return;
+
+    if (mobileWeekCarouselScrollTimeoutRef.current) {
+      window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
+    }
+
+    mobileWeekCarouselScrollTimeoutRef.current = window.setTimeout(() => {
+      const pageWidth = container.clientWidth;
+      if (pageWidth <= 0) return;
+      const pageProgress = container.scrollLeft / pageWidth;
+
+      if (pageProgress <= 0.58) {
+        navigateFromMobileWeekCarousel(-1);
+        return;
+      }
+
+      if (pageProgress >= 1.42) {
+        navigateFromMobileWeekCarousel(1);
+        return;
+      }
+
+      centerMobileWeekCarousel("smooth");
+    }, 90);
+  };
+
   const getSnappedTimeFromY = (yOffset: number): { hour: number; minute: number } => {
     const totalMinutesFromStart = (yOffset / HOUR_HEIGHT) * 60;
     const rawHour = Math.floor(totalMinutesFromStart / 60) + START_HOUR;
@@ -399,25 +454,21 @@ export function WeekView({
   }, [multiDayJobs, weekDays]);
 
   const daySummaries = useMemo(
+    () => weekDays.map((day) => getWeekDaySummary(day, appointments, conflictIds)),
+    [appointments, conflictIds, weekDays]
+  );
+  const mobileWeekPages = useMemo(
     () =>
-      weekDays.map((day) => {
-        const labor = appointments
-          .filter((apt) => hasLaborOnDay(apt, day))
-          .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-        const onsiteOnly = appointments
-          .filter((apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day) && !hasLaborOnDay(apt, day))
-          .sort((a, b) => getJobSortTime(a).getTime() - getJobSortTime(b).getTime());
-        const totalValue = labor.reduce((sum, apt) => sum + getCalendarAppointmentAmount(apt), 0);
+      [-1, 0, 1].map((offset) => {
+        const anchor = new Date(currentDate);
+        anchor.setDate(anchor.getDate() + offset * 7);
+        const days = offset === 0 ? weekDays : getWeekDays(anchor);
         return {
-          day,
-          labor,
-          onsiteOnly,
-          totalItems: labor.length + onsiteOnly.length,
-          conflictCount: labor.filter((apt) => conflictIds?.has(apt.id)).length,
-          totalValue,
+          offset,
+          summaries: days.map((day) => getWeekDaySummary(day, appointments, conflictIds)),
         };
       }),
-    [appointments, conflictIds, weekDays]
+    [appointments, conflictIds, currentDate, weekDays]
   );
   const focusedSummary = daySummaries[focusedDayIndex] ?? daySummaries[0];
   const weekTotalItems = daySummaries.reduce((sum, summary) => sum + summary.totalItems, 0);
@@ -433,7 +484,7 @@ export function WeekView({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
-      <div className="flex min-h-0 flex-1 flex-col md:hidden">
+      <div className="flex min-h-0 flex-1 flex-col lg:hidden">
         <div className="shrink-0 border-b border-border/70 bg-white/92 px-3 py-3 backdrop-blur-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -448,70 +499,75 @@ export function WeekView({
             </div>
           </div>
 
-          <div className="mt-3 overflow-hidden rounded-[1.35rem]">
+          <div
+            ref={mobileWeekCarouselRef}
+            data-week-date-carousel="true"
+            className="ios-momentum-x ios-scrollbar-none -mx-3 mt-3 overflow-x-auto overscroll-x-contain scroll-smooth snap-x snap-mandatory px-3"
+            role="group"
+            aria-label="Swipe week dates for previous or next week"
+            onScroll={handleMobileWeekCarouselScroll}
+          >
             <div
-              data-week-date-strip="true"
-              className={cn(
-                "ios-touch-pan-y grid select-none grid-cols-7 gap-1.5",
-                mobileWeekMotionClassName
-              )}
-              style={mobileWeekMotionStyle}
-              role="group"
-              aria-label="Swipe week dates for previous or next week"
-              onPointerDown={handleMobileWeekPointerDown}
-              onPointerMove={handleMobileWeekPointerMove}
-              onPointerUp={finishMobileWeekSwipe}
-              onPointerCancel={cancelMobileWeekSwipe}
-              onTouchStart={handleMobileWeekTouchStart}
-              onTouchMove={handleMobileWeekTouchMove}
-              onTouchEnd={handleMobileWeekTouchEnd}
-              onTouchCancel={cancelMobileWeekTouch}
+              className="flex"
+              style={{ width: `${mobileWeekPages.length * 100}%` }}
             >
-              {daySummaries.map((summary, index) => {
-                const selected = index === focusedDayIndex;
-                const isToday = isSameDay(summary.day, today);
-                return (
-                  <button
-                    key={summary.day.toISOString()}
-                    type="button"
-                    data-week-day-card="true"
-                    data-selected={selected ? "true" : "false"}
-                    className={cn(
-                      "min-w-0 rounded-2xl border px-1.5 py-2 text-center transition-all",
-                      selected
-                        ? "border-primary/45 bg-primary/[0.08] shadow-sm"
-                        : "border-border/60 bg-white/78 active:bg-muted/30",
-                      isToday && !selected && "border-primary/25"
-                    )}
-                    onClick={() => {
-                      if (suppressMobileDayTapRef.current) return;
-                      setFocusedDayIndex(index);
-                      onDayClick?.(summary.day);
-                    }}
-                    aria-pressed={selected}
-                  >
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{DAY_NAMES[index]}</p>
-                    <span
-                      className={cn(
-                        "mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold",
-                        selected ? "bg-primary text-primary-foreground" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-foreground"
-                      )}
-                    >
-                      {summary.day.getDate()}
-                    </span>
-                    <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">
-                      {summary.totalItems}
-                    </p>
-                    {summary.conflictCount > 0 ? (
-                      <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full bg-rose-500" aria-label={`${summary.conflictCount} conflicts`} />
-                    ) : null}
-                  </button>
-                );
-              })}
+              {mobileWeekPages.map((page) => (
+                <div
+                  key={page.offset}
+                  className="min-w-0 snap-center px-0.5"
+                  style={{ flexBasis: `${100 / mobileWeekPages.length}%` }}
+                >
+                  <div className="grid select-none grid-cols-7 gap-1.5 rounded-[1.35rem]">
+                    {page.summaries.map((summary, index) => {
+                      const selected = page.offset === 0 && index === focusedDayIndex;
+                      const isToday = isSameDay(summary.day, today);
+                      return (
+                        <button
+                          key={`${page.offset}-${summary.day.toISOString()}`}
+                          type="button"
+                          data-week-day-card="true"
+                          data-selected={selected ? "true" : "false"}
+                          className={cn(
+                            "min-w-0 rounded-2xl border px-1.5 py-2 text-center transition-all active:scale-[0.98]",
+                            selected
+                              ? "border-primary/45 bg-primary/[0.08] shadow-sm"
+                              : "border-border/60 bg-white/78 active:bg-muted/30",
+                            isToday && !selected && "border-primary/25"
+                          )}
+                          onClick={() => {
+                            if (suppressMobileDayTapRef.current) return;
+                            if (page.offset === 0) {
+                              setFocusedDayIndex(index);
+                            }
+                            onDayClick?.(summary.day);
+                          }}
+                          aria-pressed={selected}
+                        >
+                          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{DAY_NAMES[index]}</p>
+                          <span
+                            className={cn(
+                              "mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold",
+                              selected ? "bg-primary text-primary-foreground" : isToday ? "bg-primary/10 text-primary" : "bg-muted text-foreground"
+                            )}
+                          >
+                            {summary.day.getDate()}
+                          </span>
+                          <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">
+                            {summary.totalItems}
+                          </p>
+                          {summary.conflictCount > 0 ? (
+                            <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full bg-rose-500" aria-label={`${summary.conflictCount} conflicts`} />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <p className="mt-2 text-center text-[10px] font-medium text-muted-foreground">
-            Swipe across the day cards to move to the next or previous week.
+            Swipe the day cards sideways to slide into the next or previous week.
           </p>
         </div>
 
@@ -594,8 +650,8 @@ export function WeekView({
         </div>
       </div>
 
-      <div className="ios-momentum-x hidden min-h-0 flex-1 overflow-x-auto overscroll-x-contain md:block">
-        <div className="flex h-full min-w-[46rem] flex-col md:min-w-0">
+      <div className="ios-momentum-x hidden min-h-0 flex-1 overflow-x-auto overscroll-x-contain lg:block">
+        <div className="flex h-full min-w-[46rem] flex-col lg:min-w-0">
       <div
         className={cn(
           "ios-touch-pan-y sticky top-0 z-10 grid select-none grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm",
@@ -942,6 +998,25 @@ function MobileWeekAppointmentCard({
       </button>
     </NativeContextActions>
   );
+}
+
+function getWeekDaySummary(day: Date, appointments: ApptRecord[], conflictIds?: Set<string>) {
+  const labor = appointments
+    .filter((apt) => hasLaborOnDay(apt, day))
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const onsiteOnly = appointments
+    .filter((apt) => isMultiDayJob(apt) && hasPresenceOnDay(apt, day) && !hasLaborOnDay(apt, day))
+    .sort((a, b) => getJobSortTime(a).getTime() - getJobSortTime(b).getTime());
+  const totalValue = labor.reduce((sum, apt) => sum + getCalendarAppointmentAmount(apt), 0);
+
+  return {
+    day,
+    labor,
+    onsiteOnly,
+    totalItems: labor.length + onsiteOnly.length,
+    conflictCount: labor.filter((apt) => conflictIds?.has(apt.id)).length,
+    totalValue,
+  };
 }
 
 function getJobSortTime(appointment: ApptRecord) {
