@@ -3,7 +3,7 @@
  *
  * Strata's web app is still the product source of truth. These helpers only
  * make auth returns and route restoration predictable when the app is opened
- * from a native shell or standalone container.
+ * from the native Capacitor shell.
  */
 const DEFAULT_SIGNED_IN_PATH = "/signed-in";
 const DEFAULT_APP_RETURN_PATH = "/app-return";
