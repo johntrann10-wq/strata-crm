@@ -15,6 +15,7 @@ import {
   History,
   Inbox,
   Landmark,
+  Settings,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
@@ -1463,12 +1464,17 @@ export function HomeCompactQuickActions({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-8 rounded-full border-slate-200 bg-white/88 px-3 text-xs text-slate-700"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-full border-slate-200 bg-white/88 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950",
+              customizing && "border-slate-300 bg-slate-950 text-white hover:bg-slate-900 hover:text-white"
+            )}
             onClick={() => setCustomizing((current) => !current)}
             aria-expanded={customizing}
+            aria-label={customizing ? "Done customizing shortcuts" : "Customize shortcuts"}
+            title={customizing ? "Done customizing shortcuts" : "Customize shortcuts"}
           >
-            {customizing ? "Done" : "Customize"}
+            <Settings className={cn("h-4 w-4 transition-transform", customizing && "rotate-45")} aria-hidden="true" />
           </Button>
         </div>
       </CardHeader>
