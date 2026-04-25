@@ -773,6 +773,31 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   );
 }
 
+function MobileDayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
+  if (appointments.length === 0) return null;
+
+  const orderedAppointments = [...appointments].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+
+  return (
+    <div className="pointer-events-none flex min-h-5 items-center justify-center gap-1 overflow-visible">
+      {orderedAppointments.slice(0, 4).map((apt) => {
+        const status = getStatusStyle(apt.status);
+        return (
+          <span
+            key={apt.id}
+            className={cn(
+              "block h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.9)]",
+              isCalendarBlockAppointment(apt) ? "bg-slate-500" : status.accent
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function DayOverflowIndicator({ count, label }: { count: number; label: string }) {
   return (
     <div className="pointer-events-none flex min-w-0 flex-col items-center overflow-visible space-y-1 pb-0.5 sm:items-start sm:pb-1">
@@ -1209,7 +1234,9 @@ export function MonthView({
                       )}
 
                       <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
-                        {shouldCollapseDayIndicators ? (
+                        {isMobileLayout && !shouldCollapseDayIndicators ? (
+                          <MobileDayStatusDots appointments={dayDensityItems} />
+                        ) : shouldCollapseDayIndicators ? (
                           <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
                         ) : (
                           <DayStatusDots appointments={dayDensityItems} />
