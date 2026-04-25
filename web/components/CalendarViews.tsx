@@ -1211,7 +1211,17 @@ export function MonthView({
                       )}
 
                       <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
-                        {shouldCollapseDayIndicators ? (
+                        {isMobileLayout && dayDensityItems.length > 0 ? (
+                          <span
+                            className={cn(
+                              "mx-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
+                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                            )}
+                            aria-label={dayCountLabel}
+                          >
+                            {dayDensityItems.length}
+                          </span>
+                        ) : shouldCollapseDayIndicators ? (
                           <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
                         ) : (
                           <DayStatusDots appointments={dayDensityItems} />

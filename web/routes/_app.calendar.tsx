@@ -1511,7 +1511,8 @@ export default function CalendarPage() {
           Sun-Sat
         </span>
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="-mx-2 overflow-x-auto overscroll-x-contain px-2 pb-1 [-webkit-overflow-scrolling:touch]">
+        <div className="flex min-w-max snap-x snap-mandatory gap-2">
         {mobileWeekDays.map((day) => {
           const dayKey = toLocalDateString(day);
           const selectedKey = toLocalDateString(selectedDate);
@@ -1530,7 +1531,7 @@ export default function CalendarPage() {
                 setCurrentDate(day);
               }}
               className={cn(
-                "native-touch-surface flex min-h-[4.35rem] flex-col items-center justify-between rounded-[1rem] border px-1.5 py-2 text-center transition-colors",
+                "native-touch-surface flex min-h-[4.7rem] w-[5.9rem] shrink-0 snap-start flex-col items-center justify-between rounded-[1rem] border px-2 py-2 text-center transition-colors",
                 isSelected
                   ? "border-foreground bg-foreground text-background shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
                   : "border-border/70 bg-white/84 text-foreground",
@@ -1549,6 +1550,7 @@ export default function CalendarPage() {
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );
