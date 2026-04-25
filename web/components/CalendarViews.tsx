@@ -678,22 +678,41 @@ export function AppointmentBlock({
   );
 }
 
+const MONTH_DAY_DOT_LIMIT = 6;
+
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   if (appointments.length === 0) return null;
 
   const orderedAppointments = [...appointments].sort(
     (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
-  const visibleDots = orderedAppointments.slice(0, 6);
-  const extraCount = Math.max(0, orderedAppointments.length - visibleDots.length);
   const countLabel = orderedAppointments.some((apt) => isCalendarBlockAppointment(apt))
     ? `${appointments.length} item${appointments.length === 1 ? "" : "s"}`
     : `${appointments.length} appt${appointments.length === 1 ? "" : "s"}`;
 
+  if (orderedAppointments.length > MONTH_DAY_DOT_LIMIT) {
+    return (
+      <div className="pointer-events-none min-w-0 overflow-hidden space-y-1 pb-0.5 sm:pb-1">
+        <div className="flex min-h-[12px] w-full items-center justify-center overflow-hidden sm:min-h-[14px] sm:justify-start">
+          <span
+            aria-label={countLabel}
+            title={countLabel}
+            className="inline-flex h-4 min-w-4 max-w-full items-center justify-center rounded-full bg-slate-700 px-1 text-[8px] font-semibold leading-none tabular-nums text-white sm:h-[18px] sm:min-w-[18px] sm:text-[9px]"
+          >
+            {orderedAppointments.length}
+          </span>
+        </div>
+        <span className="hidden text-[10px] font-semibold leading-none text-foreground/80 sm:inline-flex">
+          {countLabel}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="pointer-events-none min-w-0 overflow-hidden space-y-1 pb-0.5 sm:pb-1">
-      <div className="flex h-4 min-w-0 flex-wrap items-center gap-1 overflow-hidden sm:h-5">
-        {visibleDots.map((apt) => {
+      <div className="flex min-h-[12px] w-full flex-wrap items-center justify-center gap-1 overflow-hidden sm:min-h-[14px] sm:justify-start">
+        {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
             <span
@@ -705,13 +724,8 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
             />
           );
         })}
-        {extraCount > 0 ? (
-          <span className="rounded-full bg-muted px-1 text-[8px] font-semibold leading-4 text-muted-foreground sm:text-[9px]">
-            +{extraCount}
-          </span>
-        ) : null}
       </div>
-      <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
+      <span className="hidden text-[10px] font-semibold leading-none text-foreground/80 sm:inline-flex">
         {countLabel}
       </span>
     </div>
