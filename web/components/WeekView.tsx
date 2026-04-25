@@ -73,28 +73,9 @@ export function WeekView({
   );
   const mobileWeekSwipeRef = useRef<MobileWeekSwipeGesture | null>(null);
   const mobileWeekTouchRef = useRef<MobileWeekSwipeGesture | null>(null);
-  const mobileWeekCarouselRef = useRef<HTMLDivElement | null>(null);
   const mobileWeekTransitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const mobileWeekSettleTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const mobileWeekCarouselScrollTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const mobileWeekCarouselSuppressScrollRef = useRef(false);
-  const mobileWeekCarouselUserScrollRef = useRef(false);
-  const mobileWeekCarouselNavigatingRef = useRef(false);
   const suppressMobileDayTapRef = useRef(false);
-
-  const centerMobileWeekCarousel = (behavior: ScrollBehavior = "auto") => {
-    const container = mobileWeekCarouselRef.current;
-    if (!container) return;
-    mobileWeekCarouselSuppressScrollRef.current = true;
-    if (mobileWeekCarouselScrollTimeoutRef.current) {
-      window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
-      mobileWeekCarouselScrollTimeoutRef.current = null;
-    }
-    container.scrollTo({ left: container.clientWidth, behavior });
-    window.setTimeout(() => {
-      mobileWeekCarouselSuppressScrollRef.current = false;
-    }, behavior === "smooth" ? 320 : 80);
-  };
 
   useEffect(() => {
     const container = document.getElementById("week-scroll-container");
@@ -121,20 +102,8 @@ export function WeekView({
       if (mobileWeekSettleTimeoutRef.current) {
         window.clearTimeout(mobileWeekSettleTimeoutRef.current);
       }
-      if (mobileWeekCarouselScrollTimeoutRef.current) {
-        window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
-      }
     };
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const frame = window.requestAnimationFrame(() => {
-      centerMobileWeekCarousel("auto");
-      mobileWeekCarouselNavigatingRef.current = false;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [currentDate]);
 
   const clearMobileWeekTransitionTimers = () => {
     if (mobileWeekTransitionTimeoutRef.current) {
@@ -377,48 +346,6 @@ export function WeekView({
     }, 180);
   };
 
-  const navigateFromMobileWeekCarousel = (direction: -1 | 1) => {
-    if (!onWeekNavigate || mobileWeekCarouselNavigatingRef.current) return;
-    mobileWeekCarouselNavigatingRef.current = true;
-    mobileWeekCarouselUserScrollRef.current = false;
-    triggerNativeFeedback("light");
-    onWeekNavigate(direction);
-  };
-
-  const beginMobileWeekCarouselInteraction = () => {
-    mobileWeekCarouselUserScrollRef.current = true;
-    mobileWeekCarouselSuppressScrollRef.current = false;
-  };
-
-  const handleMobileWeekCarouselScroll = () => {
-    const container = mobileWeekCarouselRef.current;
-    if (!container || !onWeekNavigate || mobileWeekCarouselNavigatingRef.current) return;
-    if (mobileWeekCarouselSuppressScrollRef.current || !mobileWeekCarouselUserScrollRef.current) return;
-
-    if (mobileWeekCarouselScrollTimeoutRef.current) {
-      window.clearTimeout(mobileWeekCarouselScrollTimeoutRef.current);
-    }
-
-    mobileWeekCarouselScrollTimeoutRef.current = window.setTimeout(() => {
-      const pageWidth = container.clientWidth;
-      if (pageWidth <= 0) return;
-      const pageProgress = container.scrollLeft / pageWidth;
-
-      if (pageProgress <= 0.58) {
-        navigateFromMobileWeekCarousel(-1);
-        return;
-      }
-
-      if (pageProgress >= 1.42) {
-        navigateFromMobileWeekCarousel(1);
-        return;
-      }
-
-      mobileWeekCarouselUserScrollRef.current = false;
-      centerMobileWeekCarousel("smooth");
-    }, 90);
-  };
-
   const getSnappedTimeFromY = (yOffset: number): { hour: number; minute: number } => {
     const totalMinutesFromStart = (yOffset / HOUR_HEIGHT) * 60;
     const rawHour = Math.floor(totalMinutesFromStart / 60) + START_HOUR;
@@ -518,28 +445,30 @@ export function WeekView({
           </div>
 
           <div
-            ref={mobileWeekCarouselRef}
             data-week-date-carousel="true"
-            className="ios-momentum-x ios-scrollbar-none -mx-3 mt-3 overflow-x-auto overscroll-x-contain scroll-smooth snap-x snap-mandatory px-3"
+            className="mt-3 overflow-hidden rounded-[1.35rem]"
             role="group"
             aria-label="Swipe week dates for previous or next week"
-            onPointerDown={beginMobileWeekCarouselInteraction}
-            onTouchStart={beginMobileWeekCarouselInteraction}
-            onWheel={(event) => {
-              if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-                beginMobileWeekCarouselInteraction();
-              }
-            }}
-            onScroll={handleMobileWeekCarouselScroll}
+            onPointerDown={handleMobileWeekPointerDown}
+            onPointerMove={handleMobileWeekPointerMove}
+            onPointerUp={finishMobileWeekSwipe}
+            onPointerCancel={cancelMobileWeekSwipe}
+            onTouchStart={handleMobileWeekTouchStart}
+            onTouchMove={handleMobileWeekTouchMove}
+            onTouchEnd={handleMobileWeekTouchEnd}
+            onTouchCancel={cancelMobileWeekTouch}
           >
             <div
-              className="flex"
-              style={{ width: `${mobileWeekPages.length * 100}%` }}
+              className={cn("flex select-none", mobileWeekMotionClassName)}
+              style={{
+                width: `${mobileWeekPages.length * 100}%`,
+                transform: `translate3d(calc(-${100 / mobileWeekPages.length}% + ${mobileWeekSwipeOffset}px), 0, 0)`,
+              }}
             >
               {mobileWeekPages.map((page) => (
                 <div
                   key={page.offset}
-                  className="min-w-0 snap-center px-0.5"
+                  className="min-w-0 px-0.5"
                   style={{ flexBasis: `${100 / mobileWeekPages.length}%` }}
                 >
                   <div className="grid select-none grid-cols-7 gap-1.5 rounded-[1.35rem]">
