@@ -23,6 +23,7 @@ import {
   getCalendarAppointmentAmount,
   getCalendarDayRevenue,
   getHeaderTitle,
+  getStatusStyle,
   getViewRange,
   navigateDate,
 } from "../components/CalendarViews";
@@ -80,6 +81,55 @@ function InlineMetricPill({ label, value }: { label: string; value: string }) {
       <span className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
       <span className="font-semibold text-foreground">{value}</span>
     </div>
+  );
+}
+
+function MobileWeekDayIndicators({
+  appointments,
+  selected,
+}: {
+  appointments: ApptRecord[];
+  selected: boolean;
+}) {
+  const uniqueAppointments = Array.from(new Map(appointments.map((appointment) => [appointment.id, appointment])).values());
+
+  if (uniqueAppointments.length === 0) {
+    return <span className={cn("h-5 text-[10px] font-semibold", selected ? "text-background/55" : "text-muted-foreground")}>-</span>;
+  }
+
+  if (uniqueAppointments.length >= 5) {
+    return (
+      <span
+        className={cn(
+          "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold leading-none tabular-nums",
+          selected ? "bg-background/16 text-background" : "bg-slate-800 text-white"
+        )}
+        aria-label={`${uniqueAppointments.length} calendar items`}
+      >
+        {uniqueAppointments.length}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex h-5 items-center justify-center gap-0.5" aria-label={`${uniqueAppointments.length} calendar items`}>
+      {uniqueAppointments.map((appointment) => {
+        const status = getStatusStyle(appointment.status);
+        return (
+          <span
+            key={appointment.id}
+            className={cn(
+              "block h-1.5 w-1.5 rounded-full",
+              selected
+                ? "bg-background/82"
+                : isCalendarBlockAppointment(appointment)
+                  ? "bg-slate-500"
+                  : status.accent
+            )}
+          />
+        );
+      })}
+    </span>
   );
 }
 
@@ -1511,13 +1561,13 @@ export default function CalendarPage() {
           Sun-Sat
         </span>
       </div>
-      <div className="-mx-2 overflow-x-auto overscroll-x-contain px-2 pb-1 [-webkit-overflow-scrolling:touch]">
-        <div className="flex min-w-max snap-x snap-mandatory gap-2">
+      <div className="grid grid-cols-7 gap-1 pb-1">
         {mobileWeekDays.map((day) => {
           const dayKey = toLocalDateString(day);
           const selectedKey = toLocalDateString(selectedDate);
           const todayKey = toLocalDateString(new Date());
           const daySnapshot = getCalendarDaySnapshot(appointments, day);
+          const indicatorAppointments = daySnapshot.agendaItems.map(({ appointment }) => appointment);
           const isSelected = dayKey === selectedKey;
           const isTodayColumn = dayKey === todayKey;
 
@@ -1531,7 +1581,7 @@ export default function CalendarPage() {
                 setCurrentDate(day);
               }}
               className={cn(
-                "native-touch-surface flex min-h-[4.7rem] w-[5.9rem] shrink-0 snap-start flex-col items-center justify-between rounded-[1rem] border px-2 py-2 text-center transition-colors",
+                "native-touch-surface flex min-h-[4.35rem] min-w-0 flex-col items-center justify-between rounded-[0.85rem] border px-1 py-2 text-center transition-colors",
                 isSelected
                   ? "border-foreground bg-foreground text-background shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
                   : "border-border/70 bg-white/84 text-foreground",
@@ -1544,13 +1594,10 @@ export default function CalendarPage() {
                 {day.toLocaleDateString("en-US", { weekday: "short" })}
               </span>
               <span className="text-base font-semibold tabular-nums">{day.getDate()}</span>
-              <span className={cn("text-[10px] font-semibold", isSelected ? "text-background/75" : "text-muted-foreground")}>
-                {daySnapshot.agendaItems.length}
-              </span>
+              <MobileWeekDayIndicators appointments={indicatorAppointments} selected={isSelected} />
             </button>
           );
         })}
-        </div>
       </div>
     </div>
   );

@@ -738,7 +738,7 @@ export function AppointmentBlock({
   );
 }
 
-const MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 6;
+const MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 5;
 
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   if (appointments.length === 0) return null;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   getMultiDayDayKind,
@@ -26,6 +26,7 @@ import {
   StaffWorkloadBar,
   activeDragDurationMs,
   getCalendarAppointmentAmount,
+  getStatusStyle,
 } from "./CalendarViews";
 import { triggerSelectionFeedback } from "@/lib/nativeInteractions";
 
@@ -54,7 +55,6 @@ export function WeekView({
   const [focusedDayIndex, setFocusedDayIndex] = useState(() =>
     Math.max(0, getWeekDays(currentDate).findIndex((day) => isSameDay(day, currentDate)))
   );
-  const dayRailRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const container = document.getElementById("week-scroll-container");
@@ -132,9 +132,6 @@ export function WeekView({
       setFocusedDayIndex(index);
       void triggerSelectionFeedback();
       onDayClick?.(day);
-      dayRailRef.current
-        ?.querySelector<HTMLElement>(`[data-week-day-index="${index}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     },
     [onDayClick, weekDays]
   );
@@ -156,8 +153,8 @@ export function WeekView({
             </div>
           </div>
 
-          <div ref={dayRailRef} className="-mx-3 mt-3 overflow-x-auto overscroll-x-contain px-3 pb-1 [-webkit-overflow-scrolling:touch]">
-            <div className="flex min-w-max snap-x snap-mandatory gap-2">
+          <div className="mt-3">
+            <div className="grid grid-cols-7 gap-1">
               {daySummaries.map((summary, index) => {
                 const isFocused = index === focusedDayIndex;
                 const isCurrentDay = isSameDay(summary.date, today);
@@ -168,7 +165,7 @@ export function WeekView({
                     data-week-day-index={index}
                     onClick={() => focusDay(index)}
                     className={cn(
-                      "w-[7.4rem] shrink-0 snap-start rounded-2xl border px-3 py-2.5 text-left transition-[background-color,border-color,box-shadow,transform] active:scale-[0.985]",
+                      "min-w-0 rounded-xl border px-1 py-2 text-center transition-[background-color,border-color,box-shadow,transform] active:scale-[0.985]",
                       isFocused
                         ? "border-primary/35 bg-primary/[0.07] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
                         : "border-border/70 bg-white/92",
@@ -176,18 +173,14 @@ export function WeekView({
                     )}
                     aria-pressed={isFocused}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                         {DAY_NAMES[index]}
                       </span>
                       {isCurrentDay ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
                     </div>
-                    <p className="mt-1 text-2xl font-semibold leading-none text-foreground">{summary.date.getDate()}</p>
-                    <div className="mt-2 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
-                      <p>{summary.bookedCount} booked</p>
-                      {summary.onSiteCount > 0 ? <p>{summary.onSiteCount} on site</p> : null}
-                      {summary.conflictCount > 0 ? <p className="font-semibold text-rose-700">{summary.conflictCount} conflict</p> : null}
-                    </div>
+                    <p className="mt-1 text-base font-semibold leading-none text-foreground">{summary.date.getDate()}</p>
+                    <MobileWeekIndicators appointments={summary.items} selected={isFocused} />
                   </button>
                 );
               })}
@@ -491,6 +484,7 @@ type WeekDaySummary = {
   onSiteCount: number;
   conflictCount: number;
   revenue: number;
+  items: ApptRecord[];
   groups: Array<{ label: string; items: ApptRecord[] }>;
 };
 
@@ -510,6 +504,51 @@ function WeekMetric({
         {value}
       </p>
     </div>
+  );
+}
+
+function MobileWeekIndicators({
+  appointments,
+  selected,
+}: {
+  appointments: ApptRecord[];
+  selected: boolean;
+}) {
+  const uniqueAppointments = Array.from(new Map(appointments.map((appointment) => [appointment.id, appointment])).values());
+
+  if (uniqueAppointments.length === 0) {
+    return <span className="mt-2 h-4 text-[10px] font-semibold text-muted-foreground">-</span>;
+  }
+
+  if (uniqueAppointments.length >= 5) {
+    return (
+      <span
+        className={cn(
+          "mt-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold leading-none tabular-nums",
+          selected ? "bg-primary text-primary-foreground" : "bg-slate-800 text-white"
+        )}
+        aria-label={`${uniqueAppointments.length} calendar items`}
+      >
+        {uniqueAppointments.length}
+      </span>
+    );
+  }
+
+  return (
+    <span className="mt-2 flex h-5 items-center justify-center gap-0.5" aria-label={`${uniqueAppointments.length} calendar items`}>
+      {uniqueAppointments.map((appointment) => {
+        const status = getStatusStyle(appointment.status);
+        return (
+          <span
+            key={appointment.id}
+            className={cn(
+              "block h-1.5 w-1.5 rounded-full",
+              isCalendarBlockAppointment(appointment) ? "bg-slate-500" : status.accent
+            )}
+          />
+        );
+      })}
+    </span>
   );
 }
 
@@ -633,6 +672,7 @@ function getWeekDaySummary(day: Date, appointments: ApptRecord[], conflictIds?: 
     onSiteCount: onSite.length,
     conflictCount: labor.filter((appointment) => conflictIds?.has(appointment.id)).length,
     revenue: labor.reduce((total, appointment) => total + getCalendarAppointmentAmount(appointment), 0),
+    items: [...labor, ...onSite],
     groups,
   };
 }
