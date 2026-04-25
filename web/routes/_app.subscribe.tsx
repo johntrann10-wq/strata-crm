@@ -26,6 +26,40 @@ type BillingStatus = {
   portalConfigured: boolean;
 };
 
+function getPrimaryBillingAction(status: BillingStatus | null): {
+  label: string;
+  mode: "checkout" | "portal";
+  configured: boolean;
+  unavailableMessage: string;
+} | null {
+  if (!status || status.accessState === "pending_setup_failure") return null;
+  if (status.accessState === "canceled") {
+    return {
+      label: "Reactivate subscription",
+      mode: "checkout",
+      configured: status.checkoutConfigured,
+      unavailableMessage: "Stripe checkout is not available right now.",
+    };
+  }
+  if (
+    status.accessState === "paused_missing_payment_method" ||
+    (status.accessState === "active_trial" && !status.billingHasPaymentMethod)
+  ) {
+    return {
+      label: status.accessState === "paused_missing_payment_method" ? "Resume subscription" : "Add payment method",
+      mode: "portal",
+      configured: status.portalConfigured,
+      unavailableMessage: "Stripe billing portal is not available right now.",
+    };
+  }
+  return {
+    label: "Manage billing",
+    mode: "portal",
+    configured: status.portalConfigured,
+    unavailableMessage: "Stripe billing portal is not available right now.",
+  };
+}
+
 export default function SubscribePage() {
   const nativeShellSession = isNativeShell();
   const { membershipRole } = useOutletContext<AuthOutletContext>();
@@ -35,6 +69,7 @@ export default function SubscribePage() {
   const [retryingSetup, setRetryingSetup] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
 
   useEffect(() => {
@@ -62,19 +97,25 @@ export default function SubscribePage() {
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
   const billingPrompt = billingStatus?.billingPrompt ?? null;
+  const primaryAction = getPrimaryBillingAction(billingStatus);
 
   const handleOpenBillingPortal = async () => {
-    if (!canManageBilling) return;
+    if (!canManageBilling || !primaryAction) return;
     setError(null);
+    setNotice(null);
+    if (!primaryAction.configured) {
+      setError(primaryAction.unavailableMessage);
+      return;
+    }
     setLoadingPortal(true);
     try {
-      if (billingStatus?.accessState === "canceled") {
+      if (primaryAction.mode === "checkout") {
         const result = await api.billing.createCheckoutSession();
         if (result?.url) {
           window.location.href = result.url;
           return;
         }
-        setError("Billing checkout is not available right now.");
+        setError(primaryAction.unavailableMessage);
         return;
       }
       const promptStage =
@@ -90,7 +131,7 @@ export default function SubscribePage() {
         window.location.href = result.url;
         return;
       }
-      setError("Billing portal is not available right now.");
+      setError(primaryAction.unavailableMessage);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not open billing portal.");
     } finally {
@@ -100,22 +141,38 @@ export default function SubscribePage() {
 
   useEffect(() => {
     if (nativeShellSession) return;
-    if (searchParams.get("billingPortal") !== "return") return;
+    const billingPortalReturn = searchParams.get("billingPortal") === "return";
+    const legacyCheckoutCanceled = searchParams.get("canceled") === "1";
+    if (!billingPortalReturn && !legacyCheckoutCanceled) return;
     let cancelled = false;
 
     setError(null);
+    setNotice(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("billingPortal");
+    nextParams.delete("canceled");
+    setSearchParams(nextParams, { replace: true });
+
+    if (legacyCheckoutCanceled) {
+      setNotice("Billing checkout was canceled. No subscription changes were made.");
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoadingPortal(true);
     void api.billing
       .refreshBillingState()
       .then((status) => {
         if (cancelled) return;
         setBillingStatus(status);
-        if (
+        if (status.accessState === "active_trial" && status.billingHasPaymentMethod) {
+          setNotice("Payment method saved. The trial stays active and the paid plan can start automatically afterward.");
+        } else if (
           hasFullBillingAccess(status.accessState) ||
           (status.accessState == null && (status.status === "active" || status.status === "trialing"))
         ) {
-          navigate("/signed-in", { replace: true });
-          return;
+          setNotice("Billing status refreshed.");
         }
         if (status.accessState === "paused_missing_payment_method") {
           setError("Billing still needs a payment method before full access can resume.");
@@ -130,14 +187,10 @@ export default function SubscribePage() {
         if (!cancelled) setLoadingPortal(false);
       });
 
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("billingPortal");
-    setSearchParams(nextParams, { replace: true });
-
     return () => {
       cancelled = true;
     };
-  }, [navigate, nativeShellSession, searchParams, setSearchParams]);
+  }, [nativeShellSession, searchParams, setSearchParams]);
 
   const handleRetrySetup = async () => {
     setError(null);
@@ -218,6 +271,12 @@ export default function SubscribePage() {
             <p className="text-sm text-destructive">{error}</p>
           ) : null}
 
+          {notice ? (
+            <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              {notice}
+            </p>
+          ) : null}
+
           {billingStatus?.accessState === "pending_setup_failure" ? (
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button onClick={handleRetrySetup} disabled={retryingSetup}>
@@ -230,15 +289,9 @@ export default function SubscribePage() {
             </div>
           ) : (
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={handleOpenBillingPortal} disabled={loadingPortal || !billingStatus?.portalConfigured || !canManageBilling}>
+              <Button onClick={handleOpenBillingPortal} disabled={loadingPortal || !primaryAction?.configured || !canManageBilling}>
                 {loadingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {billingStatus?.accessState === "paused_missing_payment_method"
-                  ? "Resume subscription"
-                  : billingStatus?.accessState === "canceled"
-                    ? "Reactivate subscription"
-                  : billingStatus?.billingHasPaymentMethod
-                    ? "Manage billing"
-                    : "Add payment method"}
+                {primaryAction?.label ?? "Open billing"}
               </Button>
               <Button asChild variant="outline">
                 <Link to="/settings?tab=billing">Billing settings</Link>
