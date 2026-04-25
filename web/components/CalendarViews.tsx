@@ -1192,14 +1192,14 @@ export function MonthView({
                       {dayDensityItems.length > 0 && !isMobileLayout ? (
                         <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-hidden pt-1">
                           {dayDensityItems
-                            .slice(0, 3)
+                            .slice(0, 2)
                             .map((appointment, index) => (
                               <div
                                 key={`${appointment.id}-${day.toISOString()}-label`}
                                 className={cn(
-                                  "truncate rounded-md border border-border/50 bg-white/82 px-1.5 py-0.5 font-medium text-foreground/85 shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
-                                  "text-[10px] lg:text-[11px]",
-                                  index < 2 ? "hidden sm:block" : "hidden xl:block"
+                                  "truncate rounded-md bg-muted/[0.16] px-1.5 py-0.5 font-medium text-foreground/85",
+                                  "text-[10px]",
+                                  index === 0 ? "hidden sm:block" : "hidden xl:block"
                                 )}
                               >
                                 {apptLabel(appointment)}
