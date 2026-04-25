@@ -961,13 +961,20 @@ export default function CalendarPage() {
       aria-labelledby={dayInspectorTitleId}
       className="flex h-full min-h-0 flex-col overflow-hidden"
     >
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
-          <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
-            <h3 id={dayInspectorTitleId} className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
+        <div className={cn(
+          "flex flex-wrap items-start justify-between gap-3 border-b border-border/60",
+          isMobileLayout ? "pb-2" : "pb-3"
+        )}>
+          <div className="min-w-0 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {isMobileLayout ? "Day" : "Day inspector"}
+            </p>
+            <h3 id={dayInspectorTitleId} className={cn("truncate font-semibold text-foreground", isMobileLayout ? "text-sm" : "text-base")}>
+              {formatPanelDate(inspectorDate)}
+            </h3>
           </div>
           {isMobileLayout ? (
-            <div className="flex flex-wrap gap-2 text-xs">
+            <div className="flex shrink-0 flex-wrap gap-1.5 text-xs">
               <InlineMetricPill label="Revenue" value={formatCurrency(selectedDayRevenue)} />
               <InlineMetricPill label="Jobs" value={String(selectedDayAgendaItems.length)} />
             </div>
@@ -991,15 +998,15 @@ export default function CalendarPage() {
             </div>
           )}
       </div>
-      <div className="mt-3 min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", isMobileLayout ? "mt-2" : "mt-3")}>
         <div className="grid h-full min-h-0 gap-3 grid-cols-1">
           <div
             className={cn(
               "flex h-full min-h-0 flex-col overflow-hidden rounded-[1.3rem] border border-border/60 bg-white/72",
-              isMobileLayout ? "min-h-[18.5rem] p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
+              isMobileLayout ? "min-h-0 p-2" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
             )}
           >
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className={cn("flex items-center justify-between gap-3", isMobileLayout ? "mb-2" : "mb-3")}>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {view === "month" ? "Selected date" : "Today plan"}
               </p>
@@ -1011,8 +1018,8 @@ export default function CalendarPage() {
               <div
                 className={cn(
                   "ios-momentum-y min-h-0 flex-1 space-y-2 overflow-y-auto scroll-pb-8 pb-2",
-                  isMobileLayout
-                    ? "touch-pan-y overscroll-contain px-1 pb-4 pr-0.5 pt-0.5"
+                isMobileLayout
+                    ? "touch-pan-y overscroll-contain px-0.5 pb-3 pr-0.5 pt-0.5"
                     : "pr-1 pt-0.5"
                 )}
               >
@@ -1199,7 +1206,7 @@ export default function CalendarPage() {
             <div
               className={cn(
                 "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "h-[26rem] min-h-[26rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
+                isMobileLayout ? "h-[42dvh] max-h-[20rem] min-h-[12rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
               )}
             >
               {dayInspectorPanel}
@@ -1217,27 +1224,55 @@ export default function CalendarPage() {
       >
         <SheetContent
           side={isMobileLayout ? "bottom" : "right"}
+          swipeToClose={isMobileLayout}
+          onSwipeClose={() => {
+            setIsAppointmentInspectorOpen(false);
+            setSelectedAppointmentId(null);
+          }}
           className={cn(
             "gap-0 !border-0 !bg-transparent !shadow-none p-2 [&>button]:right-5 [&>button]:top-5 [&>button]:z-30 [&>button]:rounded-full [&>button]:bg-white/85 [&>button]:backdrop-blur-xl",
             isMobileLayout
-              ? "max-h-[92dvh] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+              ? "h-[82dvh] max-h-[82dvh] overflow-hidden pb-[max(0.75rem,env(safe-area-inset-bottom))]"
               : "sm:inset-y-5 sm:right-5 sm:h-auto sm:max-h-[calc(100dvh-2.5rem)] sm:w-[min(92vw,34rem)] sm:max-w-[34rem] sm:p-0 lg:w-[36rem] lg:max-w-[36rem]"
           )}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-white/75 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.91))] shadow-[0_28px_80px_rgba(15,23,42,0.26),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-2xl">
+          <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-white/75 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.91))] shadow-[0_28px_80px_rgba(15,23,42,0.26),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-2xl">
             <div className="flex shrink-0 justify-center pt-3">
               <span aria-hidden="true" className="h-1.5 w-12 rounded-full bg-slate-300/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]" />
             </div>
             <div className="shrink-0 border-b border-white/65 px-5 pb-3 pt-2 text-left">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Floating inspector</p>
-                  <SheetTitle className="mt-1 truncate pr-4 text-lg font-semibold tracking-[-0.03em] text-foreground">
-                    {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
-                  </SheetTitle>
+              <div className={cn("flex gap-3", isMobileLayout ? "flex-col" : "items-start justify-between")}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Floating inspector</p>
+                    <SheetTitle className={cn("mt-1 truncate font-semibold tracking-[-0.03em] text-foreground", isMobileLayout ? "pr-1 text-base" : "pr-4 text-lg")}>
+                      {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
+                    </SheetTitle>
+                  </div>
+                  {isMobileLayout ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 shrink-0 rounded-full border-white/70 bg-white/86 px-3 text-xs font-semibold shadow-sm"
+                      onClick={() => {
+                        setIsAppointmentInspectorOpen(false);
+                        setSelectedAppointmentId(null);
+                      }}
+                      data-calendar-swipe-ignore="true"
+                    >
+                      Close
+                    </Button>
+                  ) : null}
                 </div>
                 {inspectorAppointmentCount > 1 ? (
-                  <div className="mr-8 flex shrink-0 items-center gap-1.5" data-calendar-swipe-ignore="true">
+                  <div
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5",
+                      isMobileLayout ? "w-full justify-center rounded-full border border-white/65 bg-white/54 px-2 py-1 shadow-sm" : "mr-8"
+                    )}
+                    data-calendar-swipe-ignore="true"
+                  >
                     <Button
                       type="button"
                       variant="outline"
