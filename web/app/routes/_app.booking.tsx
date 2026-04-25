@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useOutletContext } from "react-router";
-import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Share2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
@@ -48,6 +48,8 @@ import {
   resolveEffectiveBookingRequestSettings,
   type BookingRequestSettings,
 } from "@/lib/bookingRequestSettings";
+import { shareNativeContent, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
+import { buildPreviewBookingUrl, buildPublicBookingUrl, openExternalUrl } from "@/lib/publicAppUrl";
 
 type BuilderTab = "branding" | "experience" | "request" | "fields";
 type PreviewMode = "live" | "request_timing" | "request_review";
@@ -544,10 +546,8 @@ export default function BookingBuilderPage() {
     setServiceForm((current) => (formsMatch(current, next) ? current : next));
   }, [selectedService]);
 
-  const bookingUrl = useMemo(() => {
-    if (!businessId || typeof window === "undefined") return "";
-    return `${window.location.origin}/book/${businessId}`;
-  }, [businessId]);
+  const bookingUrl = useMemo(() => buildPublicBookingUrl(businessId), [businessId]);
+  const previewBaseUrl = useMemo(() => buildPreviewBookingUrl(businessId), [businessId]);
   const previewQuery = useMemo(() => {
     const params = new URLSearchParams({
       builderPreview: "1",
@@ -561,8 +561,8 @@ export default function BookingBuilderPage() {
     return params.toString();
   }, [previewMode, previewNonce]);
   const previewUrl = useMemo(
-    () => (bookingUrl ? `${bookingUrl}?${previewQuery}` : "about:blank"),
-    [bookingUrl, previewQuery]
+    () => (previewBaseUrl ? `${previewBaseUrl}?${previewQuery}` : "about:blank"),
+    [previewBaseUrl, previewQuery]
   );
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
   const bookingTheme = useMemo(() => resolveBookingBrandTheme(toBrandingTokens(form)), [form]);
@@ -800,9 +800,35 @@ export default function BookingBuilderPage() {
     try {
       await navigator.clipboard.writeText(bookingUrl);
       toast.success("Booking URL copied.");
+      void triggerNotificationFeedback("success");
     } catch {
       toast.error("Could not copy the booking URL.");
+      void triggerNotificationFeedback("error");
     }
+  };
+
+  const shareBookingUrl = async () => {
+    if (!bookingUrl) return;
+    const result = await shareNativeContent({
+      title: "Strata booking page",
+      text: businessRecord?.name ? `${businessRecord.name} booking page` : "Share the live Strata booking page.",
+      url: bookingUrl,
+    });
+
+    if (result === "shared") {
+      toast.success("Booking link shared.");
+      void triggerNotificationFeedback("success");
+      return;
+    }
+    if (result === "copied") {
+      toast.success("Booking link copied.");
+      void triggerNotificationFeedback("success");
+      return;
+    }
+    if (result === "cancelled") return;
+
+    toast.error("Could not share the booking link.");
+    void triggerNotificationFeedback("error");
   };
 
   const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -853,7 +879,25 @@ export default function BookingBuilderPage() {
               </div>
               <Switch checked={form.bookingEnabled} onCheckedChange={(next) => updateField("bookingEnabled", next)} disabled={!canEdit} />
             </div>
-            <Button type="button" variant="outline" onClick={() => bookingUrl && window.open(bookingUrl, "_blank", "noopener,noreferrer")} disabled={!bookingUrl}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void shareBookingUrl()}
+              disabled={!bookingUrl}
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share live link
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (!bookingUrl) return;
+                void triggerSelectionFeedback();
+                openExternalUrl(bookingUrl);
+              }}
+              disabled={!bookingUrl}
+            >
               <ExternalLink className="mr-2 h-4 w-4" />
               View live
             </Button>

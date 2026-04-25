@@ -167,24 +167,25 @@ const SignOutOption = () => {
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
 
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     if (signingOut) return;
     setSigningOut(true);
-    try {
-      await api.user.signOut();
-    } catch {
-      // JWT sign-out is local-first; backend failure should not trap the user.
-    }
+
+    const signOutRequest = api.user.signOut();
     clearAuthState("auth:logout");
-    if (typeof window !== "undefined") {
-      window.location.replace("/sign-in");
-      return;
-    }
     navigate("/sign-in", { replace: true });
+
+    void signOutRequest.catch(() => {
+      // JWT sign-out is local-first; backend failure should not trap the user.
+    });
   };
 
   return (
-    <DropdownMenuItem onClick={handleSignOut} disabled={signingOut} className="flex items-center text-red-600 focus:text-red-600 cursor-pointer">
+    <DropdownMenuItem
+      onSelect={handleSignOut}
+      disabled={signingOut}
+      className="flex items-center text-red-600 focus:text-red-600 cursor-pointer"
+    >
       <LogOut className="mr-2 h-4 w-4" />
       {signingOut ? "Signing out..." : "Sign out"}
     </DropdownMenuItem>

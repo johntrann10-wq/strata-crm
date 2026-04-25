@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import {
@@ -68,6 +68,24 @@ function shiftDateKey(value: string, days: number) {
 function formatDashboardAxisCurrency(value: number) {
   if (value === 0) return "$0";
   return formatDashboardCompactCurrency(value);
+}
+
+const DASHBOARD_SHORTCUTS_STORAGE_KEY = "strata.dashboard.shortcuts.v1";
+const DASHBOARD_SHORTCUT_KEYS = ["new_appointment", "new_quote", "new_invoice", "add_client"] as const;
+
+type DashboardShortcutAction = HomeDashboardSnapshot["quickActions"][number];
+
+function loadStoredDashboardShortcuts(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_SHORTCUTS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((value): value is string => typeof value === "string");
+  } catch {
+    return null;
+  }
 }
 
 function WidgetErrorState({ title, error, onRetry }: { title: string; error?: Error | null; onRetry?: () => void }) {
@@ -1269,13 +1287,29 @@ export function HomeCompactQuickActions({
   error,
   onRetry,
 }: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
+  const [customizing, setCustomizing] = useState(false);
+  const [selectedShortcutKeys, setSelectedShortcutKeys] = useState<string[] | null>(() => loadStoredDashboardShortcuts());
+  const availableActions = useMemo(() => {
+    const allowedKeys = new Set<string>(DASHBOARD_SHORTCUT_KEYS);
+    return (snapshot?.quickActions ?? []).filter((action) => allowedKeys.has(action.key));
+  }, [snapshot?.quickActions]);
+  const visibleActions = useMemo(() => {
+    if (!selectedShortcutKeys) return availableActions;
+    const availableByKey = new Map(availableActions.map((action) => [action.key, action]));
+    return selectedShortcutKeys
+      .map((key) => availableByKey.get(key))
+      .filter((action): action is DashboardShortcutAction => Boolean(action));
+  }, [availableActions, selectedShortcutKeys]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedShortcutKeys) return;
+    window.localStorage.setItem(DASHBOARD_SHORTCUTS_STORAGE_KEY, JSON.stringify(selectedShortcutKeys));
+  }, [selectedShortcutKeys]);
+
   if (loading) return <CardLoadingShell title="Shortcuts" rows={2} compact />;
   if (error) return <WidgetErrorState title="Shortcuts" error={error} onRetry={onRetry} />;
 
-  const allowedKeys = new Set(["new_appointment", "new_quote", "new_invoice", "add_client"]);
-  const actions = (snapshot?.quickActions ?? []).filter((action) => allowedKeys.has(action.key));
-
-  if (actions.length === 0) return null;
+  if (availableActions.length === 0) return null;
 
   return (
     <Card className={cn(dashboardPanelClassName, "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78")}>
@@ -1283,36 +1317,97 @@ export function HomeCompactQuickActions({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base tracking-[-0.02em] text-slate-800">Shortcuts</CardTitle>
-            <CardDescription className="text-slate-500">Secondary entry points for common admin work.</CardDescription>
           </div>
-          <span className="rounded-full border border-slate-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-            {actions.length} actions
-          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full border-slate-200 bg-white/88 px-3 text-xs text-slate-700"
+            onClick={() => setCustomizing((current) => !current)}
+            aria-expanded={customizing}
+          >
+            {customizing ? "Done" : "Customize"}
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <p className="text-sm text-slate-500">Keep the dashboard focused on the week. Use shortcuts for quick admin tasks, not primary navigation.</p>
-        <div className="grid gap-2 sm:flex sm:flex-wrap lg:justify-end">
-        {actions.map((action) => (
-          <Button
-            key={action.key}
-            asChild
-            variant={action.key === "new_appointment" ? "default" : "outline"}
-            className={cn(
-              "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
-              action.key === "new_appointment"
-                ? "bg-slate-950 text-white hover:bg-slate-800"
-                : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50"
-            )}
-          >
-            <Link to={action.url}>{action.label}</Link>
-          </Button>
-        ))}
+      <CardContent className="space-y-3">
+        {customizing ? (
+          <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/82 p-3">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {availableActions.map((action) => {
+                const activeKeys = selectedShortcutKeys ?? availableActions.map((item) => item.key);
+                const checked = activeKeys.includes(action.key);
+                return (
+                  <label
+                    key={action.key}
+                    className={cn(
+                      "flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors",
+                      checked
+                        ? "border-slate-300 bg-slate-950 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        const current = selectedShortcutKeys ?? availableActions.map((item) => item.key);
+                        if (event.target.checked) {
+                          setSelectedShortcutKeys([...current.filter((key) => key !== action.key), action.key]);
+                        } else {
+                          setSelectedShortcutKeys(current.filter((key) => key !== action.key));
+                        }
+                      }}
+                      className="h-4 w-4 accent-slate-950"
+                    />
+                    <span>{action.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-full text-xs text-slate-500"
+                onClick={() => {
+                  setSelectedShortcutKeys(null);
+                  if (typeof window !== "undefined") {
+                    window.localStorage.removeItem(DASHBOARD_SHORTCUTS_STORAGE_KEY);
+                  }
+                }}
+              >
+                Reset shortcuts
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-2 sm:flex sm:flex-wrap">
+          {visibleActions.length > 0 ? (
+            visibleActions.map((action) => (
+              <Button
+                key={action.key}
+                asChild
+                variant={action.key === "new_appointment" ? "default" : "outline"}
+                className={cn(
+                  "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
+                  action.key === "new_appointment"
+                    ? "bg-slate-950 text-white hover:bg-slate-800"
+                    : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50"
+                )}
+              >
+                <Link to={action.url}>{action.label}</Link>
+              </Button>
+            ))
+          ) : (
+            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/72 px-3 py-3 text-sm text-slate-500">
+              No shortcuts selected.
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
-
-
-

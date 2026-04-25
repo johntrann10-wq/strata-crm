@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -49,6 +50,7 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
+import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import {
   buildQuarterHourOptions,
   FormDatePicker,
@@ -56,6 +58,11 @@ import {
   toDateInputValue,
 } from "../components/appointments/SchedulingControls";
 import { getIntakePreset } from "../lib/intakePresets";
+import {
+  triggerImpactFeedback,
+  triggerNotificationFeedback,
+  triggerSelectionFeedback,
+} from "../lib/nativeInteractions";
 import {
   ClientCard,
   VehicleCard,
@@ -81,6 +88,9 @@ import {
   RotateCcw,
   MoreHorizontal,
   CalendarDays,
+  Phone,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 
 const APPOINTMENT_STATUSES = [
@@ -185,6 +195,46 @@ function formatCurrency(amount: number | null | undefined): string {
     style: "currency",
     currency: "USD",
   }).format(amount);
+}
+
+function trimContactValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatDisplayPhone(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  return trimmed;
+}
+
+function buildPhoneHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `tel:${normalized}` : null;
+}
+
+function buildSmsHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `sms:${normalized}` : null;
+}
+
+function buildEmailHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  return trimmed ? `mailto:${trimmed}` : null;
 }
 
 function safeDate(value: string | Date | null | undefined): Date | null {
@@ -834,34 +884,42 @@ export default function AppointmentDetail() {
   ) => {
     if (deliveryStatus === "emailed") {
       toast.success(`${successLabel} and email sent`);
+      void triggerNotificationFeedback("success");
       return;
     }
     if (deliveryStatus === "missing_email") {
       toast.warning(`${successLabel}, but the client has no email address.`);
+      void triggerNotificationFeedback("warning");
       return;
     }
     if (deliveryStatus === "smtp_disabled") {
       toast.warning(`${successLabel}, but transactional email is not configured.`);
+      void triggerNotificationFeedback("warning");
       return;
     }
     if (deliveryStatus === "email_failed") {
       toast.warning(`${successLabel}, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
+      void triggerNotificationFeedback("warning");
       return;
     }
     toast.success(successLabel);
+    void triggerNotificationFeedback("success");
   };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!appointment) return;
+    await triggerImpactFeedback("light");
     const result = await runUpdateStatus({ id: appointment.id, status: newStatus });
     if (result.error) {
       toast.error(`Failed to update status: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
     } else {
       const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
       if (newStatus === "confirmed") {
         notifyConfirmationResult(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null);
       } else {
         toast.success(`Status updated to ${STATUS_LABELS[newStatus] ?? newStatus}`);
+        void triggerNotificationFeedback("success");
       }
       void refetchAppointment();
       void refetchActivity();
@@ -874,9 +932,11 @@ export default function AppointmentDetail() {
     recipientName?: string;
   }) => {
     if (!appointment) return;
+    await triggerImpactFeedback("light");
     const result = await runSendConfirmation({ id: appointment.id, ...payload });
     if (result.error) {
       toast.error(getTransactionalEmailErrorMessage(result.error, "Appointment confirmation"));
+      void triggerNotificationFeedback("error");
       return;
     }
     const deliveryResult = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
@@ -890,11 +950,14 @@ export default function AppointmentDetail() {
 
   const handleComplete = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("medium");
     const result = await runComplete({ id: appointment.id });
     if (result.error) {
       toast.error(`Failed to complete appointment: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
     } else {
       toast.success("Appointment marked as complete");
+      void triggerNotificationFeedback("success");
       void refetchAppointment();
       void refetchActivity();
     }
@@ -902,11 +965,14 @@ export default function AppointmentDetail() {
 
   const handleCancel = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("rigid");
     const result = await runCancel({ id: appointment.id });
     if (result.error) {
       toast.error(`Failed to cancel appointment: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
     } else {
       toast.success("Appointment cancelled");
+      void triggerNotificationFeedback("warning");
       setShowCancelDialog(false);
       void refetchAppointment();
       void refetchActivity();
@@ -915,19 +981,23 @@ export default function AppointmentDetail() {
 
   const handleDeleteAppointment = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("rigid");
     const result = await runDeleteAppointment({ id: appointment.id });
     if (result.error) {
       const message = result.error.message ?? "Failed to delete appointment";
       toast.error(message.includes("can't be deleted") ? message : `Failed to delete appointment: ${message}`);
+      void triggerNotificationFeedback("error");
       return;
     }
     toast.success("Appointment deleted");
+    void triggerNotificationFeedback("warning");
     setShowDeleteDialog(false);
     navigate(returnTo);
   };
 
   const handleSaveNotes = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("light");
     const result = await runUpdate({
       id: appointment.id,
       notes: notesValue,
@@ -935,9 +1005,12 @@ export default function AppointmentDetail() {
     });
     if (result.error) {
       toast.error("Failed to save notes: " + result.error.message);
+      void triggerNotificationFeedback("error");
       return;
     }
     setIsEditing(false);
+    toast.success("Notes updated");
+    void triggerNotificationFeedback("success");
     void refetchAppointment();
   };
 
@@ -1073,6 +1146,46 @@ export default function AppointmentDetail() {
     void refetchAppointment();
   };
 
+  const handleOperationalUpdate = async ({
+    successLabel,
+    nextStatus,
+    updateValues,
+  }: {
+    successLabel: string;
+    nextStatus?: string | null;
+    updateValues?: Record<string, unknown> | null;
+  }) => {
+    if (!appointment) return;
+
+    await triggerImpactFeedback("light");
+
+    if (nextStatus && appointment.status !== nextStatus) {
+      const statusResult = await runUpdateStatus({ id: appointment.id, status: nextStatus });
+      if (statusResult.error) {
+        toast.error(`Failed to update status: ${statusResult.error.message}`);
+        void triggerNotificationFeedback("error");
+        return;
+      }
+    }
+
+    if (updateValues) {
+      const updateResult = await runUpdate({
+        id: appointment.id,
+        ...updateValues,
+      });
+      if (updateResult.error) {
+        toast.error(`Failed to update appointment: ${updateResult.error.message}`);
+        void triggerNotificationFeedback("error");
+        return;
+      }
+    }
+
+    toast.success(successLabel);
+    void triggerNotificationFeedback("success");
+    void refetchAppointment();
+    void refetchActivity();
+  };
+
   if (!id) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -1086,8 +1199,9 @@ export default function AppointmentDetail() {
 
   if (fetching) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading appointment details...</p>
       </div>
     );
   }
@@ -1098,12 +1212,19 @@ export default function AppointmentDetail() {
         <p className="text-destructive text-lg font-medium">
           {error ? `Error: ${error.message}` : "Appointment not found"}
         </p>
-        <Button variant="outline" asChild>
-          <Link to={returnTo}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Appointments
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {error ? (
+            <Button variant="outline" onClick={() => void refetchAppointment()}>
+              Retry
+            </Button>
+          ) : null}
+          <Button variant="outline" asChild>
+            <Link to={returnTo}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Appointments
+            </Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -1156,6 +1277,28 @@ export default function AppointmentDetail() {
     isInternalAppointment,
     blockCoverageLabel
   );
+  const appointmentMapsHref = appointment?.isMobile && appointment.mobileAddress
+    ? `https://maps.apple.com/?q=${encodeURIComponent(appointment.mobileAddress)}`
+    : null;
+  const appointmentClientPhone = trimContactValue(appointment.client?.phone ?? null);
+  const appointmentClientPhoneLabel = formatDisplayPhone(appointmentClientPhone);
+  const appointmentClientEmail = trimContactValue(appointment.client?.email ?? null);
+  const appointmentCallHref = buildPhoneHref(appointmentClientPhone);
+  const appointmentSmsHref = buildSmsHref(appointmentClientPhone);
+  const appointmentEmailHref = buildEmailHref(appointmentClientEmail);
+  const appointmentHasMedia = ((activityLogs ?? []) as Array<{ type?: string | null }>).some((record) =>
+    String(record.type ?? "").endsWith(".media_added")
+  );
+  const supportsInShopWorkflow = !isInternalAppointment && !appointment.isMobile;
+  const quickJumpLinks = [
+    { label: "Schedule", href: "#appointment-schedule-card" },
+    { label: "Services", href: "#appointment-services-card" },
+    { label: "Notes", href: "#appointment-notes-card" },
+    { label: appointmentHasMedia ? "Photos" : "Add photos", href: "#appointment-media-card" },
+    { label: "Client", href: "#appointment-client-card" },
+    { label: "Vehicle", href: "#appointment-vehicle-card" },
+    { label: "Payments", href: "#appointment-finance-card" },
+  ];
   const hasPlaceholderClient =
     appointment.client?.firstName === "Walk-in" && appointment.client?.lastName === "Customer";
     const hasPlaceholderVehicle =
@@ -1245,6 +1388,26 @@ export default function AppointmentDetail() {
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show";
   const primaryEditLabel = appointment.status === "completed" ? "Edit Details" : "Reschedule";
+  const canMarkArrived =
+    supportsInShopWorkflow &&
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show" &&
+    !(appointment as any).vehicleOnSite;
+  const canStartJob =
+    !isInternalAppointment &&
+    appointment.status !== "in_progress" &&
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show";
+  const canSetWaiting = supportsInShopWorkflow && appointment.status === "in_progress" && String((appointment as any).jobPhase ?? "") !== "waiting";
+  const canSetCuring = supportsInShopWorkflow && appointment.status === "in_progress" && String((appointment as any).jobPhase ?? "") !== "curing";
+  const canSetPickupReady =
+    supportsInShopWorkflow &&
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show" &&
+    String((appointment as any).jobPhase ?? "") !== "pickup_ready";
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -1871,23 +2034,26 @@ export default function AppointmentDetail() {
               </Button>
             ) : null}
 
-            <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
+            <Sheet open={showMobileActions} onOpenChange={setShowMobileActions}>
               <Button
                 variant="outline"
                 className="w-full justify-center"
                 aria-label="More appointment actions"
-                onClick={() => setShowMobileActions(true)}
+                onClick={() => {
+                  void triggerSelectionFeedback();
+                  setShowMobileActions(true);
+                }}
               >
                 <MoreHorizontal className="h-4 w-4 mr-2" />
                 More actions
               </Button>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Appointment actions</DialogTitle>
-                <DialogDescription>
+            <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <SheetHeader>
+                <SheetTitle>Appointment actions</SheetTitle>
+                <SheetDescription>
                   Open the next workflow step for this appointment without leaving the detail view guessing.
-                </DialogDescription>
-              </DialogHeader>
+                </SheetDescription>
+              </SheetHeader>
               <div className="grid gap-2">
                 {canQuickEditAppointment ? (
                   <Button
@@ -2046,8 +2212,8 @@ export default function AppointmentDetail() {
                   </Button>
                 ) : null}
               </div>
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
           </div>
         </div>
       </div>
@@ -2061,6 +2227,161 @@ export default function AppointmentDetail() {
             <span>No staff assigned — assign a technician before starting this job.</span>
           </div>
         )}
+
+      {!isInternalAppointment ? (
+        <Card className="border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-base">Operations hub</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Reach the client, move the job forward, and jump straight to the details that matter on site.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.16em]">
+                  {appointment.isMobile ? "Mobile job" : "Shop workflow"}
+                </Badge>
+                {(appointment as any).vehicleOnSite ? (
+                  <Badge variant="outline" className="rounded-full px-3 py-1">
+                    Vehicle on site
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Reach client</p>
+                <span className="text-xs text-muted-foreground">{appointmentClientPhoneLabel || appointmentClientEmail || "No live contact on file"}</span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <OperationalActionButton icon={Phone} label="Call client" detail={appointmentClientPhoneLabel ?? "No phone"} href={appointmentCallHref} />
+                <OperationalActionButton icon={MessageSquare} label="Text client" detail={appointmentClientPhoneLabel ?? "No phone"} href={appointmentSmsHref} />
+                <OperationalActionButton icon={Mail} label="Email client" detail={appointmentClientEmail ?? "No email"} href={appointmentEmailHref} />
+                <OperationalActionButton icon={MapPin} label="Open in Maps" detail={appointmentLocationLabel} href={appointmentMapsHref} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Job state</p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {canMarkArrived ? (
+                  <OperationalActionButton
+                    icon={MapPin}
+                    label="Mark arrived"
+                    detail="Keep the job visible on site"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Vehicle marked on site",
+                        updateValues: {
+                          vehicleOnSite: true,
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canStartJob ? (
+                  <OperationalActionButton
+                    icon={Clock}
+                    label="Start job"
+                    detail="Move into active work"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Job started",
+                        nextStatus: appointment.status === "scheduled" ? "confirmed" : "in_progress",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "active_work",
+                          jobStartTime: (appointment as any).jobStartTime ?? new Date().toISOString(),
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canSetWaiting ? (
+                  <OperationalActionButton
+                    icon={Clock}
+                    label="Waiting"
+                    detail="Pause for parts, approval, or cooldown"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Job marked waiting",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "waiting",
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canSetCuring ? (
+                  <OperationalActionButton
+                    icon={Clock}
+                    label="Curing"
+                    detail="Keep the team synced on cure time"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Job marked curing",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "curing",
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canSetPickupReady ? (
+                  <OperationalActionButton
+                    icon={CalendarDays}
+                    label="Pickup ready"
+                    detail={(appointment as any).pickupReadyTime ? "Already stamped ready" : "Stamp handoff timing now"}
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Marked ready for pickup",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "pickup_ready",
+                          pickupReadyTime: (appointment as any).pickupReadyTime ?? new Date().toISOString(),
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canQuickCompleteAppointment ? (
+                  <OperationalActionButton
+                    icon={CheckCircle}
+                    label="Complete"
+                    detail="Wrap the visit and lock billing follow-through"
+                    onClick={() => {
+                      const hasServices = appointmentServices && appointmentServices.length > 0;
+                      const hasTotalPrice = getDisplayedAppointmentAmount(appointment) > 0;
+                      if (!hasServices && !hasTotalPrice) {
+                        void triggerSelectionFeedback();
+                        setShowCompleteWarningDialog(true);
+                      } else {
+                        void handleComplete();
+                      }
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Jump to</p>
+              <div className="flex flex-wrap gap-2">
+                {quickJumpLinks.map((link) => (
+                  <Button key={link.href} type="button" variant="outline" size="sm" className="rounded-full" asChild>
+                    <a href={link.href}>{link.label}</a>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <JobLifecycleStepper
         status={appointment.status}
@@ -2150,7 +2471,7 @@ export default function AppointmentDetail() {
             {/* Left column */}
             <div className="lg:col-span-2 space-y-6">
               {/* Appointment Info Card */}
-              <Card>
+              <Card id="appointment-schedule-card" className="scroll-mt-24">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Appointment Info</CardTitle>
@@ -2341,7 +2662,7 @@ export default function AppointmentDetail() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card id="appointment-services-card" className="scroll-mt-24">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Services</CardTitle>
@@ -2440,7 +2761,7 @@ export default function AppointmentDetail() {
               </Card>
 
               {/* Notes Card */}
-              <Card>
+              <Card id="appointment-notes-card" className="scroll-mt-24">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-3">
                     <CardTitle className="text-base">Notes</CardTitle>
@@ -2592,13 +2913,18 @@ export default function AppointmentDetail() {
                 </Card>
               ) : (
                 <>
-                  <ClientCard client={appointment.client} />
-                  <VehicleCard vehicle={appointment.vehicle} clientId={appointment.client?.id} />
+                  <div id="appointment-client-card" className="scroll-mt-24">
+                    <ClientCard client={appointment.client} locationLabel={appointmentLocationLabel} mapsHref={appointmentMapsHref} />
+                  </div>
+                  <div id="appointment-vehicle-card" className="scroll-mt-24">
+                    <VehicleCard vehicle={appointment.vehicle} clientId={appointment.client?.id} />
+                  </div>
                   <InvoiceCard invoice={invoice} invoiceFetching={invoiceFetching} appointmentId={appointment.id} />
                 </>
               )}
 
               {/* Financial Summary Card */}
+              <div id="appointment-finance-card" className="scroll-mt-24">
               <FinancialSummaryCard 
                 subtotal={appointment.subtotal}
                 taxRate={appointment.taxRate}
@@ -2657,6 +2983,7 @@ export default function AppointmentDetail() {
                 onPricingAction={handleOpenPricingDialog}
                 pricingActionDisabled={updatingNotes}
               />
+              </div>
 
               {canEditDeposit ? (
                 <Button
@@ -2669,6 +2996,24 @@ export default function AppointmentDetail() {
                   <DollarSign className="mr-2 h-4 w-4" />
                   {Number(appointment.depositAmount ?? 0) > 0 ? "Edit deposit / partial payment" : "Set deposit / partial payment"}
                 </Button>
+              ) : null}
+
+              {!isInternalAppointment ? (
+                <div id="appointment-media-card" className="scroll-mt-24">
+                <EntityCollaborationCard
+                  entityType="appointment"
+                  entityId={appointment.id}
+                  records={((activityLogs ?? []) as any[])}
+                  fetching={activityFetching}
+                  canWrite={permissions.has("appointments.write")}
+                  title="Job photos & activity"
+                  showNoteComposer={false}
+                  onCreated={() => {
+                    void refetchActivity();
+                    void refetchAppointment();
+                  }}
+                />
+                </div>
               ) : null}
 
               {!isInternalAppointment ? (
@@ -3279,6 +3624,70 @@ export default function AppointmentDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+function OperationalActionButton({
+  icon: Icon,
+  label,
+  detail,
+  href,
+  onClick,
+}: {
+  icon: typeof Phone;
+  label: string;
+  detail: string;
+  href?: string | null;
+  onClick?: (() => void) | null;
+}) {
+  const content = (
+    <>
+      <div className="rounded-full bg-primary/10 p-2 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </>
+  );
+
+  const className =
+    "flex items-center gap-3 rounded-[1rem] border border-border/70 bg-background/90 px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-background";
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        className={className}
+        onClick={() => {
+          void triggerSelectionFeedback();
+        }}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={() => {
+          void triggerSelectionFeedback();
+          onClick();
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className={`${className} cursor-not-allowed opacity-70`} aria-disabled="true">
+      {content}
     </div>
   );
 }

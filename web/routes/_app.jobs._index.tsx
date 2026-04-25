@@ -29,6 +29,12 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
+import {
+  selectorSelectContentClassName,
+  selectorSelectTriggerClassName,
+  selectorTabsListClassName,
+  selectorTabsTriggerClassName,
+} from "../components/shared/selectorStyles";
 
 type JobStatusTab = "all" | "scheduled" | "in_progress" | "completed" | "cancelled";
 type JobView = JobStatusTab | "mine";
@@ -181,10 +187,10 @@ export default function JobsIndexPage() {
                 setCurrentLocationId(value === "all" ? null : value);
               }}
             >
-              <SelectTrigger className="w-full lg:w-52">
+              <SelectTrigger className={selectorSelectTriggerClassName("w-full lg:w-52")}>
                 <SelectValue placeholder="All locations" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className={selectorSelectContentClassName()}>
                 <SelectItem value="all">All locations</SelectItem>
                 {locationRecords.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
@@ -233,13 +239,13 @@ export default function JobsIndexPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as JobView)}>
-        <TabsList className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-6">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="mine" disabled={!myStaffRecord}>My Queue</TabsTrigger>
-          <TabsTrigger value="scheduled">Ready</TabsTrigger>
-          <TabsTrigger value="in_progress">In Progress</TabsTrigger>
-          <TabsTrigger value="completed">Ready to Bill</TabsTrigger>
-          <TabsTrigger value="cancelled">Closed</TabsTrigger>
+        <TabsList className={selectorTabsListClassName("w-full")}>
+          <TabsTrigger value="all" className={selectorTabsTriggerClassName()}>All</TabsTrigger>
+          <TabsTrigger value="mine" disabled={!myStaffRecord} className={selectorTabsTriggerClassName()}>My Queue</TabsTrigger>
+          <TabsTrigger value="scheduled" className={selectorTabsTriggerClassName()}>Ready</TabsTrigger>
+          <TabsTrigger value="in_progress" className={selectorTabsTriggerClassName()}>In Progress</TabsTrigger>
+          <TabsTrigger value="completed" className={selectorTabsTriggerClassName()}>Ready to Bill</TabsTrigger>
+          <TabsTrigger value="cancelled" className={selectorTabsTriggerClassName()}>Closed</TabsTrigger>
         </TabsList>
       </Tabs>
 

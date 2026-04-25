@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, Plus } from "lucide-react";
+import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 import {
   getCalendarDaySnapshot,
   getJobSpanEnd,
@@ -38,10 +39,87 @@ interface DayViewProps {
   appointments: ApptRecord[];
   onSlotClick: (date: Date) => void;
   onApptClick: (apt: ApptRecord) => void;
+  onApptLongPress?: (apt: ApptRecord) => void;
   selectedAppointmentId?: string | null;
   isMobileLayout: boolean;
   onReschedule?: (appointmentId: string, newStart: Date, newEnd: Date | null) => void;
   conflictIds?: Set<string>;
+}
+
+const PRESSABLE_CARD_STYLE: CSSProperties = {
+  WebkitTouchCallout: "none",
+  WebkitTapHighlightColor: "transparent",
+  WebkitUserSelect: "none",
+  userSelect: "none",
+  touchAction: "manipulation",
+};
+
+function useLongPressActions(onOpen: () => void) {
+  const timerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null && typeof window !== "undefined") {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const begin = useCallback((event?: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    if (typeof window === "undefined") return;
+    clearTimer();
+    longPressTriggeredRef.current = false;
+    const firstTouch = event?.touches?.[0];
+    touchStartRef.current = firstTouch ? { x: firstTouch.clientX, y: firstTouch.clientY } : null;
+    timerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    }, 420);
+  }, [clearTimer, onOpen]);
+
+  const consumeIfLongPress = useCallback((event: { preventDefault(): void; stopPropagation(): void }) => {
+    if (longPressTriggeredRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      longPressTriggeredRef.current = false;
+      clearTimer();
+      touchStartRef.current = null;
+      return true;
+    }
+    clearTimer();
+    touchStartRef.current = null;
+    return false;
+  }, [clearTimer]);
+
+  const handleTouchMove = useCallback((event: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    const firstTouch = event.touches?.[0];
+    const start = touchStartRef.current;
+    if (!firstTouch || !start) return;
+    const distance = Math.hypot(firstTouch.clientX - start.x, firstTouch.clientY - start.y);
+    if (distance > 10) {
+      clearTimer();
+      touchStartRef.current = null;
+    }
+  }, [clearTimer]);
+
+  const openContextMenu = useCallback((event: { preventDefault(): void }) => {
+    event.preventDefault();
+    longPressTriggeredRef.current = true;
+    void triggerImpactFeedback("medium");
+    onOpen();
+  }, [onOpen]);
+
+  return {
+    begin,
+    clearTimer,
+    consumeIfLongPress,
+    handleTouchMove,
+    openContextMenu,
+  };
 }
 
 function DaySection({
@@ -77,11 +155,110 @@ function MobileAgendaSectionLabel({ title, count }: { title: string; count: numb
   );
 }
 
+function MobileAppointmentCard({
+  appointment,
+  currentDate,
+  kind,
+  selected,
+  onClick,
+  onLongPress,
+  conflict,
+}: {
+  appointment: ApptRecord;
+  currentDate: Date;
+  kind: "timed" | "onsite";
+  selected: boolean;
+  onClick: (appointment: ApptRecord) => void;
+  onLongPress?: (appointment: ApptRecord) => void;
+  conflict: boolean;
+}) {
+  const style = getStatusStyle(appointment.status);
+  const isBlock = isCalendarBlockAppointment(appointment);
+  const multiDayKind = isMultiDayJob(appointment) ? getMultiDayDayKind(appointment, currentDate) : null;
+  const moneyLabel = apptMoneyLabel(appointment);
+  const openActions = useCallback(() => {
+    onLongPress?.(appointment);
+  }, [appointment, onLongPress]);
+  const longPress = useLongPressActions(openActions);
+
+  return (
+    <button
+      type="button"
+      aria-haspopup={onLongPress ? "dialog" : undefined}
+      className={cn(
+        "w-full select-none rounded-2xl border bg-white px-3 py-2.5 text-left shadow-sm transition-all hover:shadow-md [&_*]:select-none",
+        isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
+        isBlock ? "" : style.text,
+        isBlock ? "" : style.border,
+        selected && !isBlock && "ring-2 ring-primary/40",
+        conflict && "ring-1 ring-rose-300"
+      )}
+      onClick={(event) => {
+        if (longPress.consumeIfLongPress(event)) return;
+        event.stopPropagation();
+        onClick(appointment);
+      }}
+      onDragStart={(event) => event.preventDefault()}
+      onSelectStart={(event) => event.preventDefault()}
+      onTouchStart={longPress.begin}
+      onTouchEnd={longPress.consumeIfLongPress}
+      onTouchCancel={longPress.clearTimer}
+      onTouchMove={longPress.handleTouchMove}
+      onContextMenu={onLongPress ? longPress.openContextMenu : undefined}
+      style={PRESSABLE_CARD_STYLE}
+      draggable={false}
+    >
+      <div className="pointer-events-none flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">
+            {[isBlock ? getCalendarBlockLabel(appointment) : apptLabel(appointment), moneyLabel].filter(Boolean).join(" · ")}
+          </p>
+          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+            {apptClientLabel(appointment)} · {apptVehicleLabel(appointment)}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
+            isBlock ? "bg-slate-200 text-slate-700" : style.pill
+          )}
+        >
+          {kind === "onsite"
+            ? getMultiDayDayLabel(multiDayKind)
+            : multiDayKind
+              ? getMultiDayDayLabel(multiDayKind)
+              : isBlock
+                ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
+                : apptStageLabel(appointment, currentDate)}
+        </span>
+      </div>
+      <div className="pointer-events-none mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          {kind === "onsite"
+            ? `${getMultiDayDayLabel(multiDayKind)} · until ${getJobSpanEnd(appointment).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+            : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
+        </span>
+        {moneyLabel ? <span className="font-semibold text-foreground">{moneyLabel}</span> : null}
+        <span>
+          {kind === "onsite"
+            ? "Vehicle on site"
+            : appointment.assignedStaff
+              ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
+              : "Unassigned"}
+        </span>
+        {appointment.isMobile ? <span>Mobile</span> : null}
+        {conflict ? <span className="font-semibold text-rose-700">Conflict</span> : null}
+      </div>
+    </button>
+  );
+}
+
 export function DayView({
   currentDate,
   appointments,
   onSlotClick,
   onApptClick,
+  onApptLongPress,
   selectedAppointmentId,
   isMobileLayout,
   onReschedule,
@@ -223,7 +400,7 @@ export function DayView({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2.5">
+        <div className="app-native-scroll flex-1 overflow-y-auto p-2.5">
           {visibleItemCount === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/70 bg-muted/10 px-5 text-center">
               <CalendarIcon className="h-10 w-10 text-muted-foreground" />
@@ -239,69 +416,17 @@ export function DayView({
             <div className="space-y-3">
               {timedAgendaItems.length > 0 ? <MobileAgendaSectionLabel title="Timed work" count={timedAgendaItems.length} /> : null}
               {agendaItems.map(({ appointment, kind }) => {
-                const style = getStatusStyle(appointment.status);
-                const isBlock = isCalendarBlockAppointment(appointment);
-                const multiDayKind = isMultiDayJob(appointment) ? getMultiDayDayKind(appointment, currentDate) : null;
-                const moneyLabel = apptMoneyLabel(appointment);
                 return (
-                  <button
+                  <MobileAppointmentCard
                     key={`${appointment.id}-${kind}-mobile`}
-                    type="button"
-                    className={cn(
-                      "w-full rounded-2xl border bg-white px-3 py-2.5 text-left shadow-sm transition-all hover:shadow-md",
-                      isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
-                      isBlock ? "" : style.text,
-                      isBlock ? "" : style.border,
-                      selectedAppointmentId === appointment.id && !isBlock && "ring-2 ring-primary/40",
-                      conflictIds?.has(appointment.id) && "ring-1 ring-rose-300"
-                    )}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onApptClick(appointment);
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">
-                          {[isBlock ? getCalendarBlockLabel(appointment) : apptLabel(appointment), moneyLabel].filter(Boolean).join(" · ")}
-                        </p>
-                        <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-                          {apptClientLabel(appointment)} · {apptVehicleLabel(appointment)}
-                        </p>
-                      </div>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
-                          isBlock ? "bg-slate-200 text-slate-700" : style.pill
-                        )}
-                      >
-                        {kind === "onsite"
-                          ? getMultiDayDayLabel(multiDayKind)
-                          : multiDayKind
-                            ? getMultiDayDayLabel(multiDayKind)
-                            : isBlock
-                              ? (isFullDayCalendarBlock(appointment) ? "All day" : "Blocked")
-                              : apptStageLabel(appointment, currentDate)}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>
-                        {kind === "onsite"
-                          ? `${getMultiDayDayLabel(multiDayKind)} · until ${getJobSpanEnd(appointment).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                          : `${formatTime(new Date(appointment.startTime))}${appointment.endTime ? ` - ${formatTime(new Date(appointment.endTime))}` : ""}`}
-                      </span>
-                      {moneyLabel ? <span className="font-semibold text-foreground">{moneyLabel}</span> : null}
-                      <span>
-                        {kind === "onsite"
-                          ? "Vehicle on site"
-                          : appointment.assignedStaff
-                            ? `${appointment.assignedStaff.firstName} ${appointment.assignedStaff.lastName}`
-                            : "Unassigned"}
-                      </span>
-                      {appointment.isMobile ? <span>Mobile</span> : null}
-                      {conflictIds?.has(appointment.id) ? <span className="font-semibold text-rose-700">Conflict</span> : null}
-                    </div>
-                  </button>
+                    appointment={appointment}
+                    currentDate={currentDate}
+                    kind={kind}
+                    selected={selectedAppointmentId === appointment.id}
+                    onClick={onApptClick}
+                    onLongPress={onApptLongPress}
+                    conflict={Boolean(conflictIds?.has(appointment.id))}
+                  />
                 );
               })}
             </div>
@@ -400,7 +525,7 @@ export function DayView({
         ) : null}
       </div>
 
-      <div id="day-scroll-container" className="flex-1 overflow-y-auto">
+      <div id="day-scroll-container" className="app-native-scroll flex-1 overflow-y-auto">
         {onSiteOnlyJobs.length > 0 ? (
           <div className="border-b border-border/60 bg-muted/10 px-4 py-3">
             <DaySection title="In Shop Today" count={onSiteOnlyJobs.length}>
@@ -412,11 +537,23 @@ export function DayView({
                 <button
                   key={`${apt.id}-onsite`}
                   type="button"
-                  onClick={() => onApptClick(apt)}
+                  aria-haspopup={onApptLongPress ? "dialog" : undefined}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onApptClick(apt);
+                  }}
+                  onContextMenu={onApptLongPress ? (event) => {
+                    event.preventDefault();
+                    onApptLongPress(apt);
+                  } : undefined}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left",
+                    "flex w-full select-none items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left [&_*]:select-none",
                     selectedAppointmentId === apt.id && "border-primary/35 bg-primary/[0.05] ring-2 ring-primary/30"
                   )}
+                  onDragStart={(event) => event.preventDefault()}
+                  onSelectStart={(event) => event.preventDefault()}
+                  style={PRESSABLE_CARD_STYLE}
+                  draggable={false}
                 >
                   <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getMultiDayDayTone(multiDayKind))} />
                   <div className="min-w-0 flex-1">
@@ -523,6 +660,7 @@ export function DayView({
                   event.stopPropagation();
                   onApptClick(apt);
                 }}
+                onLongPress={onApptLongPress}
                 isSelected={selectedAppointmentId === apt.id}
                 isConflict={conflictIds?.has(apt.id)}
                 zIndex={10}
@@ -537,6 +675,7 @@ export function DayView({
                   event.stopPropagation();
                   onApptClick(appointment);
                 }}
+                onLongPress={onApptLongPress}
                 isSelected={selectedAppointmentId === appointment.id}
                 isConflict={conflictIds?.has(appointment.id)}
                 leftCss={leftCss}

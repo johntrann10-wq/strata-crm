@@ -200,7 +200,7 @@ export function WeekView({
 
       <StaffWorkloadBar appointments={appointments} />
 
-      <div id="week-scroll-container" className="flex-1 overflow-y-auto">
+      <div id="week-scroll-container" className="app-native-scroll flex-1 overflow-y-auto">
         <div
           className="grid grid-cols-[68px_repeat(7,minmax(0,1fr))] relative"
           style={{ height: TOTAL_HEIGHT }}

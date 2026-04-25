@@ -125,6 +125,7 @@ body,
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overflow-x: clip;
+    scroll-behavior: smooth;
     background:
       radial-gradient(circle at top left, hsl(25 88% 95% / 0.95), transparent 28%),
       radial-gradient(circle at top right, hsl(35 44% 94% / 0.75), transparent 24%),
@@ -133,6 +134,7 @@ body,
   body {
     @apply bg-transparent text-foreground;
     overflow-x: clip;
+    overscroll-behavior-y: auto;
   }
 }
 
@@ -176,6 +178,11 @@ body,
 }
 
 @layer components {
+  .app-native-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: auto;
+  }
+
   .page-content {
     @apply mx-auto max-w-7xl px-2.5 py-2.5 sm:px-6 sm:py-6 lg:px-8 lg:py-8;
   }
@@ -218,6 +225,133 @@ body,
   .kpi-card {
     border-radius: 1.05rem;
     padding: 1rem;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+html[data-compact-landscape="true"] {
+  font-size: 14px;
+}
+
+html[data-compact-landscape="true"] body {
+  line-height: 1.35;
+}
+
+html[data-compact-landscape="true"] .page-content {
+  padding-top: 0.5rem !important;
+  padding-right: 0.7rem !important;
+  padding-left: 0.7rem !important;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.45rem) !important;
+}
+
+html[data-compact-landscape="true"] .page-section > * + * {
+  margin-top: 0.7rem !important;
+}
+
+html[data-compact-landscape="true"] [class*="pb-28"] {
+  padding-bottom: 4rem !important;
+}
+
+html[data-compact-landscape="true"] [class*="fixed inset-x-0 bottom-0 z-30"],
+html[data-compact-landscape="true"] [class*="fixed inset-x-0 bottom-0 z-40"] {
+  padding: 0.5rem 0.7rem !important;
+}
+
+html[data-compact-landscape="true"] [class*="fixed inset-x-0 bottom-0 z-30"] button,
+html[data-compact-landscape="true"] [class*="fixed inset-x-0 bottom-0 z-40"] button {
+  min-height: 2.25rem;
+}
+
+html[data-compact-landscape="true"] .surface-panel,
+html[data-compact-landscape="true"] .app-page-header {
+  border-radius: 0.95rem;
+}
+
+html[data-compact-landscape="true"] .mobile-support-card {
+  padding: 0.7rem 0.8rem;
+}
+
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
+  .page-content {
+    padding-top: 0.6rem;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  }
+
+  .page-section > * + * {
+    margin-top: 0.75rem !important;
+  }
+
+  .surface-panel,
+  .app-page-header {
+    border-radius: 1rem;
+  }
+
+  .mobile-support-card {
+    padding: 0.75rem 0.875rem;
+  }
+
+  .app-mobile-shell-header {
+    position: sticky;
+    top: 0;
+  }
+
+  .app-mobile-shell-header .app-mobile-shell-header-inner {
+    gap: 0.35rem;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .app-mobile-shell-header .app-mobile-shell-menu-button {
+    height: 2rem;
+    width: 2rem;
+  }
+
+  .app-mobile-shell-header .app-mobile-shell-title {
+    font-size: 0.75rem;
+    line-height: 1.1rem;
+  }
+
+  .app-mobile-shell-header .app-mobile-shell-subtitle {
+    display: none;
+  }
+
+  .app-mobile-shell-header .app-mobile-shell-actions {
+    gap: 0.15rem;
+  }
+
+  .app-mobile-shell-header .app-mobile-shell-avatar {
+    transform: scale(0.84);
+  }
+
+  .app-page-header .app-page-header-shell {
+    padding: 0.75rem 0.875rem;
+  }
+
+  .app-page-header .app-page-header-layout {
+    gap: 0.6rem;
+  }
+
+  .app-page-header .app-page-header-back {
+    margin-bottom: 0.5rem;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.55rem;
+  }
+
+  .app-page-header .app-page-header-copy {
+    gap: 0.4rem;
+  }
+
+  .app-page-header .app-page-header-title {
+    font-size: 1.05rem;
+    line-height: 1.3rem;
+  }
+
+  .app-page-header .app-page-header-subtitle {
+    display: none;
   }
 }
 

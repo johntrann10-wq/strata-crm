@@ -8,6 +8,7 @@ Use this folder as the single repo source of truth for Strata's first iOS hybrid
 2. Check [iOS go / no-go checklist](./ios-go-no-go-checklist.md)
 3. Use [iOS hybrid shell readiness](./ios-hybrid-shell-readiness.md) while generating the shell
 4. Run [iOS device QA checklist](./ios-device-qa-checklist.md) on real hardware before TestFlight
+5. Use [App Review resubmission guide](./app-review-resubmission.md) before each reviewer build
 
 ## Status rule
 

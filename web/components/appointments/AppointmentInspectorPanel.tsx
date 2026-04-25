@@ -7,6 +7,15 @@ import { useAction, useFindMany, useFindFirst } from "@/hooks/useApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -81,6 +90,8 @@ const QUICK_PHASE_OPTIONS = [
   { value: "hold", label: "On hold" },
   { value: "pickup_ready", label: "Ready" },
 ] as const;
+
+type ConfirmationIntent = "reversePayment" | "cancelAppointment" | "deleteAppointment";
 
 const TIME_OPTIONS = buildQuarterHourOptions();
 
@@ -208,6 +219,7 @@ export function AppointmentInspectorPanel({
   emptyTitle = "Select a job",
   emptyDescription = "Pick any job to inspect the customer, vehicle, timing, money, and current stage.",
   compact = false,
+  minimalChrome = false,
   onAppointmentChange,
   onRequestClose,
 }: {
@@ -215,6 +227,7 @@ export function AppointmentInspectorPanel({
   emptyTitle?: string;
   emptyDescription?: string;
   compact?: boolean;
+  minimalChrome?: boolean;
   onAppointmentChange?: (() => void | Promise<void>) | undefined;
   onRequestClose?: (() => void) | undefined;
 }) {
@@ -245,6 +258,7 @@ export function AppointmentInspectorPanel({
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+  const [confirmationIntent, setConfirmationIntent] = useState<ConfirmationIntent | null>(null);
   const [clientIdDraft, setClientIdDraft] = useState("internal");
   const [vehicleIdDraft, setVehicleIdDraft] = useState("none");
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("unassigned");
@@ -348,6 +362,15 @@ export function AppointmentInspectorPanel({
   } as any);
 
   if (!appointment) {
+    if (minimalChrome) {
+      return (
+        <div className="rounded-2xl border border-dashed border-border/70 bg-white/80 px-4 py-5 text-sm">
+          <p className="font-medium text-foreground">{emptyTitle}</p>
+          <p className="mt-1 text-muted-foreground">{emptyDescription}</p>
+        </div>
+      );
+    }
+
     return (
       <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
         <CardContent className={cn("space-y-2", compact ? "p-3" : "p-4")}>
@@ -446,13 +469,14 @@ export function AppointmentInspectorPanel({
   }
 
   function openTimingDialog() {
+    const pickupFallback = appointment.expectedCompletionTime ?? appointment.endTime ?? appointment.startTime ?? null;
     setServiceDate(toDateInputValue(appointment.startTime));
     setServiceStartTime(toTimeInputValue(appointment.startTime));
     setServiceEndTime(toTimeInputValue(appointment.endTime));
     setDropoffDate(toDateInputValue(appointment.jobStartTime));
     setDropoffTime(toTimeInputValue(appointment.jobStartTime));
-    setPickupDate(toDateInputValue(appointment.expectedCompletionTime));
-    setPickupTime(toTimeInputValue(appointment.expectedCompletionTime));
+    setPickupDate(toDateInputValue(pickupFallback));
+    setPickupTime(toTimeInputValue(pickupFallback));
     setPickupReadyDate(toDateInputValue(appointment.pickupReadyTime));
     setPickupReadyTime(toTimeInputValue(appointment.pickupReadyTime));
     setTimingDialogOpen(true);
@@ -682,37 +706,29 @@ export function AppointmentInspectorPanel({
   }
 
   async function handleReversePayment() {
-    const confirmed = window.confirm(
-      paymentSummary.isPaidInFull ? "Reverse the recorded payment for this appointment?" : "Reverse the recorded deposit for this appointment?"
-    );
-    if (!confirmed) return;
     const result = await reverseDepositPayment({ id: appointment.id } as any);
     if (result.error) {
       toast.error("Failed to reverse payment: " + result.error.message);
       return;
     }
     toast.success(paymentSummary.isPaidInFull ? "Payment reversed" : "Deposit reversed");
+    setConfirmationIntent(null);
     await onAppointmentChange?.();
   }
 
   async function handleCancelAppointment() {
-    const confirmed = window.confirm("Cancel this appointment?");
-    if (!confirmed) return;
     const result = await cancelAppointment({ id: appointment.id } as any);
     if (result.error) {
       toast.error("Failed to cancel appointment: " + result.error.message);
       return;
     }
     toast.success("Appointment cancelled");
+    setConfirmationIntent(null);
     await onAppointmentChange?.();
     onRequestClose?.();
   }
 
   async function handleDeleteAppointment() {
-    const confirmed = window.confirm(
-      isInternalAppointment ? "Delete this blocked/internal appointment?" : "Delete this appointment?"
-    );
-    if (!confirmed) return;
     const result = await deleteAppointment({ id: appointment.id } as any);
     if (result.error) {
       const message = result.error.message ?? "Failed to delete appointment";
@@ -720,32 +736,66 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success(isInternalAppointment ? "Block deleted" : "Appointment deleted");
+    setConfirmationIntent(null);
     await onAppointmentChange?.();
     onRequestClose?.();
   }
 
+  const confirmationCopy =
+    confirmationIntent === "reversePayment"
+      ? {
+          title: paymentSummary.isPaidInFull ? "Reverse payment?" : "Reverse deposit?",
+          description: paymentSummary.isPaidInFull
+            ? "This removes the recorded payment from the appointment balance."
+            : "This removes the recorded deposit from the appointment balance.",
+          action: paymentSummary.isPaidInFull ? "Reverse payment" : "Reverse deposit",
+          busy: reversingPayment,
+          run: handleReversePayment,
+        }
+      : confirmationIntent === "cancelAppointment"
+        ? {
+            title: "Cancel appointment?",
+            description: "This keeps the appointment record but marks it cancelled.",
+            action: "Cancel appointment",
+            busy: cancellingAppointment,
+            run: handleCancelAppointment,
+          }
+        : confirmationIntent === "deleteAppointment"
+          ? {
+              title: isInternalAppointment ? "Delete block?" : "Delete appointment?",
+              description: isInternalAppointment
+                ? "This removes the blocked/internal appointment from the schedule."
+                : "This permanently removes the appointment from the schedule.",
+              action: isInternalAppointment ? "Delete block" : "Delete appointment",
+              busy: deletingAppointment,
+              run: handleDeleteAppointment,
+            }
+          : null;
+
   return (
     <>
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className={cn(compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
-        <div className="space-y-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {lifecycleLabel}
-              </span>
-              {isMultiDayJob(appointment) ? (
-                <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-                  {getStageLabel(appointment)}
+      <Card className={cn("border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]", minimalChrome && "!border-0 !bg-transparent !shadow-none")}>
+        <CardContent className={cn(minimalChrome ? "space-y-3 !p-0" : compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
+        {!minimalChrome ? (
+          <div className="space-y-1">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {lifecycleLabel}
                 </span>
-              ) : null}
+                {isMultiDayJob(appointment) ? (
+                  <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+                    {getStageLabel(appointment)}
+                  </span>
+                ) : null}
+              </div>
             </div>
+            <h3 className={cn("break-words font-semibold text-foreground", compact ? "line-clamp-2 text-base leading-5" : "text-lg")}>
+              {getAppointmentLabel(appointment)}
+            </h3>
           </div>
-          <h3 className={cn("break-words font-semibold text-foreground", compact ? "line-clamp-2 text-base leading-5" : "text-lg")}>
-            {getAppointmentLabel(appointment)}
-          </h3>
-        </div>
+        ) : null}
 
         <div className="grid gap-3 text-sm">
           <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
@@ -902,7 +952,7 @@ export function AppointmentInspectorPanel({
                       size="sm"
                       variant="outline"
                       className="rounded-xl"
-                      onClick={() => void handleReversePayment()}
+                      onClick={() => setConfirmationIntent("reversePayment")}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
                       {reversingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -945,7 +995,7 @@ export function AppointmentInspectorPanel({
                     size="sm"
                     variant="outline"
                     className="rounded-xl"
-                    onClick={() => void handleCancelAppointment()}
+                    onClick={() => setConfirmationIntent("cancelAppointment")}
                     disabled={cancellingAppointment || deletingAppointment}
                   >
                     {cancellingAppointment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -956,7 +1006,7 @@ export function AppointmentInspectorPanel({
                   size="sm"
                   variant="outline"
                   className="rounded-xl border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => void handleDeleteAppointment()}
+                  onClick={() => setConfirmationIntent("deleteAppointment")}
                   disabled={cancellingAppointment || deletingAppointment}
                 >
                   {deletingAppointment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -1070,6 +1120,28 @@ export function AppointmentInspectorPanel({
         </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={confirmationIntent !== null} onOpenChange={(open) => !open && setConfirmationIntent(null)}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmationCopy?.title ?? "Confirm action"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmationCopy?.description ?? "Confirm this appointment action before continuing."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={confirmationCopy?.busy}>Keep appointment</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={() => void confirmationCopy?.run()}
+              disabled={!confirmationCopy || confirmationCopy.busy}
+            >
+              {confirmationCopy?.busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {confirmationCopy?.action ?? "Confirm"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
         <DialogContent className="sm:max-w-md">

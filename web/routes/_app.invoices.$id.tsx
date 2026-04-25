@@ -747,7 +747,7 @@ export default function InvoiceDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:p-6">
+    <div className="container mx-auto max-w-5xl space-y-5 px-4 py-4 pb-28 sm:p-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
       <PageHeader
         backTo={returnTo}
@@ -811,9 +811,9 @@ export default function InvoiceDetailPage() {
               ) : null}
             </div>
 
-            <div className="flex w-full items-center gap-2 sm:hidden">
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:hidden">
               {invoiceAllowsPayment(status) && canWritePayments ? (
-                <Button onClick={handleOpenPaymentDialog} className="flex-1">
+                <Button onClick={handleOpenPaymentDialog} className="w-full">
                   <CreditCard className="h-4 w-4 mr-2" />
                   Record Payment
                 </Button>
@@ -822,7 +822,7 @@ export default function InvoiceDetailPage() {
                   onClick={() => void handleMarkAsSent()}
                   disabled={sendingToClient}
                   variant="outline"
-                  className="flex-1"
+                  className="w-full"
                 >
                   {sendingToClient ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

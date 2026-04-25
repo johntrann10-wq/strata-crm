@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { endOfWeek, format, isToday, startOfWeek } from "date-fns";
-import { Link, useOutletContext } from "react-router";
-import { CalendarRange, ChevronLeft, ChevronRight, Inbox, Plus, Search } from "lucide-react";
+import { Link, useLocation, useNavigate, useOutletContext } from "react-router";
+import { CalendarRange, ChevronLeft, ChevronRight, Inbox, Mail, MessageSquare, Phone, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
@@ -28,6 +29,7 @@ import {
 } from "@/lib/calendarJobSpans";
 import { isCalendarBlockAppointment } from "@/lib/calendarBlocks";
 import { cn } from "@/lib/utils";
+import { triggerImpactFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 
 type StaffRecord = {
   id: string;
@@ -75,7 +77,7 @@ type AppointmentRecord = {
   notes?: string | null;
   internalNotes?: string | null;
   location?: { name?: string | null } | null;
-  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null; phone?: string | null; email?: string | null } | null;
   vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
   assignedStaff?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
 };
@@ -98,6 +100,23 @@ const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
   { value: "ready", label: "Ready for pickup" },
   { value: "pickups", label: "Pickups" },
 ];
+
+const SCHEDULE_SCROLL_STORAGE_KEY = "strata:schedule:scroll-position";
+
+function getAppScrollContainer(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.querySelector("main.app-native-scroll");
+}
+
+function captureScheduleScrollPosition(routeKey: string) {
+  if (typeof window === "undefined") return;
+  const container = getAppScrollContainer();
+  const top = container?.scrollTop ?? window.scrollY ?? 0;
+  window.sessionStorage.setItem(
+    SCHEDULE_SCROLL_STORAGE_KEY,
+    JSON.stringify({ routeKey, top })
+  );
+}
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -135,11 +154,116 @@ function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null
   return formatCurrency(amount);
 }
 
+function normalizePhone(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith("1")) return digits;
+  if (digits.length === 10) return `1${digits}`;
+  return digits;
+}
+
+function formatDisplayPhone(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+const PRESSABLE_CARD_STYLE: CSSProperties = {
+  WebkitTouchCallout: "none",
+  WebkitUserSelect: "none",
+  WebkitTapHighlightColor: "transparent",
+  userSelect: "none",
+  touchAction: "manipulation",
+};
+
 function joinMeta(parts: Array<string | null | undefined>): string {
   return parts
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part))
     .join(" - ");
+}
+
+function useLongPressActions(onOpen: () => void) {
+  const timerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null && typeof window !== "undefined") {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const begin = useCallback((event?: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    if (typeof window === "undefined") return;
+    clearTimer();
+    longPressTriggeredRef.current = false;
+    const firstTouch = event?.touches?.[0];
+    touchStartRef.current = firstTouch ? { x: firstTouch.clientX, y: firstTouch.clientY } : null;
+    timerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    }, 420);
+  }, [clearTimer, onOpen]);
+
+  const consumeIfLongPress = useCallback(
+    (event: { preventDefault(): void; stopPropagation(): void }) => {
+      if (longPressTriggeredRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        longPressTriggeredRef.current = false;
+        clearTimer();
+        touchStartRef.current = null;
+        return true;
+      }
+      clearTimer();
+      touchStartRef.current = null;
+      return false;
+    },
+    [clearTimer]
+  );
+
+  const handleTouchMove = useCallback(
+    (event: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+      const firstTouch = event.touches?.[0];
+      const start = touchStartRef.current;
+      if (!firstTouch || !start) return;
+      const distance = Math.hypot(firstTouch.clientX - start.x, firstTouch.clientY - start.y);
+      if (distance > 10) {
+        clearTimer();
+        touchStartRef.current = null;
+      }
+    },
+    [clearTimer]
+  );
+
+  const openContextMenu = useCallback(
+    (event: { preventDefault(): void }) => {
+      event.preventDefault();
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    },
+    [onOpen]
+  );
+
+  return {
+    begin,
+    clearTimer,
+    consumeIfLongPress,
+    handleTouchMove,
+    openContextMenu,
+  };
 }
 
 function isOperationalAppointment(appointment: AppointmentRecord): boolean {
@@ -267,6 +391,7 @@ function MobileFilterSelect({
 
 export default function AppointmentsPage() {
   const { businessId, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
+  const location = useLocation();
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [search, setSearch] = useState("");
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
@@ -330,7 +455,7 @@ export default function AppointmentsPage() {
       notes: true,
       internalNotes: true,
       location: { name: true },
-      client: { id: true, firstName: true, lastName: true },
+      client: { id: true, firstName: true, lastName: true, phone: true, email: true },
       vehicle: { id: true, year: true, make: true, model: true },
       assignedStaff: { id: true, firstName: true, lastName: true },
     },
@@ -385,6 +510,32 @@ export default function AppointmentsPage() {
   );
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
+  const scheduleReturnTo = `${location.pathname}${location.search}`;
+
+  useEffect(() => {
+    if (isInitialLoad || typeof window === "undefined") return;
+    const raw = window.sessionStorage.getItem(SCHEDULE_SCROLL_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as { routeKey?: string; top?: number };
+      if (parsed.routeKey !== scheduleReturnTo || typeof parsed.top !== "number") return;
+      const restore = () => {
+        const container = getAppScrollContainer();
+        if (container) {
+          container.scrollTo({ top: parsed.top, behavior: "auto" });
+        } else {
+          window.scrollTo({ top: parsed.top, behavior: "auto" });
+        }
+      };
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(restore);
+      });
+    } catch {
+      // Ignore invalid restoration state.
+    } finally {
+      window.sessionStorage.removeItem(SCHEDULE_SCROLL_STORAGE_KEY);
+    }
+  }, [isInitialLoad, scheduleReturnTo]);
 
   return (
     <div className="page-content page-section max-w-7xl">
@@ -394,19 +545,34 @@ export default function AppointmentsPage() {
         right={
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <Button asChild variant="outline" className="w-full lg:w-auto">
-              <Link to="/calendar?view=day">
+              <Link
+                to="/calendar?view=day"
+                onClick={() => {
+                  void triggerImpactFeedback("light");
+                }}
+              >
                 <CalendarRange className="mr-2 h-4 w-4" />
                 Open Calendar
               </Link>
             </Button>
             <Button asChild variant="outline" className="w-full lg:w-auto">
-              <Link to="/appointments/requests">
+              <Link
+                to="/appointments/requests"
+                onClick={() => {
+                  void triggerImpactFeedback("light");
+                }}
+              >
                 <Inbox className="mr-2 h-4 w-4" />
                 Booking Requests
               </Link>
             </Button>
             <Button asChild className="w-full lg:w-auto">
-              <Link to="/appointments/new">
+              <Link
+                to="/appointments/new"
+                onClick={() => {
+                  void triggerImpactFeedback("light");
+                }}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 New Appointment
               </Link>
@@ -575,6 +741,7 @@ export default function AppointmentsPage() {
                     key={snapshot.date.toISOString()}
                     snapshot={snapshot}
                     onOpenDay={() => setInspectedDateKey(snapshot.date.toISOString())}
+                    returnTo={scheduleReturnTo}
                   />
                 ))}
               </div>
@@ -587,7 +754,17 @@ export default function AppointmentsPage() {
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
-              {inspectedSnapshot ? <ScheduleDayInspector snapshot={inspectedSnapshot} /> : null}
+              {inspectedSnapshot ? (
+                <>
+                  <DialogHeader className="sr-only">
+                    <DialogTitle>Operational week detail for {format(inspectedSnapshot.date, "EEEE, MMMM d")}</DialogTitle>
+                    <DialogDescription>
+                      Review the day timeline, revenue, and job load for this week snapshot without leaving the board.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <ScheduleDayInspector snapshot={inspectedSnapshot} returnTo={scheduleReturnTo} />
+                </>
+              ) : null}
             </DialogContent>
           </Dialog>
         </div>
@@ -598,7 +775,15 @@ export default function AppointmentsPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
-function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOpenDay: () => void }) {
+function WeeklyDaySection({
+  snapshot,
+  onOpenDay,
+  returnTo,
+}: {
+  snapshot: DaySnapshot;
+  onOpenDay: () => void;
+  returnTo: string;
+}) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
@@ -640,6 +825,7 @@ function WeeklyDaySection({ snapshot, onOpenDay }: { snapshot: DaySnapshot; onOp
                     appointment={appointment}
                     referenceDate={snapshot.date}
                     onOpenDay={onOpenDay}
+                    returnTo={returnTo}
                   />
                 ))}
               </div>
@@ -655,10 +841,12 @@ function ScheduleBoardRow({
   appointment,
   referenceDate,
   onOpenDay,
+  returnTo,
 }: {
   appointment: AppointmentRecord;
   referenceDate: Date;
   onOpenDay: () => void;
+  returnTo: string;
 }) {
   const vehicleLabel = getVehicleLabel(appointment);
   const clientName = getClientName(appointment);
@@ -669,41 +857,63 @@ function ScheduleBoardRow({
     : getJobPhaseLabel(appointment.jobPhase);
   const identityLabel = joinMeta([clientName || "Internal", vehicleLabel || "No vehicle"]);
   const supportLabel = joinMeta([appointment.location?.name ?? null, appointment.assignedStaffId ? getTechName(appointment) : null]);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const openActions = useCallback(() => {
+    void triggerSelectionFeedback();
+    setActionsOpen(true);
+  }, []);
+  const longPress = useLongPressActions(openActions);
 
   return (
-    <button
-      type="button"
-      onClick={onOpenDay}
-      className="block rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 text-left transition-colors hover:bg-white sm:rounded-xl sm:px-3 sm:py-3"
-    >
-      <div className="grid gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-start gap-2">
-            <p className="min-w-0 flex-1 break-words text-[12.5px] font-semibold leading-4.5 text-foreground sm:text-sm sm:leading-5">
-              {getAppointmentLabel(appointment)}
-            </p>
-            {moneyLabel ? <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-[12px]">{moneyLabel}</span> : null}
+    <>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          if (longPress.consumeIfLongPress(event)) return;
+          onOpenDay();
+        }}
+        onDragStart={(event) => event.preventDefault()}
+        onSelectStart={(event) => event.preventDefault()}
+        onTouchStart={longPress.begin}
+        onTouchEnd={longPress.consumeIfLongPress}
+        onTouchCancel={longPress.clearTimer}
+        onTouchMove={longPress.handleTouchMove}
+        onContextMenu={longPress.openContextMenu}
+        className="block select-none rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 text-left transition-[transform,background-color] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none"
+        style={PRESSABLE_CARD_STYLE}
+        draggable={false}
+      >
+        <div className="pointer-events-none grid gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-start gap-2">
+              <p className="min-w-0 flex-1 break-words text-[12.5px] font-semibold leading-4.5 text-foreground sm:text-sm sm:leading-5">
+                {getAppointmentLabel(appointment)}
+              </p>
+              {moneyLabel ? <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-[12px]">{moneyLabel}</span> : null}
+            </div>
+            <p className="mt-0.5 break-words text-[11px] text-muted-foreground sm:mt-1 sm:text-[13px]">{identityLabel}</p>
           </div>
-          <p className="mt-0.5 break-words text-[11px] text-muted-foreground sm:mt-1 sm:text-[13px]">{identityLabel}</p>
-        </div>
 
-        <div className="min-w-0 space-y-0.5">
-          <p className="break-words text-[11px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
-          {supportLabel ? <p className="break-words text-[10px] text-muted-foreground sm:text-[11px]">{supportLabel}</p> : null}
-        </div>
+          <div className="min-w-0 space-y-0.5">
+            <p className="break-words text-[11px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
+            {supportLabel ? <p className="break-words text-[10px] text-muted-foreground sm:text-[11px]">{supportLabel}</p> : null}
+          </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 xl:justify-end">
-          <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
-          <span className="max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
-            {stageLabel}
-          </span>
+          <div className="flex min-w-0 items-center gap-1.5 xl:justify-end">
+            <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
+            <span className="max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
+              {stageLabel}
+            </span>
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+      <AppointmentQuickActionsSheet appointment={appointment} open={actionsOpen} onOpenChange={setActionsOpen} returnTo={returnTo} />
+    </>
   );
 }
 
-function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
+function ScheduleDayInspector({ snapshot, returnTo }: { snapshot: DaySnapshot; returnTo: string }) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
@@ -732,30 +942,12 @@ function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">{group.label}</div>
               <div className="space-y-1.5 sm:space-y-2">
                 {group.items.map((appointment) => (
-                  <Link
+                  <InspectorAppointmentCard
                     key={`${group.label}-${appointment.id}`}
-                    to={`/appointments/${appointment.id}`}
-                    className="block rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 transition-colors hover:bg-white sm:rounded-xl sm:px-3 sm:py-3"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="min-w-0 flex-1 break-words text-[13px] font-semibold text-foreground sm:text-sm">{getAppointmentLabel(appointment)}</p>
-                        {getAppointmentMoneyLabel(appointment) ? (
-                          <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-xs">{getAppointmentMoneyLabel(appointment)}</span>
-                        ) : null}
-                      </div>
-                      <p className="break-words text-[11px] text-muted-foreground sm:text-sm">
-                        {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
-                      </p>
-                      <p className="break-words text-[11px] text-muted-foreground sm:text-sm">{getScheduleTimingLabel(appointment)}</p>
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
-                        <span className="rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
-                          {isMultiDayJob(appointment) ? getOperationalDayLabel(appointment, snapshot.date) : getJobPhaseLabel(appointment.jobPhase)}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
+                    appointment={appointment}
+                    snapshotDate={snapshot.date}
+                    returnTo={returnTo}
+                  />
                 ))}
               </div>
             </div>
@@ -763,5 +955,160 @@ function ScheduleDayInspector({ snapshot }: { snapshot: DaySnapshot }) {
         )}
       </div>
     </>
+  );
+}
+
+function InspectorAppointmentCard({
+  appointment,
+  snapshotDate,
+  returnTo,
+}: {
+  appointment: AppointmentRecord;
+  snapshotDate: Date;
+  returnTo: string;
+}) {
+  const navigate = useNavigate();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const openActions = useCallback(() => {
+    void triggerSelectionFeedback();
+    setActionsOpen(true);
+  }, []);
+  const longPress = useLongPressActions(openActions);
+  const openAppointment = useCallback(() => {
+    void triggerSelectionFeedback();
+    captureScheduleScrollPosition(returnTo);
+    navigate(`/appointments/${appointment.id}?from=${encodeURIComponent(returnTo)}`);
+  }, [appointment.id, navigate, returnTo]);
+
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          if (longPress.consumeIfLongPress(event)) return;
+          openAppointment();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openAppointment();
+          }
+        }}
+        onDragStart={(event) => event.preventDefault()}
+        onSelectStart={(event) => event.preventDefault()}
+        onTouchStart={longPress.begin}
+        onTouchEnd={longPress.consumeIfLongPress}
+        onTouchCancel={longPress.clearTimer}
+        onTouchMove={longPress.handleTouchMove}
+        onContextMenu={longPress.openContextMenu}
+        className="block select-none rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 transition-[transform,background-color] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none"
+        style={PRESSABLE_CARD_STYLE}
+        draggable={false}
+      >
+        <div className="pointer-events-none space-y-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 flex-1 break-words text-[13px] font-semibold text-foreground sm:text-sm">{getAppointmentLabel(appointment)}</p>
+            {getAppointmentMoneyLabel(appointment) ? (
+              <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-xs">{getAppointmentMoneyLabel(appointment)}</span>
+            ) : null}
+          </div>
+          <p className="break-words text-[11px] text-muted-foreground sm:text-sm">
+            {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
+          </p>
+          <p className="break-words text-[11px] text-muted-foreground sm:text-sm">{getScheduleTimingLabel(appointment)}</p>
+          <div className="flex items-center gap-1.5">
+            <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
+            <span className="rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
+              {isMultiDayJob(appointment) ? getOperationalDayLabel(appointment, snapshotDate) : getJobPhaseLabel(appointment.jobPhase)}
+            </span>
+          </div>
+        </div>
+      </div>
+      <AppointmentQuickActionsSheet appointment={appointment} open={actionsOpen} onOpenChange={setActionsOpen} returnTo={returnTo} />
+    </>
+  );
+}
+
+function AppointmentQuickActionsSheet({
+  appointment,
+  open,
+  onOpenChange,
+  returnTo,
+}: {
+  appointment: AppointmentRecord;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  returnTo: string;
+}) {
+  const navigate = useNavigate();
+  const clientName = getClientName(appointment) || "Appointment";
+  const clientHref = appointment.client?.id ? `/clients/${appointment.client.id}` : null;
+  const normalizedPhone = normalizePhone(appointment.client?.phone);
+  const displayPhone = formatDisplayPhone(appointment.client?.phone);
+  const phoneHref = normalizedPhone ? `tel:${normalizedPhone}` : null;
+  const textHref = normalizedPhone ? `sms:${normalizedPhone}` : null;
+  const emailHref = appointment.client?.email ? `mailto:${appointment.client.email}` : null;
+
+  const openAppointment = () => {
+    void triggerSelectionFeedback();
+    onOpenChange(false);
+    captureScheduleScrollPosition(returnTo);
+    navigate(`/appointments/${appointment.id}?from=${encodeURIComponent(returnTo)}`);
+  };
+
+  const openClient = () => {
+    if (!clientHref) return;
+    void triggerSelectionFeedback();
+    onOpenChange(false);
+    navigate(clientHref);
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <SheetHeader>
+          <SheetTitle>{clientName}</SheetTitle>
+          <SheetDescription>Long-press appointment cards to move faster through client follow-up and job details.</SheetDescription>
+        </SheetHeader>
+        <div className="mt-4 grid gap-2">
+          <Button type="button" variant="outline" className="justify-start" onClick={openAppointment}>
+            <CalendarRange className="mr-2 h-4 w-4" />
+            Open appointment
+          </Button>
+          {clientHref ? (
+            <Button type="button" variant="outline" className="justify-start" onClick={openClient}>
+              <Users className="mr-2 h-4 w-4" />
+              Open client
+            </Button>
+          ) : null}
+          {phoneHref ? (
+            <Button asChild variant="outline" className="justify-start">
+              <a href={phoneHref} onClick={() => onOpenChange(false)}>
+                <Phone className="mr-2 h-4 w-4" />
+                Call client {displayPhone ? `(${displayPhone})` : ""}
+              </a>
+            </Button>
+          ) : null}
+          {textHref ? (
+            <Button asChild variant="outline" className="justify-start">
+              <a href={textHref} onClick={() => onOpenChange(false)}>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Text client
+              </a>
+            </Button>
+          ) : null}
+          {emailHref ? (
+            <Button asChild variant="outline" className="justify-start">
+              <a href={emailHref} onClick={() => onOpenChange(false)}>
+                <Mail className="mr-2 h-4 w-4" />
+                Email client
+              </a>
+            </Button>
+          ) : null}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -25,7 +25,16 @@ function formatActivityDescription(record: ActivityRecord) {
   try {
     const parsed = JSON.parse(record.metadata) as Record<string, unknown>;
     if (typeof parsed.body === "string" && parsed.body.trim()) return parsed.body.trim();
-    if (typeof parsed.label === "string" && typeof parsed.url === "string") return `${parsed.label}: ${parsed.url}`;
+    if (typeof parsed.label === "string" && typeof parsed.url === "string") {
+      const url = parsed.url.trim();
+      if (/^data:image\//i.test(url)) {
+        return `${parsed.label.trim() || "Photo"} attached`;
+      }
+      if (/\.(png|jpe?g|webp|gif|bmp|heic|heif)(\?|#|$)/i.test(url)) {
+        return `${parsed.label.trim() || "Photo"} linked`;
+      }
+      return `${parsed.label}: ${parsed.url}`;
+    }
     const parts = Object.entries(parsed)
       .filter(([, value]) => value != null && value !== "")
       .slice(0, 3)

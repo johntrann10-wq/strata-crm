@@ -7,7 +7,6 @@ import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import type { Application } from "express";
-import { getHomeDashboardSnapshot } from "../lib/homeDashboard.js";
 import { getDefaultPermissionsForRole } from "../lib/permissions.js";
 
 const skipEmbeddedDashboardPath = process.platform === "win32";
@@ -17,6 +16,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
   let dbUrl = "";
   let app: Application | undefined;
   let closeDb: (() => Promise<void>) | undefined;
+  let getHomeDashboardSnapshot: typeof import("../lib/homeDashboard.js").getHomeDashboardSnapshot;
 
   const password = "TestPassword123!";
   const email = `dashboard-${Date.now()}@example.com`;
@@ -79,6 +79,9 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
     const dbMod = await import("../db/index.js");
     closeDb = dbMod.closeDb;
 
+    const dashboardMod = await import("../lib/homeDashboard.js");
+    getHomeDashboardSnapshot = dashboardMod.getHomeDashboardSnapshot;
+
     const signUpRes = await request(app).post("/api/auth/sign-up").send({
       email,
       password,
@@ -91,7 +94,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
 
     const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${token}`).send({
       name: "Dashboard Test Business",
-      type: "detail_shop",
+      type: "auto_detailing",
       staffCount: 2,
       operatingHours: "Mon-Fri 09:00-17:00",
       monthlyRevenueGoal: 15000,
@@ -176,7 +179,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
 
     const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${workspaceToken}`).send({
       name: `${label} Business`,
-      type: "detail_shop",
+      type: "auto_detailing",
       staffCount: 1,
       operatingHours: "Mon-Fri 09:00-17:00",
       monthlyRevenueGoal: 5000,

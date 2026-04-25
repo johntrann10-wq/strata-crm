@@ -71,6 +71,8 @@ type FindManyOpts = {
   vehicleId?: string;
   /** Workflow records: filter by location. */
   locationId?: string;
+  /** Optional shell data that should not force a logout on transient 401s. */
+  suppressAuthInvalidation?: boolean;
   pause?: boolean;
   live?: boolean;
 };
@@ -112,6 +114,7 @@ function buildFindManyOpts(
   clientId: FindManyOpts["clientId"],
   vehicleId: FindManyOpts["vehicleId"],
   locationId: FindManyOpts["locationId"],
+  suppressAuthInvalidation: FindManyOpts["suppressAuthInvalidation"],
   pause: FindManyOpts["pause"],
   live: FindManyOpts["live"]
 ): FindManyOpts | undefined {
@@ -131,6 +134,7 @@ function buildFindManyOpts(
     clientId == null &&
     vehicleId == null &&
     locationId == null &&
+    suppressAuthInvalidation == null &&
     pause == null &&
     live == null
   ) {
@@ -153,6 +157,7 @@ function buildFindManyOpts(
     clientId,
     vehicleId,
     locationId,
+    suppressAuthInvalidation,
     pause,
     live,
   };
@@ -276,6 +281,7 @@ export function useFindMany(
         String(opts?.clientId ?? ""),
         String(opts?.vehicleId ?? ""),
         String(opts?.locationId ?? ""),
+        opts?.suppressAuthInvalidation ? "1" : "0",
         opts?.pause ? "1" : "0",
         opts?.live ? "1" : "0",
       ].join("|"),
@@ -295,6 +301,7 @@ export function useFindMany(
       opts?.clientId,
       opts?.vehicleId,
       opts?.locationId,
+      opts?.suppressAuthInvalidation,
       opts?.pause,
       opts?.live,
     ]
@@ -322,6 +329,7 @@ export function useFindMany(
         opts?.clientId,
         opts?.vehicleId,
         opts?.locationId,
+        opts?.suppressAuthInvalidation,
         opts?.pause,
         opts?.live
       ),
@@ -425,6 +433,7 @@ export function useFindFirst(
         String(opts?.clientId ?? ""),
         String(opts?.vehicleId ?? ""),
         String(opts?.locationId ?? ""),
+        opts?.suppressAuthInvalidation ? "1" : "0",
         opts?.pause ? "1" : "0",
         opts?.live ? "1" : "0",
       ].join("|"),
@@ -444,6 +453,7 @@ export function useFindFirst(
       opts?.clientId,
       opts?.vehicleId,
       opts?.locationId,
+      opts?.suppressAuthInvalidation,
       opts?.pause,
       opts?.live,
     ]
@@ -471,6 +481,7 @@ export function useFindFirst(
         opts?.clientId,
         opts?.vehicleId,
         opts?.locationId,
+        opts?.suppressAuthInvalidation,
         opts?.pause,
         opts?.live
       ),

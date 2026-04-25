@@ -821,11 +821,9 @@ export default function NewAppointmentPage() {
   }, [expectedCompletionDate, jobStartDate]);
 
   const suggestedExpectedCompletionDateTime = useMemo(() => {
-    if (startDateTime && effectiveDuration > 0) {
-      return addMinutes(startDateTime, effectiveDuration);
-    }
+    if (endDateTime) return endDateTime;
     return startDateTime ?? dropOffDateTime;
-  }, [dropOffDateTime, effectiveDuration, startDateTime]);
+  }, [dropOffDateTime, endDateTime, startDateTime]);
 
   const handleMultiDayRangeChange = useCallback((range: DateRange | undefined) => {
     if (!range?.from) {
@@ -2156,40 +2154,49 @@ export default function NewAppointmentPage() {
                 </div>
 
                 {isMultiDayJob ? (
-                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-4 sm:col-span-2">
-                    <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-3.5 sm:col-span-2 sm:p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">Multi-day job timeline</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Drop-off and pickup are the main anchors. The active work window stays tied to the date and time above.
                         </p>
                       </div>
-                      <Badge variant="secondary" className="shrink-0">
+                      <Badge variant="secondary" className="w-fit shrink-0">
                         In shop
                       </Badge>
                     </div>
 
-                    <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
-                      <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-2.5 sm:p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Shop stay</p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             Tap the drop-off day first, then the pickup day. The calendar will highlight the full in-shop span.
                           </p>
                         </div>
-                        <div className="text-right text-[11px] text-muted-foreground">
+                        <div className="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2 text-[11px] text-muted-foreground sm:text-right">
                           <p>{dropOffDateTime ? `Drop-off ${format(dropOffDateTime, "MMM d")}` : "Pick drop-off"}</p>
                           <p>{pickupDateTime ? `Pickup ${format(pickupDateTime, "MMM d")}` : "Pick pickup"}</p>
                         </div>
                       </div>
-                      <div className="overflow-hidden rounded-xl border border-border/60">
+                      <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
                         <Calendar
                           mode="range"
                           selected={multiDayDateRange}
                           onSelect={handleMultiDayRangeChange}
                           defaultMonth={multiDayDateRange?.from ?? selectedDate ?? new Date()}
                           numberOfMonths={isSmallViewport ? 1 : 2}
-                          className="w-full p-2"
+                          className="w-full p-1 sm:p-2 [--cell-size:2.5rem] sm:[--cell-size:2.75rem]"
+                          classNames={{
+                            root: "w-full",
+                            months: "flex flex-col gap-3 md:flex-row",
+                            month: "w-full gap-3",
+                            table: "w-full table-fixed border-collapse",
+                            month_caption: "flex h-(--cell-size) w-full items-center justify-center px-9 sm:px-(--cell-size)",
+                            nav: "absolute inset-x-0 top-0 flex w-full items-center justify-between gap-1",
+                            weekday: "flex-1 rounded-md text-[0.68rem] font-medium text-muted-foreground sm:text-[0.8rem]",
+                          }}
                         />
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

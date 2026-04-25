@@ -52,7 +52,7 @@
 - Open privacy policy inside the app
 - Open terms inside the app
 - Open support contact from inside the app
-- Open Profile and submit account deletion request
+- Open `Settings > Account` and complete the in-app delete-account flow
 
 ## Reliability
 

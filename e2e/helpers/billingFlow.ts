@@ -1045,9 +1045,22 @@ export async function mockBillingFlowApp(page: Page, options: BillingMockOptions
     }
 
     if (path === "/invoices" && method === "GET") {
-      const appointmentId = url.searchParams.get("appointmentId");
-      const quoteId = url.searchParams.get("quoteId");
-      const clientId = url.searchParams.get("clientId");
+      const parsedFilter = (() => {
+        const filterParam = url.searchParams.get("filter");
+        if (!filterParam) return null;
+        try {
+          return JSON.parse(filterParam) as {
+            appointmentId?: { equals?: string };
+            quoteId?: { equals?: string };
+            clientId?: { equals?: string };
+          };
+        } catch {
+          return null;
+        }
+      })();
+      const appointmentId = parsedFilter?.appointmentId?.equals ?? url.searchParams.get("appointmentId");
+      const quoteId = parsedFilter?.quoteId?.equals ?? url.searchParams.get("quoteId");
+      const clientId = parsedFilter?.clientId?.equals ?? url.searchParams.get("clientId");
       const records = state.invoices.filter((invoice) => {
         if (appointmentId && invoice.appointmentId !== appointmentId) return false;
         if (quoteId && invoice.quoteId !== quoteId) return false;

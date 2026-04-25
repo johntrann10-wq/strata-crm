@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { CalendarPlus, ChevronDown, FileText, PhoneCall, Plus, Receipt, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getCurrentLocationId } from "@/lib/auth";
 import { useCommandPalette } from "./CommandPaletteContext";
+import { triggerImpactFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 
 function withLocation(path: string): string {
   const currentLocationId = getCurrentLocationId();
@@ -25,7 +26,8 @@ function withLocation(path: string): string {
 export function QuickCreateMenu() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { setOpen } = useCommandPalette();
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
+  const [open, setOpen] = useState(false);
   const [shortcut, setShortcut] = useState("Cmd K");
 
   useEffect(() => {
@@ -35,11 +37,25 @@ export function QuickCreateMenu() {
   }, []);
 
   const currentPath = `${location.pathname}${location.search}`;
-  const go = (path: string) =>
-    navigate(`${path}${path.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentPath)}`);
+  const go = useCallback(
+    (path: string) => {
+      void triggerImpactFeedback("light");
+      setOpen(false);
+      navigate(`${path}${path.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentPath)}`);
+    },
+    [currentPath, navigate]
+  );
 
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen !== open) {
+          void triggerSelectionFeedback();
+        }
+        setOpen(nextOpen);
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button variant="default" size="sm" className={cn("h-9 gap-2 px-3.5 text-[13px]")}>
           <Plus className="h-3.5 w-3.5" />
@@ -67,7 +83,13 @@ export function QuickCreateMenu() {
           New invoice
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setOpen(true)}>
+        <DropdownMenuItem
+          onSelect={() => {
+            void triggerSelectionFeedback();
+            setOpen(false);
+            setCommandPaletteOpen(true);
+          }}
+        >
           <Search className="text-muted-foreground" />
           Open command palette
           <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
@@ -18,6 +18,7 @@ import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlo
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 import {
   getMultiDayDayKind,
   getMultiDayDayLabel,
@@ -137,6 +138,82 @@ export const MONTH_NAMES = [
   "November",
   "December",
 ];
+
+const PRESSABLE_CARD_STYLE: CSSProperties = {
+  WebkitTouchCallout: "none",
+  WebkitTapHighlightColor: "transparent",
+  WebkitUserSelect: "none",
+  userSelect: "none",
+  touchAction: "manipulation",
+};
+
+function useLongPressActions(onOpen: () => void) {
+  const timerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null && typeof window !== "undefined") {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const begin = useCallback((event?: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    if (typeof window === "undefined") return;
+    clearTimer();
+    longPressTriggeredRef.current = false;
+    const firstTouch = event?.touches?.[0];
+    touchStartRef.current = firstTouch ? { x: firstTouch.clientX, y: firstTouch.clientY } : null;
+    timerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    }, 420);
+  }, [clearTimer, onOpen]);
+
+  const consumeIfLongPress = useCallback((event: { preventDefault(): void; stopPropagation(): void }) => {
+    if (longPressTriggeredRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      longPressTriggeredRef.current = false;
+      clearTimer();
+      touchStartRef.current = null;
+      return true;
+    }
+    clearTimer();
+    touchStartRef.current = null;
+    return false;
+  }, [clearTimer]);
+
+  const handleTouchMove = useCallback((event: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    const firstTouch = event.touches?.[0];
+    const start = touchStartRef.current;
+    if (!firstTouch || !start) return;
+    const distance = Math.hypot(firstTouch.clientX - start.x, firstTouch.clientY - start.y);
+    if (distance > 10) {
+      clearTimer();
+      touchStartRef.current = null;
+    }
+  }, [clearTimer]);
+
+  const openContextMenu = useCallback((event: { preventDefault(): void }) => {
+    event.preventDefault();
+    longPressTriggeredRef.current = true;
+    void triggerImpactFeedback("medium");
+    onOpen();
+  }, [onOpen]);
+
+  return {
+    begin,
+    clearTimer,
+    consumeIfLongPress,
+    handleTouchMove,
+    openContextMenu,
+  };
+}
 
 export function isSameDay(a: Date, b: Date): boolean {
   return (
@@ -290,7 +367,7 @@ export type ApptRecord = {
   totalPrice?: number | null;
   isMobile?: boolean | null;
   assignedStaffId?: string | null;
-  client: { firstName: string; lastName: string } | null;
+  client: { id?: string | null; firstName: string; lastName: string; phone?: string | null; email?: string | null } | null;
   vehicle: { make: string; model: string; year?: number | null } | null;
   assignedStaff: { firstName: string; lastName: string } | null;
 };
@@ -491,6 +568,7 @@ interface AppointmentBlockProps {
   apt: ApptRecord;
   dayContext?: Date;
   onClick: () => void;
+  onLongPress?: (apt: ApptRecord) => void;
   isSelected?: boolean;
   draggable?: boolean;
   onDragStart?: (apt: ApptRecord, e: React.DragEvent) => void;
@@ -504,6 +582,7 @@ export function AppointmentBlock({
   apt,
   dayContext,
   onClick,
+  onLongPress,
   isSelected = false,
   draggable: draggableProp,
   onDragStart,
@@ -514,6 +593,10 @@ export function AppointmentBlock({
 }: AppointmentBlockProps) {
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const openActions = useCallback(() => {
+    onLongPress?.(apt);
+  }, [apt, onLongPress]);
+  const longPress = useLongPressActions(openActions);
 
   const start = new Date(apt.startTime);
   const end = apt.endTime ? new Date(apt.endTime) : new Date(start.getTime() + 60 * 60 * 1000);
@@ -556,7 +639,7 @@ export function AppointmentBlock({
     <button
       type="button"
       className={cn(
-        "absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
+        "absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none [&_*]:select-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
         isBlock ? "" : style.text,
@@ -567,6 +650,24 @@ export function AppointmentBlock({
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
         isConflict && "ring-1 ring-rose-300"
       )}
+      title={isConflict ? "Scheduling conflict" : undefined}
+      aria-haspopup={onLongPress ? "dialog" : undefined}
+      draggable={draggableProp ?? true}
+      onClick={(event) => {
+        if (longPress.consumeIfLongPress(event)) return;
+        event.stopPropagation();
+        onClick();
+      }}
+      onSelectStart={(event) => event.preventDefault()}
+      onTouchStart={longPress.begin}
+      onTouchEnd={longPress.consumeIfLongPress}
+      onTouchCancel={longPress.clearTimer}
+      onTouchMove={longPress.handleTouchMove}
+      onContextMenu={onLongPress ? longPress.openContextMenu : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       style={{
         top: `${top}px`,
         height: `${height}px`,
@@ -575,17 +676,8 @@ export function AppointmentBlock({
         width: widthCss ?? undefined,
         right: widthCss ? undefined : "6px",
         zIndex: zIndex ?? undefined,
+        ...PRESSABLE_CARD_STYLE,
       }}
-      title={isConflict ? "Scheduling conflict" : undefined}
-      draggable={draggableProp ?? true}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
     >
       <div className="flex items-start gap-2">
         <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", isBlock ? "bg-slate-500" : style.accent)} />
@@ -646,6 +738,8 @@ export function AppointmentBlock({
   );
 }
 
+const MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 6;
+
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   if (appointments.length === 0) return null;
 
@@ -674,6 +768,25 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
       </div>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
         {countLabel}
+      </span>
+    </div>
+  );
+}
+
+function DayOverflowIndicator({ count, label }: { count: number; label: string }) {
+  return (
+    <div className="pointer-events-none min-w-0 overflow-visible space-y-1 pb-0.5 sm:pb-1">
+      <div className="grid min-h-[8px] grid-cols-6 items-center gap-1 overflow-visible sm:min-h-[12px] sm:grid-cols-8">
+        <span
+          title={label}
+          aria-label={label}
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-700 px-1 text-[8px] font-semibold leading-none tabular-nums text-white sm:h-4.5 sm:min-w-4.5 sm:text-[9px]"
+        >
+          {count}
+        </span>
+      </div>
+      <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
+        {label}
       </span>
     </div>
   );
@@ -1025,6 +1138,10 @@ export function MonthView({
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
               const dayDensityItems = uniqueAppointmentsById(monthGridLookup.dayMap.get(dayKey) ?? []);
               const hasConflict = monthGridLookup.conflictDaySet.has(dayKey);
+              const shouldCollapseDayIndicators = dayDensityItems.length >= MONTH_DAY_OVERFLOW_BADGE_THRESHOLD;
+              const dayCountLabel = dayDensityItems.some((apt) => isCalendarBlockAppointment(apt))
+                ? `${dayDensityItems.length} item${dayDensityItems.length === 1 ? "" : "s"}`
+                : `${dayDensityItems.length} appointment${dayDensityItems.length === 1 ? "" : "s"}`;
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
@@ -1068,9 +1185,7 @@ export function MonthView({
                       >
                         {day.getDate()}
                       </span>
-                      <div className="flex min-w-0 flex-col items-end gap-1">
-                        {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
-                      </div>
+                      {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                     </div>
 
                     <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1096,7 +1211,11 @@ export function MonthView({
                       )}
 
                       <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
-                        <DayStatusDots appointments={dayDensityItems} />
+                        {shouldCollapseDayIndicators ? (
+                          <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
+                        ) : (
+                          <DayStatusDots appointments={dayDensityItems} />
+                        )}
                       </div>
                     </div>
                   </div>

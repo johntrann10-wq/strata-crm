@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useOutletContext } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Link, useLocation, useNavigate, useOutletContext } from "react-router";
 import { format, isSameMonth } from "date-fns";
-import { AlertCircle, CalendarClock, Loader2, Mail, Phone, Search, UserPlus, Users } from "lucide-react";
+import { AlertCircle, CalendarClock, CalendarPlus, Ellipsis, Loader2, Mail, MessageSquare, Phone, Search, UserPlus, Users } from "lucide-react";
 import { useFindMany } from "../hooks/useApi";
 import { api, ApiError } from "../api";
 import type { AuthOutletContext } from "./_app";
@@ -12,6 +12,239 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { triggerImpactFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
+
+type ClientListRecord = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  email: string | null;
+  createdAt: string;
+  notes?: string | null;
+};
+
+function normalizePhone(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith("1")) return digits;
+  if (digits.length === 10) return `1${digits}`;
+  return digits;
+}
+
+function formatDisplayPhone(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
+const PRESSABLE_CARD_STYLE: CSSProperties = {
+  WebkitTouchCallout: "none",
+  WebkitUserSelect: "none",
+  WebkitTapHighlightColor: "transparent",
+  userSelect: "none",
+  touchAction: "manipulation",
+};
+
+function useLongPressActions(onOpen: () => void) {
+  const timerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null && typeof window !== "undefined") {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const begin = useCallback((event?: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    if (typeof window === "undefined") return;
+    clearTimer();
+    longPressTriggeredRef.current = false;
+    const firstTouch = event?.touches?.[0];
+    touchStartRef.current = firstTouch ? { x: firstTouch.clientX, y: firstTouch.clientY } : null;
+    timerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    }, 420);
+  }, [clearTimer, onOpen]);
+
+  const consumeIfLongPress = useCallback(
+    (event: { preventDefault(): void; stopPropagation(): void }) => {
+      if (longPressTriggeredRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        longPressTriggeredRef.current = false;
+      }
+      clearTimer();
+      touchStartRef.current = null;
+    },
+    [clearTimer]
+  );
+
+  const handleTouchMove = useCallback(
+    (event: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+      const firstTouch = event.touches?.[0];
+      const start = touchStartRef.current;
+      if (!firstTouch || !start) return;
+      const distance = Math.hypot(firstTouch.clientX - start.x, firstTouch.clientY - start.y);
+      if (distance > 10) {
+        clearTimer();
+        touchStartRef.current = null;
+      }
+    },
+    [clearTimer]
+  );
+
+  const openContextMenu = useCallback(
+    (event: { preventDefault(): void }) => {
+      event.preventDefault();
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    },
+    [onOpen]
+  );
+
+  return {
+    begin,
+    clearTimer,
+    consumeIfLongPress,
+    handleTouchMove,
+    openContextMenu,
+  };
+}
+
+function MobileClientCard({ client, returnTo }: { client: ClientListRecord; returnTo: string }) {
+  const navigate = useNavigate();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const normalizedPhone = normalizePhone(client.phone);
+  const displayPhone = formatDisplayPhone(client.phone);
+  const clientName = `${client.firstName ?? ""} ${client.lastName ?? ""}`.trim() || "Unnamed client";
+  const clientHref = `/clients/${client.id}?from=${encodeURIComponent(returnTo)}`;
+  const newAppointmentHref = `/appointments/new?clientId=${client.id}&from=${encodeURIComponent(returnTo)}`;
+
+  const openActions = useCallback(() => {
+    void triggerSelectionFeedback();
+    setActionsOpen(true);
+  }, []);
+
+  const longPress = useLongPressActions(openActions);
+
+  const openClient = useCallback(() => {
+    void triggerSelectionFeedback();
+    setActionsOpen(false);
+    navigate(clientHref);
+  }, [clientHref, navigate]);
+
+  return (
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-haspopup="dialog"
+        onClick={openClient}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openClient();
+          }
+        }}
+        onDragStart={(event) => event.preventDefault()}
+        onSelectStart={(event) => event.preventDefault()}
+        onTouchStart={longPress.begin}
+        onTouchEnd={longPress.consumeIfLongPress}
+        onTouchCancel={longPress.clearTimer}
+        onTouchMove={longPress.handleTouchMove}
+        onContextMenu={longPress.openContextMenu}
+        className="block select-none rounded-[1.1rem] border bg-card p-4 shadow-sm transition-[transform,background-color] hover:bg-muted/30 active:scale-[0.985] [&_*]:select-none"
+        style={PRESSABLE_CARD_STYLE}
+        draggable={false}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="pointer-events-none min-w-0">
+            <p className="font-semibold text-foreground">{clientName}</p>
+            {displayPhone ? <p className="mt-1 text-sm text-muted-foreground">{displayPhone}</p> : null}
+            {client.email ? <p className="mt-0.5 text-sm text-muted-foreground">{client.email}</p> : null}
+          </div>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <span className="rounded-full bg-muted/55 px-2 py-1 text-[11px] font-medium text-muted-foreground">Open</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openActions();
+              }}
+            >
+              <Ellipsis className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">Client since {format(new Date(client.createdAt), "MMM d, yyyy")}</p>
+      </div>
+
+      <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <SheetHeader>
+            <SheetTitle>{clientName}</SheetTitle>
+            <SheetDescription>Jump into the record or contact this client without hunting through the CRM.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 grid gap-2">
+            <Button type="button" variant="outline" className="justify-start" onClick={openClient}>
+              <Users className="mr-2 h-4 w-4" />
+              Open client
+            </Button>
+            <Button asChild variant="outline" className="justify-start">
+              <Link to={newAppointmentHref} onClick={() => setActionsOpen(false)}>
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                New appointment
+              </Link>
+            </Button>
+            {normalizedPhone ? (
+              <Button asChild variant="outline" className="justify-start">
+                <a href={`tel:${normalizedPhone}`} onClick={() => setActionsOpen(false)}>
+                  <Phone className="mr-2 h-4 w-4" />
+                  Call client
+                </a>
+              </Button>
+            ) : null}
+            {normalizedPhone ? (
+              <Button asChild variant="outline" className="justify-start">
+                <a href={`sms:${normalizedPhone}`} onClick={() => setActionsOpen(false)}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Text client
+                </a>
+              </Button>
+            ) : null}
+            {client.email ? (
+              <Button asChild variant="outline" className="justify-start">
+                <a href={`mailto:${client.email}`} onClick={() => setActionsOpen(false)}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Email client
+                </a>
+              </Button>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
 
 export default function ClientsPage() {
   const { businessId } = useOutletContext<AuthOutletContext>();
@@ -41,11 +274,14 @@ export default function ClientsPage() {
   });
 
   const visibleClients = useMemo(
-    () => (clients ?? []).filter((client) => !parseLeadRecord(client.notes).isLead),
+    () => ((clients ?? []) as ClientListRecord[]).filter((client) => !parseLeadRecord(client.notes).isLead),
     [clients]
   );
   const isLoading = (!businessId && !clientsError) || (!!businessId && fetchingClients && !clients);
   const isRefetching = fetchingClients && !!clients;
+  const handleAddClientTap = useCallback(() => {
+    void triggerImpactFeedback("light");
+  }, []);
   const clientsWithPhone = useMemo(() => visibleClients.filter((client) => Boolean(client.phone)).length, [visibleClients]);
   const clientsWithEmail = useMemo(() => visibleClients.filter((client) => Boolean(client.email)).length, [visibleClients]);
   const newThisMonth = useMemo(
@@ -60,7 +296,7 @@ export default function ClientsPage() {
         subtitle="Use the client ledger to manage contact records, communication readiness, and every downstream vehicle, appointment, quote, and invoice."
         right={
           <Button asChild>
-            <Link to="/clients/new">
+            <Link to="/clients/new" onClick={handleAddClientTap}>
               <UserPlus className="mr-1.5 h-4 w-4" />
               Add Client
             </Link>
@@ -123,7 +359,7 @@ export default function ClientsPage() {
         className="mb-5"
         actions={
           <Button asChild>
-            <Link to="/clients/new">
+            <Link to="/clients/new" onClick={handleAddClientTap}>
               <UserPlus className="mr-1.5 h-4 w-4" />
               Add Client
             </Link>
@@ -169,7 +405,7 @@ export default function ClientsPage() {
             description="Start with one real customer. Once a client exists, Strata can hold their vehicles, appointments, invoices, and follow-up history in one place."
             action={
               <Button asChild>
-                <Link to="/clients/new">
+                <Link to="/clients/new" onClick={handleAddClientTap}>
                   <UserPlus className="mr-1.5 h-4 w-4" />
                   Add Your First Client
                 </Link>
@@ -217,23 +453,7 @@ export default function ClientsPage() {
 
           <div className="space-y-3 md:hidden">
             {visibleClients.map((client) => (
-              <Link
-                key={client.id}
-                to={`/clients/${client.id}?from=${encodeURIComponent(returnTo)}`}
-                className="block rounded-[1.1rem] border bg-card p-4 shadow-sm transition-colors hover:bg-muted/30"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-foreground">
-                      {client.firstName} {client.lastName}
-                    </p>
-                    {client.phone ? <p className="mt-1 text-sm text-muted-foreground">{client.phone}</p> : null}
-                    {client.email ? <p className="mt-0.5 text-sm text-muted-foreground">{client.email}</p> : null}
-                  </div>
-                  <span className="rounded-full bg-muted/55 px-2 py-1 text-[11px] font-medium text-muted-foreground">Open</span>
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">Client since {format(new Date(client.createdAt), "MMM d, yyyy")}</p>
-              </Link>
+              <MobileClientCard key={client.id} client={client} returnTo={returnTo} />
             ))}
           </div>
 

@@ -17,6 +17,7 @@ export default tseslint.config(
       "test-results/**",
       "coverage/**",
       "public/**",
+      "ios/App/App/public/**",
       "*.json",
       "backend/**/*.d.ts",
       "legacy/**",

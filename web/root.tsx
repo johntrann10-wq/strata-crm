@@ -9,7 +9,7 @@ import {
   useNavigate,
   useRouteError,
 } from "react-router";
-import { Suspense, useEffect, useLayoutEffect, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./app.css";
 import faviconHref from "./favicon.svg";
 import appleTouchIconHref from "./apple-touch-icon.png";
@@ -19,7 +19,14 @@ import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageVie
 import { persistAuthState } from "./lib/auth";
 import { buildCanonicalUrl } from "./lib/publicShareMeta";
 import { recordRuntimeError } from "./lib/runtimeErrors";
-import { buildNavigationTarget, isNativeShell, resolveAppReturnState } from "./lib/mobileShell";
+import {
+  addNativeAppUrlOpenListener,
+  buildNavigationTarget,
+  getNativeLaunchUrl,
+  isNativeShell,
+  resolveAppReturnState,
+  resolveNativeShellReturnUrl,
+} from "./lib/mobileShell";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
@@ -171,6 +178,18 @@ function AuthHashConsumer() {
       search: location.search,
       hash: location.hash,
     });
+    if (token || isAppReturnPath) {
+      console.log("[mobile-shell-bridge] app-return-state", {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+        hasToken: Boolean(token),
+        nextPath,
+        cleanedSearch,
+        cleanedHash,
+        isAppReturnPath,
+      });
+    }
     if (!token) return;
     persistAuthState(token, { source: isAppReturnPath ? "app-return" : "auth-hash" });
     if (isAppReturnPath && nextPath) {
@@ -186,6 +205,15 @@ function AuthHashConsumer() {
 }
 
 function MobileShellBridge() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const lastHandledUrlRef = useRef<string | null>(null);
+  const latestLocationRef = useRef(`${location.pathname}${location.search}${location.hash}`);
+
+  useEffect(() => {
+    latestLocationRef.current = `${location.pathname}${location.search}${location.hash}`;
+  }, [location.hash, location.pathname, location.search]);
+
   useEffect(() => {
     if (typeof document === "undefined") return;
     const html = document.documentElement;
@@ -198,6 +226,60 @@ function MobileShellBridge() {
       delete html.dataset.mobileShell;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isNativeShell()) return;
+
+    let disposed = false;
+    let removeListener: (() => Promise<void>) | null = null;
+
+    const closeNativeBrowserIfNeeded = async (rawUrl: string, resolvedTarget: string) => {
+      if (!rawUrl.includes("authToken=") && !resolvedTarget.startsWith("/app-return")) return;
+      try {
+        const { Browser } = await import("@capacitor/browser");
+        await Browser.close();
+      } catch {
+        // Browser.close() is best-effort only.
+      }
+    };
+
+    const handleNativeReturn = async (rawUrl: string | null | undefined) => {
+      if (disposed || typeof rawUrl !== "string") return;
+      const trimmed = rawUrl.trim();
+      if (!trimmed || trimmed === lastHandledUrlRef.current) return;
+
+      const resolvedTarget = resolveNativeShellReturnUrl(trimmed);
+      if (!resolvedTarget) return;
+
+      lastHandledUrlRef.current = trimmed;
+      await closeNativeBrowserIfNeeded(trimmed, resolvedTarget);
+
+      if (latestLocationRef.current === resolvedTarget) return;
+      navigate(resolvedTarget, { replace: true });
+    };
+
+    void getNativeLaunchUrl().then((launchUrl) => void handleNativeReturn(launchUrl));
+    void addNativeAppUrlOpenListener((url) => {
+      void handleNativeReturn(url);
+    }).then((remove) => {
+      if (disposed) {
+        void remove();
+        return;
+      }
+      removeListener = remove;
+    }).catch((error) => {
+      recordRuntimeError({
+        source: "mobile-shell-bridge",
+        message: error instanceof Error ? error.message : "Failed to initialize mobile auth return bridge",
+        detail: error instanceof Error ? error.stack : undefined,
+      });
+    });
+
+    return () => {
+      disposed = true;
+      void removeListener?.();
+    };
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   return null;
 }

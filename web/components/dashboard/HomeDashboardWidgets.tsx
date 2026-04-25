@@ -42,6 +42,7 @@ type TopBarProps = {
   roleLabel: string;
   range: HomeDashboardRange;
   onRangeChange: (value: HomeDashboardRange) => void;
+  showRangeSelector?: boolean;
   teamOptions: Array<{ id: string; name: string }>;
   teamMemberId: string;
   onTeamChange: (value: string) => void;
@@ -155,6 +156,7 @@ export function HomeDashboardTopBar({
   roleLabel,
   range,
   onRangeChange,
+  showRangeSelector = true,
   teamOptions,
   teamMemberId,
   onTeamChange,
@@ -172,44 +174,46 @@ export function HomeDashboardTopBar({
 
   return (
     <Card className="surface-panel overflow-hidden rounded-[1.7rem] border-border/70 bg-white/96 py-0 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
-      <CardContent className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
+      <CardContent className="flex flex-col gap-4 px-3.5 py-4 sm:px-5 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <div className="space-y-1">
             <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
               {title}
             </h1>
-            {subtitle ? <p className="max-w-2xl text-sm text-slate-500">{subtitle}</p> : null}
+            {subtitle ? <p className="max-w-2xl text-[15px] leading-6 text-slate-500 sm:text-sm sm:leading-5">{subtitle}</p> : null}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-500 sm:text-sm">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] font-medium text-slate-500 sm:text-sm">
             <span>{businessName ?? "Current business"}</span>
             <span className="text-slate-300">/</span>
             <span>{roleLabel}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-[13px] text-slate-500 sm:text-sm">
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
             <span>{refreshing ? "Refreshing..." : `Last updated ${lastUpdatedLabel}`}</span>
           </div>
         </div>
 
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:max-w-[56rem]">
+        <div className="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:max-w-[56rem]">
           {primaryAction}
           {secondaryAction}
-          <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onRangeChange(option.value)}
-                className={cn(
-                  "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
-                  range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
-                )}
-                aria-pressed={range === option.value}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {showRangeSelector ? (
+            <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
+              {rangeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onRangeChange(option.value)}
+                  className={cn(
+                    "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
+                    range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
+                  )}
+                  aria-pressed={range === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {canFilterTeam ? (
             <label className="inline-flex w-full items-center gap-2 rounded-[1.1rem] border border-border/70 bg-white px-3 py-2 text-sm text-slate-500 sm:min-w-[210px] sm:w-auto">

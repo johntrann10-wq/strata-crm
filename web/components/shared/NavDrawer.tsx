@@ -21,6 +21,8 @@ export const NavDrawer = ({ children }: { children: (props: { close: () => void 
       </SheetTrigger>
       <SheetContent
         side="left"
+        swipeToClose
+        onSwipeClose={close}
         className="w-[min(92vw,22rem)] max-w-none p-0 transition-transform duration-300 sm:w-[24rem]"
       >
         {children({ close })}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "../api";
@@ -7,6 +7,7 @@ import { CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { getBillingAccessLabel, getTrialDaysLeft, hasFullBillingAccess, type BillingAccessState } from "../lib/billingAccess";
 import type { AuthOutletContext } from "./_app";
 import type { BillingActivationMilestone, BillingPromptState } from "../lib/billingPrompts";
+import { isNativeShell } from "@/lib/mobileShell";
 
 type BillingStatus = {
   status: string | null;
@@ -26,6 +27,7 @@ type BillingStatus = {
 };
 
 export default function SubscribePage() {
+  const nativeShellSession = isNativeShell();
   const { membershipRole } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -36,6 +38,7 @@ export default function SubscribePage() {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
 
   useEffect(() => {
+    if (nativeShellSession) return;
     let cancelled = false;
     (async () => {
       setError(null);
@@ -62,7 +65,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, nativeShellSession]);
 
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
@@ -104,6 +107,7 @@ export default function SubscribePage() {
   };
 
   useEffect(() => {
+    if (nativeShellSession) return;
     if (searchParams.get("billingPortal") !== "return") return;
     let cancelled = false;
 
@@ -141,7 +145,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, searchParams, setSearchParams]);
+  }, [navigate, nativeShellSession, searchParams, setSearchParams]);
 
   const handleRetrySetup = async () => {
     setError(null);
@@ -159,6 +163,10 @@ export default function SubscribePage() {
       setRetryingSetup(false);
     }
   };
+
+  if (nativeShellSession) {
+    return <Navigate to="/settings?tab=account" replace />;
+  }
 
   if (checking) {
     return (

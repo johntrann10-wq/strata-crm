@@ -13,7 +13,7 @@
 import { UserIcon } from "@/components/shared/UserIcon";
 import { SecondaryNavigation } from "@/components/app/nav";
 import { QuickCreateMenu } from "../components/shared/QuickCreateMenu";
-import { Outlet, useOutletContext, NavLink, useNavigate, useLocation, Link, useSearchParams } from "react-router";
+import { Outlet, useOutletContext, NavLink, useNavigate, useLocation, Link, useNavigation, useSearchParams } from "react-router";
 import type { RootOutletContext } from "../root";
 import type { Route } from "./+types/_app";
 import {
@@ -74,6 +74,8 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
+import { isNativeShell } from "@/lib/mobileShell";
+import { triggerImpactFeedback, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 
 type BillingStatus = {
   status: string | null;
@@ -282,6 +284,15 @@ function NotificationCenter({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen !== open) {
+        void triggerSelectionFeedback();
+      }
+      setOpen(nextOpen);
+    },
+    [open]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -289,7 +300,7 @@ function NotificationCenter({
   }, [open, onRefresh]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -312,7 +323,12 @@ function NotificationCenter({
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1rem))] rounded-2xl border border-border/80 p-0 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+      <PopoverContent
+        align={compact ? "center" : "end"}
+        sideOffset={compact ? 8 : 6}
+        collisionPadding={8}
+        className="w-[min(24rem,calc(100vw-1rem))] rounded-2xl border border-border/80 p-0 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+      >
         <div className="border-b border-border/70 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -327,7 +343,14 @@ function NotificationCenter({
               size="sm"
               className="h-8 px-2 text-xs"
               disabled={counts.total === 0}
-              onClick={() => void onMarkAllAsRead()}
+              onClick={async () => {
+                try {
+                  await onMarkAllAsRead();
+                  void triggerNotificationFeedback("success");
+                } catch {
+                  void triggerNotificationFeedback("error");
+                }
+              }}
             >
               <CheckCheck className="mr-1.5 h-3.5 w-3.5" />
               Mark all read
@@ -348,41 +371,51 @@ function NotificationCenter({
                   <div
                     key={notification.id}
                     className={cn(
-                      "rounded-2xl border px-3 py-3 transition-colors",
+                      "rounded-xl border bg-background/95 px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors",
                       notification.isRead
-                        ? "border-border/70 bg-background"
-                        : "border-orange-200/80 bg-orange-50/70"
+                        ? "border-border/70"
+                        : "border-orange-200/70 bg-orange-50/35 ring-1 ring-inset ring-orange-100/70"
                     )}
                   >
                     <div className="flex items-start gap-3">
                       <button
                         type="button"
                         onClick={() => {
+                          void triggerSelectionFeedback();
                           setOpen(false);
                           void onOpenNotification(notification);
                         }}
                         disabled={!href}
                         className={cn("min-w-0 flex-1 text-left", !href && "cursor-default")}
                       >
-                        <div className="flex items-center gap-2">
-                          {!notification.isRead ? <span className="h-2 w-2 rounded-full bg-orange-500" /> : null}
-                          <p className="truncate text-sm font-semibold text-foreground">{notification.title}</p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {!notification.isRead ? <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" /> : null}
+                            <p className="truncate text-sm font-semibold text-foreground">{notification.title}</p>
+                          </div>
+                          <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {relativeTime}
+                          </p>
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{notification.message}</p>
-                        <p className="mt-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{relativeTime}</p>
+                        <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{notification.message}</p>
                       </button>
                       {!notification.isRead ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 shrink-0 px-2 text-xs"
-                          onClick={(event) => {
+                          className="h-8 shrink-0 rounded-full px-2.5 text-[11px] font-semibold"
+                          onClick={async (event) => {
                             event.stopPropagation();
-                            void onMarkAsRead(notification);
+                            try {
+                              await onMarkAsRead(notification);
+                              void triggerNotificationFeedback("success");
+                            } catch {
+                              void triggerNotificationFeedback("error");
+                            }
                           }}
                         >
-                          Read
+                          Mark read
                         </Button>
                       ) : null}
                     </div>
@@ -431,6 +464,7 @@ function BillingStatusBanner({
   }, [billingPrompt?.stage, billingPrompt?.visible, dismissedLocally]);
 
   if (!billingStatus) return null;
+  if (isNativeShell()) return null;
 
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
 
@@ -565,6 +599,8 @@ function BillingStatusBanner({
 
 const SidebarNav = memo(function SidebarNav({
   onItemClick,
+  onCloseMenu,
+  isMobile = false,
   enabledModules,
   permissions,
   onOpenCommandPalette,
@@ -578,6 +614,8 @@ const SidebarNav = memo(function SidebarNav({
   notificationCounts,
 }: {
   onItemClick?: () => void;
+  onCloseMenu?: () => void;
+  isMobile?: boolean;
   enabledModules: Set<string>;
   permissions: Set<string>;
   onOpenCommandPalette: () => void;
@@ -592,6 +630,19 @@ const SidebarNav = memo(function SidebarNav({
 }) {
   const location = useLocation();
   const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
+  const handleItemClick = useCallback(() => {
+    void triggerImpactFeedback("light");
+    onItemClick?.();
+  }, [onItemClick]);
+  const handleCloseMenu = useCallback(() => {
+    void triggerSelectionFeedback();
+    onCloseMenu?.();
+  }, [onCloseMenu]);
+  const handleOpenSearch = useCallback(() => {
+    void triggerSelectionFeedback();
+    onOpenCommandPalette();
+    onItemClick?.();
+  }, [onItemClick, onOpenCommandPalette]);
   const visibleSections = navSections
     .map((section) => ({
       ...section,
@@ -604,31 +655,45 @@ const SidebarNav = memo(function SidebarNav({
     .filter((section) => section.items.length > 0);
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
-      <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4">
-        <Link to={homeHref} className="flex items-center gap-2.5" onClick={onItemClick}>
-          <StrataLogoLockup
-            markClassName="h-9 w-9"
-            wordmarkClassName="text-[15px] font-semibold tracking-tight text-white"
-            sublabel="Shop OS"
-            sublabelClassName="text-white/38"
-          />
-        </Link>
+    <div className="flex min-h-full flex-col bg-[hsl(220,20%,10%)]">
+      <div
+        className={cn(
+          "border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4",
+          isMobile && "pt-[max(0.75rem,env(safe-area-inset-top))]"
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <Link to={homeHref} className="flex min-w-0 items-center gap-2.5" onClick={handleItemClick}>
+            <StrataLogoLockup
+              markClassName="h-9 w-9"
+              wordmarkClassName="text-[15px] font-semibold tracking-tight text-white"
+              sublabel="Shop OS"
+              sublabelClassName="text-white/38"
+            />
+          </Link>
+          {isMobile && onCloseMenu ? (
+            <button
+              type="button"
+              onClick={handleCloseMenu}
+              aria-label="Close navigation menu"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/6 text-white/70 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+          ) : null}
+        </div>
         <div className="mt-4 grid gap-2">
           <Button
             type="button"
             variant="secondary"
             className="w-full justify-start border border-white/8 bg-white/6 text-white hover:bg-white/10"
-            onClick={() => {
-              onOpenCommandPalette();
-              onItemClick?.();
-            }}
+            onClick={handleOpenSearch}
           >
             <SearchIcon className="h-4 w-4" />
             Search or jump
           </Button>
           <Button asChild className="w-full justify-start">
-            <Link to="/appointments/new" onClick={onItemClick}>
+            <Link to="/appointments/new" onClick={handleItemClick}>
               <Plus className="h-4 w-4" />
               New appointment
             </Link>
@@ -656,7 +721,7 @@ const SidebarNav = memo(function SidebarNav({
                     to={href}
                     end={end}
                     reloadDocument={reloadDocument}
-                    onClick={onItemClick}
+                    onClick={handleItemClick}
                     aria-label={unreadCount > 0 ? `${label} (${unreadCount} unread)` : label}
                     className={({ isActive }) =>
                       cn(
@@ -767,6 +832,7 @@ function AppLayoutInner({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const navigation = useNavigation();
   const resolvedBusiness = resolveWorkspaceBusiness(
     business as Record<string, unknown> | null | undefined,
     currentMembership
@@ -775,6 +841,7 @@ function AppLayoutInner({
   const businessId = (resolvedBusiness?.id as string) ?? null;
   const businessType = (resolvedBusiness?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [forceCompactMobileShell, setForceCompactMobileShell] = useState(false);
   const { setOpen } = useCommandPalette();
   const {
     notifications,
@@ -799,6 +866,7 @@ function AppLayoutInner({
   const [{ data: locations }] = useFindMany(api.location, {
     first: 100,
     sort: { name: "Ascending" },
+    suppressAuthInvalidation: true,
     pause: !businessId,
   } as any);
   const locationRecords = useMemo(
@@ -848,6 +916,16 @@ function AppLayoutInner({
     () => locationRecords.find((entry) => entry.id === currentLocationId)?.name?.trim() || null,
     [locationRecords, currentLocationId]
   );
+  const routeTransitioning = navigation.state !== "idle";
+  const handleMobileOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen !== mobileOpen) {
+        void triggerSelectionFeedback();
+      }
+      setMobileOpen(nextOpen);
+    },
+    [mobileOpen]
+  );
   const outletCtx = useMemo(
     () =>
       ({
@@ -896,6 +974,33 @@ function AppLayoutInner({
   }, [businessId, currentLocationId, locationRecords, onLocationChange]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+
+    const updateShellMode = () => {
+      const shouldForceCompactShell =
+        isNativeShell() &&
+        window.matchMedia("(pointer: coarse) and (orientation: landscape) and (max-height: 500px)").matches;
+      setForceCompactMobileShell(shouldForceCompactShell);
+      if (shouldForceCompactShell) {
+        root.setAttribute("data-compact-landscape", "true");
+      } else {
+        root.removeAttribute("data-compact-landscape");
+      }
+    };
+
+    updateShellMode();
+    window.addEventListener("resize", updateShellMode);
+    window.addEventListener("orientationchange", updateShellMode);
+
+    return () => {
+      window.removeEventListener("resize", updateShellMode);
+      window.removeEventListener("orientationchange", updateShellMode);
+      root.removeAttribute("data-compact-landscape");
+    };
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
@@ -912,17 +1017,35 @@ function AppLayoutInner({
       if (!notification.isRead) {
         await markAsRead(notification.id);
       }
+      void triggerSelectionFeedback();
       if (href) navigate(href);
     },
     [markAsRead, navigate]
   );
 
   return (
-    <div className="flex min-h-dvh flex-col md:h-screen md:flex-row md:overflow-hidden">
+    <div
+      className={cn(
+        "flex min-h-dvh flex-col",
+        !forceCompactMobileShell && "md:h-screen md:flex-row md:overflow-hidden"
+      )}
+    >
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none fixed inset-x-0 top-0 z-[90] h-1 origin-left bg-[linear-gradient(90deg,rgba(249,115,22,0.95),rgba(251,146,60,0.9),rgba(59,130,246,0.72))] shadow-[0_0_18px_rgba(249,115,22,0.35)] transition-all duration-300",
+          routeTransitioning ? "scale-x-100 opacity-100" : "scale-x-[0.08] opacity-0"
+        )}
+      />
       <CommandPalette enabledModules={enabledModules} hasBusiness={!!businessId} />
 
       {/* Desktop sidebar - fixed, visible on md+ screens */}
-      <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:w-64 z-20">
+      <aside
+        className={cn(
+          "z-20 hidden",
+          !forceCompactMobileShell && "md:flex md:flex-col md:fixed md:inset-y-0 md:w-64"
+        )}
+      >
         <SidebarNav
           enabledModules={enabledModules}
           permissions={permissions}
@@ -932,13 +1055,17 @@ function AppLayoutInner({
       </aside>
 
       {/* Mobile sidebar - Sheet that slides in from the left */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+      <Sheet open={mobileOpen} onOpenChange={handleMobileOpenChange}>
         <SheetContent
           side="left"
-          className="p-0 bg-zinc-900 border-zinc-700 [&>button]:text-zinc-400 [&>button]:hover:text-white"
+          swipeToClose
+          onSwipeClose={() => setMobileOpen(false)}
+          className="gap-0 overflow-hidden border-white/10 bg-[hsl(220,20%,10%)] [&>button]:hidden"
         >
           <SidebarNav
             onItemClick={() => setMobileOpen(false)}
+            onCloseMenu={() => setMobileOpen(false)}
+            isMobile
             enabledModules={enabledModules}
             permissions={permissions}
             onOpenCommandPalette={() => setOpen(true)}
@@ -958,28 +1085,38 @@ function AppLayoutInner({
       </Sheet>
 
       {/* Main content area */}
-      <div className="flex min-w-0 flex-1 flex-col md:pl-64">
-        <header className="z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86 md:sticky md:top-0">
-          <div className="flex items-center justify-between gap-2 px-2.5 py-2 md:hidden">
+      <div className={cn("flex min-w-0 flex-1 flex-col", !forceCompactMobileShell && "md:pl-64")}>
+        <header
+          className={cn(
+            "app-mobile-shell-header z-10 w-full border-b border-border/70 bg-background/92 backdrop-blur supports-[backdrop-filter]:bg-background/86",
+            forceCompactMobileShell ? "sticky top-0" : "md:sticky md:top-0"
+          )}
+        >
+          <div
+            className={cn(
+              "app-mobile-shell-header-inner items-center justify-between gap-2 px-2.5 py-2",
+              forceCompactMobileShell ? "flex" : "flex md:hidden"
+            )}
+          >
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 rounded-full"
-              onClick={() => setMobileOpen(true)}
+              className="app-mobile-shell-menu-button h-8 w-8 shrink-0 rounded-full"
+              onClick={() => handleMobileOpenChange(true)}
               aria-label="Open navigation menu"
             >
               <Menu className="h-4.5 w-4.5" />
             </Button>
-            <div className="min-w-0 flex-1 pr-1">
-              <p className="truncate text-[13px] font-semibold text-foreground">{activeNavEntry.item.label}</p>
+            <div className="app-mobile-shell-meta min-w-0 flex-1 pr-1">
+              <p className="app-mobile-shell-title truncate text-[13px] font-semibold text-foreground">{activeNavEntry.item.label}</p>
               {(businessName || activeLocationName) ? (
-                <p className="truncate text-[10px] text-muted-foreground">
+                <p className="app-mobile-shell-subtitle truncate text-[10px] text-muted-foreground">
                   {businessName ? businessName : "No business selected"}
                   {activeLocationName ? ` - ${activeLocationName}` : ""}
                 </p>
               ) : null}
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="app-mobile-shell-actions flex shrink-0 items-center gap-1">
               <NotificationCenter
                 notifications={notifications}
                 counts={notificationCounts}
@@ -990,13 +1127,18 @@ function AppLayoutInner({
                 onMarkAllAsRead={markAllAsRead}
                 compact
               />
-              <div className="scale-[0.92] origin-right">
+              <div className="app-mobile-shell-avatar scale-[0.92] origin-right">
                 <SecondaryNavigation icon={<UserIcon user={user as any} />} />
               </div>
             </div>
           </div>
 
-          <div className="hidden flex-col gap-2.5 px-3 py-2.5 md:flex md:gap-3 md:px-6 md:py-3">
+          <div
+            className={cn(
+              "flex-col gap-2.5 px-3 py-2.5 md:gap-3 md:px-6 md:py-3",
+              forceCompactMobileShell ? "hidden" : "hidden md:flex"
+            )}
+          >
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <div className="min-w-0">
@@ -1019,7 +1161,15 @@ function AppLayoutInner({
 
               <div className="flex min-w-0 flex-col gap-2.5 xl:items-end">
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <Button type="button" variant="outline" className="justify-start sm:w-auto" onClick={() => setOpen(true)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-start sm:w-auto"
+                    onClick={() => {
+                      void triggerSelectionFeedback();
+                      setOpen(true);
+                    }}
+                  >
                     <SearchIcon className="h-4 w-4" />
                     Search
                     <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span>
@@ -1097,6 +1247,9 @@ function AppLayoutInner({
                   to={item.href}
                   end={item.end}
                   reloadDocument={item.reloadDocument}
+                  onClick={() => {
+                    void triggerImpactFeedback("light");
+                  }}
                   className={({ isActive }) =>
                     cn(
                       "inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-[13px] font-medium transition-colors",
@@ -1116,7 +1269,12 @@ function AppLayoutInner({
 
         <BillingStatusBanner billingStatus={billingStatus} membershipRole={membershipRole} />
 
-        <main className="flex-1 overflow-x-hidden md:overflow-y-auto">
+        <main
+          className={cn(
+            "app-native-scroll flex-1 overflow-x-hidden",
+            forceCompactMobileShell ? "overflow-y-auto" : "md:overflow-y-auto"
+          )}
+        >
           <AppErrorBoundary>
             <div className="w-full min-h-full">
               <Outlet context={outletCtx} />
@@ -1304,6 +1462,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         lastName: true,
         email: true,
         googleProfileId: true,
+        appleSubject: true,
+        appleEmailIsPrivateRelay: true,
         hasPassword: true,
         accountDeletionRequestedAt: true,
         accountDeletionRequestNote: true,
@@ -1598,4 +1758,3 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     </CommandPaletteProvider>
   );
 }
-

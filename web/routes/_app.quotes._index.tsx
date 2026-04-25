@@ -16,6 +16,7 @@ import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { formatFreshness, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
+import { selectorTabsListClassName, selectorTabsTriggerClassName } from "../components/shared/selectorStyles";
 
 const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
 type QuoteTab = (typeof QUOTE_TABS)[number];
@@ -193,8 +194,16 @@ export default function QuotesIndexPage() {
   const allRows = Array.isArray(allQuotes) ? allQuotes : [];
   const lostRows = Array.isArray(lostQuotes) ? lostQuotes : [];
   const { acceptedRows, agingRows, followUpRows, openPipelineValue } = getQuoteQueueCollections(allRows);
+  const activeTabCount = getQuoteTabResultCount(activeTab, allRows, acceptedRows, agingRows, followUpRows, lostRows);
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
+
+  const handleTabChange = (value: string) => {
+    if (!(QUOTE_TABS as readonly string[]).includes(value)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", value);
+    setSearchParams(next, { preventScrollReset: true });
+  };
 
   const handleSendQuote = async (quoteId: string) => {
     setSendingQuoteId(quoteId);
@@ -297,7 +306,7 @@ export default function QuotesIndexPage() {
         onSearchChange={setSearch}
         placeholder="Search clients, vehicles, or quote id..."
         loading={allFetching && allRows.length > 0}
-        resultCount={getQuoteTabResultCount(activeTab, allRows, acceptedRows, agingRows, followUpRows, lostRows)}
+        resultCount={activeTabCount}
         noun="quotes"
         filtersLabel={
           [
@@ -319,44 +328,40 @@ export default function QuotesIndexPage() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(value) => {
-          const next = new URLSearchParams(searchParams);
-          next.set("tab", value);
-          setSearchParams(next, { preventScrollReset: true });
-        }}
+        onValueChange={handleTabChange}
       >
-        <TabsList className="flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-5 xl:w-full">
-          <TabsTrigger value="all" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+        <TabsList className={selectorTabsListClassName("w-full")}>
+          <TabsTrigger value="all" className={selectorTabsTriggerClassName()}>
             All Quotes
           </TabsTrigger>
-          <TabsTrigger value="accepted" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+          <TabsTrigger value="accepted" className={selectorTabsTriggerClassName()}>
             Ready to Book
             {acceptedRows.length > 0 && (
-              <span className="ml-1 rounded bg-green-100 text-green-700 px-1.5 py-0.5 text-xs font-medium">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-green-100 px-1.5 text-[10px] font-medium leading-none text-green-700">
                 {acceptedRows.length}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="aging" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+          <TabsTrigger value="aging" className={selectorTabsTriggerClassName()}>
             Aging
             {agingRows.length > 0 && (
-              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700">
                 {agingRows.length}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="followup" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+          <TabsTrigger value="followup" className={selectorTabsTriggerClassName()}>
             Follow-up
             {followUpRows.length > 0 && (
-              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700">
                 {followUpRows.length}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="lost" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
+          <TabsTrigger value="lost" className={selectorTabsTriggerClassName()}>
             Lost Quotes
             {lostRows.length > 0 && (
-              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700">
                 {lostRows.length}
               </span>
             )}

@@ -23,6 +23,7 @@ describe.skipIf(skipEmbeddedFinancePath)("Appointment finance critical path (bac
   let businessId = "";
   let clientId = "";
   let vehicleId = "";
+  let appointmentSequence = 0;
 
   beforeAll(async () => {
     const port = Number(process.env.EMBEDDED_PG_PORT ?? 5434);
@@ -86,7 +87,7 @@ describe.skipIf(skipEmbeddedFinancePath)("Appointment finance critical path (bac
 
     const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${token}`).send({
       name: "Finance Test Business",
-      type: "detail_shop",
+      type: "auto_detailing",
       staffCount: 1,
       operatingHours: "Mon-Fri 09:00-17:00",
     });
@@ -126,9 +127,10 @@ describe.skipIf(skipEmbeddedFinancePath)("Appointment finance critical path (bac
 
   async function createAppointment(options?: { depositAmount?: number; totalPrice?: number }) {
     if (!app) throw new Error("Backend app failed to load.");
+    const sequenceOffset = appointmentSequence++;
     const start = new Date();
     start.setDate(start.getDate() + 3);
-    start.setHours(9, 0, 0, 0);
+    start.setHours(9 + sequenceOffset * 4, 0, 0, 0);
     const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
     const totalPrice = options?.totalPrice ?? 715.85;
 

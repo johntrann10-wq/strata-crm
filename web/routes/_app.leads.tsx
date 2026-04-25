@@ -11,7 +11,6 @@ import {
   ChevronUp,
   ClipboardList,
   Loader2,
-  MoreVertical,
   Receipt,
   Search,
   UserRoundPlus,
@@ -37,6 +36,7 @@ import {
 import { PageHeader } from "../components/shared/PageHeader";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { EmptyState } from "../components/shared/EmptyState";
+import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 import {
   buildLeadNotes,
   formatLeadSource,
@@ -374,6 +374,9 @@ export default function LeadsPage() {
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/signed-in";
   const hasQueueReturn = searchParams.has("from");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showOverviewDetails, setShowOverviewDetails] = useState(false);
+  const [showLeadComposer, setShowLeadComposer] = useState(false);
+  const [expandedLeadDetails, setExpandedLeadDetails] = useState<Record<string, boolean>>({});
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
   const [submitMode, setSubmitMode] = useState<SubmitMode>("lead");
   const [statusFilter, setStatusFilter] = useState<LeadStatusFilter>("active");
@@ -466,6 +469,22 @@ export default function LeadsPage() {
   const setSubmitIntent = (mode: SubmitMode) => {
     submitModeRef.current = mode;
     setSubmitMode(mode);
+  };
+
+  const openLeadComposer = () => {
+    void triggerImpactFeedback("light");
+    setShowLeadComposer(true);
+  };
+
+  const toggleLeadDetails = (clientId: string) => {
+    setExpandedLeadDetails((current) => {
+      if (current[clientId]) return {};
+      if (isMobileLayout) return { [clientId]: true };
+      return {
+        ...current,
+        [clientId]: !current[clientId],
+      };
+    });
   };
 
   const getFieldError = (fieldName: string): string | undefined => {
@@ -604,6 +623,7 @@ export default function LeadsPage() {
     setLocalErrors({});
     setSubmitIntent("lead");
     setShowAdvanced(false);
+    setShowLeadComposer(false);
   };
 
   const updateLeadStatus = async (client: any, status: LeadStatus) => {
@@ -651,6 +671,170 @@ export default function LeadsPage() {
       ? (updateLeadError as any).message ?? "Could not update lead."
       : null;
 
+  const leadComposerSection = showLeadComposer ? (
+    <section className="rounded-[1.4rem] border bg-card p-5 shadow-sm sm:p-6">
+      <div className="mb-5 rounded-xl border border-border/70 bg-muted/30 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium">Lead record intake</p>
+          <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => setShowLeadComposer(false)}>
+            Hide form
+          </Button>
+        </div>
+      </div>
+
+      {localErrors.general ? <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{localErrors.general}</div> : null}
+      {generalError ? <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{generalError}</div> : null}
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="leadFirstName">First Name <span className="text-destructive">*</span></Label>
+            <Input id="leadFirstName" value={formData.firstName} onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} placeholder="Jane" aria-invalid={!!getFieldError("firstName")} />
+            {getFieldError("firstName") ? <p className="text-sm text-destructive">{getFieldError("firstName")}</p> : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="leadLastName">Last Name <span className="text-destructive">*</span></Label>
+            <Input id="leadLastName" value={formData.lastName} onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} placeholder="Smith" aria-invalid={!!getFieldError("lastName")} />
+            {getFieldError("lastName") ? <p className="text-sm text-destructive">{getFieldError("lastName")}</p> : null}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="leadPhone">Phone</Label>
+            <Input id="leadPhone" type="tel" value={formData.phone} onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))} placeholder="(555) 000-0000" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="leadEmail">Email</Label>
+            <Input id="leadEmail" type="email" value={formData.email} onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))} placeholder="jane@example.com" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label>Lead Source</Label>
+            {isMobileLayout ? (
+              <MobileLeadSelect
+                value={formData.leadSource}
+                onChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}
+              >
+                {LEAD_SOURCE_OPTIONS.map((source) => (
+                  <option key={source} value={source}>
+                    {formatLeadSource(source)}
+                  </option>
+                ))}
+              </MobileLeadSelect>
+            ) : (
+              <Select value={formData.leadSource} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}</SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Lead Status</Label>
+            {isMobileLayout ? (
+              <MobileLeadSelect
+                value={formData.leadStatus}
+                onChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}
+              >
+                {LEAD_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {formatLeadStatus(status)}
+                  </option>
+                ))}
+              </MobileLeadSelect>
+            ) : (
+              <Select value={formData.leadStatus} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="leadVehicle">Vehicle if known</Label>
+            <Input id="leadVehicle" value={formData.vehicle} onChange={(e) => setFormData((prev) => ({ ...prev, vehicle: e.target.value }))} placeholder="2021 Tesla Model 3, F-150, unknown daily driver..." />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="serviceInterest">What do they want? <span className="text-destructive">*</span></Label>
+          <Input id="serviceInterest" value={formData.serviceInterest} onChange={(e) => setFormData((prev) => ({ ...prev, serviceInterest: e.target.value }))} placeholder="Full front PPF, ceramic tint, oil service, exhaust work..." />
+          {getFieldError("serviceInterest") ? <p className="text-sm text-destructive">{getFieldError("serviceInterest")}</p> : null}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="space-y-2">
+            <Label htmlFor="leadSummary">Context</Label>
+            <Textarea id="leadSummary" value={formData.summary} onChange={(e) => setFormData((prev) => ({ ...prev, summary: e.target.value }))} placeholder="Price shopping, wants Friday install, referred by a past customer, concerned about turnaround, etc." rows={4} className="resize-none" />
+          </div>
+          <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4">
+            <div className="space-y-2">
+              <Label htmlFor="nextStep">Next Step</Label>
+              <Input id="nextStep" value={formData.nextStep} onChange={(e) => setFormData((prev) => ({ ...prev, nextStep: e.target.value }))} placeholder="Call at 4pm, send quote, waiting on VIN..." />
+            </div>
+            <div className="flex items-start gap-3">
+              <Checkbox id="leadMarketingOptIn" checked={formData.marketingOptIn} onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, marketingOptIn: checked === true }))} className="mt-0.5" />
+              <div>
+                <Label htmlFor="leadMarketingOptIn" className="cursor-pointer">Marketing opt-in</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Only leave this on when the lead explicitly agreed to follow-up marketing.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground" onClick={() => setShowAdvanced((prev) => !prev)}>
+          {showAdvanced ? <><ChevronUp className="h-4 w-4" />Hide extra details</> : <><ChevronDown className="h-4 w-4" />Add address and team notes</>}
+        </button>
+
+        {showAdvanced ? (
+          <div className="space-y-6 rounded-xl border border-border/70 bg-muted/20 p-4">
+            <div className="space-y-2">
+              <Label htmlFor="leadAddress">Address</Label>
+              <Input id="leadAddress" value={formData.address} onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))} placeholder="123 Main St" />
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="leadCity">City</Label>
+                <Input id="leadCity" value={formData.city} onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))} placeholder="Los Angeles" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="leadState">State</Label>
+                <Input id="leadState" value={formData.state} onChange={(e) => setFormData((prev) => ({ ...prev, state: e.target.value }))} placeholder="CA" maxLength={2} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="leadZip">Zip</Label>
+                <Input id="leadZip" value={formData.zip} onChange={(e) => setFormData((prev) => ({ ...prev, zip: e.target.value }))} placeholder="90001" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="teamNotes">Internal Team Notes</Label>
+              <Textarea id="teamNotes" value={formData.teamNotes} onChange={(e) => setFormData((prev) => ({ ...prev, teamNotes: e.target.value }))} placeholder="Best callback time, urgency, sales owner, pricing sensitivity, promised timeline, or anything private to the team." rows={3} className="resize-none" />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {ACTIONS.map(({ mode, label, icon: Icon, variant }) => (
+            <Button key={mode} type="submit" variant={variant} disabled={fetching} data-submit-mode={mode} onClick={() => setSubmitIntent(mode)} className="justify-start">
+              {fetching && submitMode === mode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icon className="mr-2 h-4 w-4" />}
+              {label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="ghost" asChild>
+            <Link to={returnTo}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Cancel
+            </Link>
+          </Button>
+        </div>
+      </form>
+    </section>
+  ) : null;
+
   if (businessFetching) {
     return (
       <div className="max-w-6xl mx-auto p-6 pb-12 flex items-center justify-center min-h-40">
@@ -674,16 +858,43 @@ export default function LeadsPage() {
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to previous screen" /> : null}
       <PageHeader
         title="Leads"
-        subtitle="Capture inbound demand from any source, qualify it quickly, and convert it into client work without losing intake details."
+        subtitle="Track inbound work, keep the next step clear, and move qualified leads into real client jobs."
         backTo={returnTo}
         badge={
           <Badge variant="secondary" className="text-sm font-medium">
             {business.name ?? "Shop"} pipeline
           </Badge>
         }
+        right={
+          <Button type="button" onClick={openLeadComposer}>
+            <UserRoundPlus className="mr-1.5 h-4 w-4" />
+            Add Lead
+          </Button>
+        }
       />
+      {leadComposerSection}
+      <div className="mb-5 space-y-3 md:hidden">
+        <div className="mobile-support-card flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">{visibleLeads.length} visible leads</p>
+            <p className="text-xs text-muted-foreground">
+              {activeLeadCount} active · {overdueLeadCount} overdue
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs"
+            onClick={() => setShowOverviewDetails((open) => !open)}
+          >
+            {showOverviewDetails ? "Hide details" : "More details"}
+          </Button>
+        </div>
+      </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(390px,0.85fr)]">
-        <div className="space-y-6">
+        <div className="order-2 space-y-6 xl:order-1">
+          <div className={isMobileLayout && !showOverviewDetails ? "hidden" : "space-y-6"}>
           <section className="grid gap-3 sm:grid-cols-4">
             <div className="surface-panel px-4 py-4 sm:px-5">
               <p className="text-sm font-medium text-muted-foreground">Active leads</p>
@@ -773,177 +984,26 @@ export default function LeadsPage() {
               </div>
             )}
           </section>
+          </div>
 
-          <section className="rounded-[1.4rem] border bg-card p-5 shadow-sm sm:p-6">
-            <div className="mb-5 rounded-xl border border-border/70 bg-muted/30 p-4">
-              <p className="text-sm font-medium">Lead record intake</p>
-            </div>
-
-            {localErrors.general ? <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{localErrors.general}</div> : null}
-            {generalError ? <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{generalError}</div> : null}
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="leadFirstName">First Name <span className="text-destructive">*</span></Label>
-                  <Input id="leadFirstName" value={formData.firstName} onChange={(e) => setFormData((prev) => ({ ...prev, firstName: e.target.value }))} placeholder="Jane" aria-invalid={!!getFieldError("firstName")} />
-                  {getFieldError("firstName") ? <p className="text-sm text-destructive">{getFieldError("firstName")}</p> : null}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="leadLastName">Last Name <span className="text-destructive">*</span></Label>
-                  <Input id="leadLastName" value={formData.lastName} onChange={(e) => setFormData((prev) => ({ ...prev, lastName: e.target.value }))} placeholder="Smith" aria-invalid={!!getFieldError("lastName")} />
-                  {getFieldError("lastName") ? <p className="text-sm text-destructive">{getFieldError("lastName")}</p> : null}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="leadPhone">Phone</Label>
-                  <Input id="leadPhone" type="tel" value={formData.phone} onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))} placeholder="(555) 000-0000" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="leadEmail">Email</Label>
-                  <Input id="leadEmail" type="email" value={formData.email} onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))} placeholder="jane@example.com" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Lead Source</Label>
-                  {isMobileLayout ? (
-                    <MobileLeadSelect
-                      value={formData.leadSource}
-                      onChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}
-                    >
-                      {LEAD_SOURCE_OPTIONS.map((source) => (
-                        <option key={source} value={source}>
-                          {formatLeadSource(source)}
-                        </option>
-                      ))}
-                    </MobileLeadSelect>
-                  ) : (
-                    <Select value={formData.leadSource} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadSource: value as LeadSource }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{formatLeadSource(source)}</SelectItem>)}</SelectContent>
-                    </Select>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Lead Status</Label>
-                  {isMobileLayout ? (
-                    <MobileLeadSelect
-                      value={formData.leadStatus}
-                      onChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}
-                    >
-                      {LEAD_STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {formatLeadStatus(status)}
-                        </option>
-                      ))}
-                    </MobileLeadSelect>
-                  ) : (
-                    <Select value={formData.leadStatus} onValueChange={(value) => setFormData((prev) => ({ ...prev, leadStatus: value as LeadStatus }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{LEAD_STATUS_OPTIONS.map((status) => <SelectItem key={status} value={status}>{formatLeadStatus(status)}</SelectItem>)}</SelectContent>
-                    </Select>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="leadVehicle">Vehicle if known</Label>
-                  <Input id="leadVehicle" value={formData.vehicle} onChange={(e) => setFormData((prev) => ({ ...prev, vehicle: e.target.value }))} placeholder="2021 Tesla Model 3, F-150, unknown daily driver..." />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="serviceInterest">What do they want? <span className="text-destructive">*</span></Label>
-                <Input id="serviceInterest" value={formData.serviceInterest} onChange={(e) => setFormData((prev) => ({ ...prev, serviceInterest: e.target.value }))} placeholder="Full front PPF, ceramic tint, oil service, exhaust work..." />
-                {getFieldError("serviceInterest") ? <p className="text-sm text-destructive">{getFieldError("serviceInterest")}</p> : null}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_280px]">
-                <div className="space-y-2">
-                  <Label htmlFor="leadSummary">Context</Label>
-                  <Textarea id="leadSummary" value={formData.summary} onChange={(e) => setFormData((prev) => ({ ...prev, summary: e.target.value }))} placeholder="Price shopping, wants Friday install, referred by a past customer, concerned about turnaround, etc." rows={4} className="resize-none" />
-                </div>
-                <div className="space-y-4 rounded-xl border border-border/70 bg-muted/20 p-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="nextStep">Next Step</Label>
-                    <Input id="nextStep" value={formData.nextStep} onChange={(e) => setFormData((prev) => ({ ...prev, nextStep: e.target.value }))} placeholder="Call at 4pm, send quote, waiting on VIN..." />
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <Checkbox id="leadMarketingOptIn" checked={formData.marketingOptIn} onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, marketingOptIn: checked === true }))} className="mt-0.5" />
-                    <div>
-                      <Label htmlFor="leadMarketingOptIn" className="cursor-pointer">Marketing opt-in</Label>
-                      <p className="mt-1 text-xs text-muted-foreground">Only leave this on when the lead explicitly agreed to follow-up marketing.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button type="button" className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground" onClick={() => setShowAdvanced((prev) => !prev)}>
-                {showAdvanced ? <><ChevronUp className="h-4 w-4" />Hide extra details</> : <><ChevronDown className="h-4 w-4" />Add address and team notes</>}
-              </button>
-
-              {showAdvanced ? (
-                <div className="space-y-6 rounded-xl border border-border/70 bg-muted/20 p-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="leadAddress">Address</Label>
-                    <Input id="leadAddress" value={formData.address} onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))} placeholder="123 Main St" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div className="col-span-2 space-y-2">
-                      <Label htmlFor="leadCity">City</Label>
-                      <Input id="leadCity" value={formData.city} onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))} placeholder="Los Angeles" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="leadState">State</Label>
-                      <Input id="leadState" value={formData.state} onChange={(e) => setFormData((prev) => ({ ...prev, state: e.target.value }))} placeholder="CA" maxLength={2} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="leadZip">Zip</Label>
-                      <Input id="leadZip" value={formData.zip} onChange={(e) => setFormData((prev) => ({ ...prev, zip: e.target.value }))} placeholder="90001" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="teamNotes">Internal Team Notes</Label>
-                    <Textarea id="teamNotes" value={formData.teamNotes} onChange={(e) => setFormData((prev) => ({ ...prev, teamNotes: e.target.value }))} placeholder="Best callback time, urgency, sales owner, pricing sensitivity, promised timeline, or anything private to the team." rows={3} className="resize-none" />
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="grid gap-3 md:grid-cols-2">
-                {ACTIONS.map(({ mode, label, icon: Icon, variant }) => (
-                  <Button key={mode} type="submit" variant={variant} disabled={fetching} data-submit-mode={mode} onClick={() => setSubmitIntent(mode)} className="justify-start">
-                    {fetching && submitMode === mode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icon className="mr-2 h-4 w-4" />}
-                    {label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="ghost" asChild>
-                  <Link to={returnTo}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Cancel
-                  </Link>
-                </Button>
-              </div>
-            </form>
-          </section>
         </div>
 
-        <div className="space-y-6">
+        <div className="order-1 space-y-6 xl:order-2">
           <section className="surface-panel p-5">
               <div className="flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Pipeline queue</p>
-                    <p className="mt-1 text-sm text-foreground">Keep source, requested work, status, vehicle, and next action visible so nothing is lost between first contact and scheduled work.</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {isMobileLayout
+                        ? "See who needs a call, quote, or booking next."
+                        : "Keep source, requested work, status, vehicle, and next action visible so nothing is lost between first contact and scheduled work."}
+                    </p>
                   </div>
                   <Badge variant="outline">{visibleLeads.length} visible</Badge>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className={isMobileLayout && !showOverviewDetails ? "hidden" : "grid gap-3 sm:grid-cols-3"}>
                   <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
                     <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Contact ready</p>
                     <p className="mt-2 text-lg font-semibold text-foreground">{contactReadyLeadCount}</p>
@@ -973,11 +1033,11 @@ export default function LeadsPage() {
 
                 {inlineUpdateError ? <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{inlineUpdateError}</div> : null}
 
-                <div className="grid gap-3">
+                <div className="grid gap-3 rounded-[1.15rem] border border-border/70 bg-background/80 p-3.5">
                   <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead name, ask, contact, source, or vehicle" className="pl-9" />
-                </div>
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead name, ask, contact, source, or vehicle" className="pl-9" />
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {isMobileLayout ? (
                       <>
@@ -1085,12 +1145,14 @@ export default function LeadsPage() {
                   })}`;
                   const addVehicleHref = `/clients/${client.id}/vehicles/new?from=${encodeURIComponent("/leads")}`;
                   const slaStatusLabel = sla.overdue ? "Past the response window" : sla.dueSoon ? "Approaching the response window" : "On track";
+                  const showCardDetails = !isMobileLayout || Boolean(expandedLeadDetails[client.id]);
+                  const previewMeta = [lead.nextStep ? `Next: ${lead.nextStep}` : null, lead.vehicle || null].filter(Boolean);
                   return (
-                    <Card key={client.id} className="overflow-hidden border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] py-0 shadow-[0_14px_28px_rgba(15,23,42,0.04)]">
-                      <CardContent className="space-y-5 p-4 sm:p-5">
+                    <Card key={client.id} className="overflow-hidden rounded-[1.15rem] border-border/70 bg-card py-0 shadow-sm">
+                      <CardContent className="space-y-4 p-4 sm:p-5">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                           <div className="flex min-w-0 items-start gap-4">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-slate-950 text-sm font-semibold tracking-[0.14em] text-white shadow-[0_12px_24px_rgba(15,23,42,0.16)]">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] bg-slate-950 text-sm font-semibold tracking-[0.12em] text-white">
                               {clientInitials}
                             </div>
                             <div className="min-w-0">
@@ -1104,10 +1166,19 @@ export default function LeadsPage() {
                               <p className="mt-1 text-sm text-slate-600">
                                 {lead.serviceInterest?.trim() || "Lead captured and ready for the next step."}
                               </p>
+                              {previewMeta.length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {previewMeta.map((item) => (
+                                    <span key={item} className="max-w-full truncate rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                      {item}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
                               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                                 {client.phone ? <span>{client.phone}</span> : null}
                                 {client.email ? <span>{client.email}</span> : null}
-                                {clientLocationLabel ? <span>{clientLocationLabel}</span> : null}
+                                {!isMobileLayout && clientLocationLabel ? <span>{clientLocationLabel}</span> : null}
                               </div>
                             </div>
                           </div>
@@ -1132,13 +1203,19 @@ export default function LeadsPage() {
                                 </Select>
                               )}
                             </div>
-                            <DropdownMenu>
+                            <DropdownMenu modal={false}>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" aria-label="Lead actions" className="shrink-0">
-                                  <MoreVertical className="h-4 w-4" />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  aria-label={`Lead actions for ${clientDisplayName}`}
+                                  className="shrink-0 rounded-xl border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50"
+                                >
+                                  <span>Details</span>
+                                  <ChevronDown className="ml-1 h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              <DropdownMenuContent align="end" sideOffset={8} className="w-52">
                                 <DropdownMenuItem asChild>
                                   <Link to={clientHref}>Open client</Link>
                                 </DropdownMenuItem>
@@ -1166,7 +1243,8 @@ export default function LeadsPage() {
                           </div>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {showCardDetails ? (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                           <div className="rounded-[1.1rem] border border-slate-200/85 bg-slate-50/80 p-3.5">
                             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vehicle</p>
                             <p className="mt-2 text-sm font-medium text-slate-950">{lead.vehicle || "Vehicle not captured yet"}</p>
@@ -1184,8 +1262,9 @@ export default function LeadsPage() {
                             <p className="mt-2 text-sm font-medium text-slate-950">{slaMessage || slaStatusLabel}</p>
                           </div>
                         </div>
+                        ) : null}
 
-                        {lead.summary || client.internalNotes ? (
+                        {showCardDetails ? (
                           <div className="grid gap-3 lg:grid-cols-2">
                             <div className="rounded-[1.1rem] border border-slate-200/85 bg-white p-4">
                               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Lead context</p>
@@ -1198,10 +1277,16 @@ export default function LeadsPage() {
                               <p className="mt-2 text-sm leading-6 text-slate-700">
                                 {client.internalNotes || "No internal team notes yet."}
                               </p>
+                              {clientLocationLabel ? (
+                                <p className="mt-3 text-xs text-slate-500">
+                                  {clientLocationLabel}
+                                </p>
+                              ) : null}
                             </div>
                           </div>
                         ) : null}
 
+                        {showCardDetails ? (
                         <div className="flex flex-wrap gap-2">
                           {lead.status === "new" ? (
                             <Button size="sm" onClick={() => void handleMarkContacted(entry)} disabled={updatingLead}>
@@ -1220,10 +1305,24 @@ export default function LeadsPage() {
                             </Button>
                           ) : null}
                         </div>
+                        ) : null}
 
-                        <p className="text-xs text-muted-foreground">
-                          Captured {formatDistanceToNow(new Date(client.createdAt), { addSuffix: true })}
-                        </p>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">
+                            Captured {formatDistanceToNow(new Date(client.createdAt), { addSuffix: true })}
+                          </p>
+                          {isMobileLayout ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => toggleLeadDetails(client.id)}
+                            >
+                              {showCardDetails ? "Hide details" : "More details"}
+                            </Button>
+                          ) : null}
+                        </div>
                       </CardContent>
                     </Card>
                   );

@@ -17,7 +17,7 @@ export default function AuthLayout() {
   const context = useOutletContext<RootOutletContext>();
 
   return (
-    <div className="min-h-full flex flex-col items-center justify-center bg-[hsl(220,20%,97%)] px-4 py-12">
+    <div className="flex min-h-full flex-col items-center justify-start bg-[hsl(220,20%,97%)] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:justify-center sm:py-12">
       <Outlet context={context} />
     </div>
   );

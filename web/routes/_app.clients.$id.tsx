@@ -17,6 +17,7 @@ import {
   Phone,
   Plus,
   Receipt,
+  Share2,
 } from "lucide-react";
 import { api } from "../api";
 import { useAction, useFindMany, useFindOne } from "../hooks/useApi";
@@ -38,9 +39,16 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { PageHeader } from "../components/shared/PageHeader";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
 import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
+import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { AppointmentHistoryCard, ClientEditForm, type FormState, VehiclesCard } from "../components/ClientDetailCards";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
+import {
+  shareNativeContent,
+  triggerImpactFeedback,
+  triggerNotificationFeedback,
+  triggerSelectionFeedback,
+} from "@/lib/nativeInteractions";
 
 const blank: FormState = {
   firstName: "",
@@ -527,25 +535,54 @@ export default function ClientDetailPage() {
     recipientName?: string;
   }) => {
     if (!id) return;
+    await triggerImpactFeedback("light");
     const result = await runSendPortal({ id, ...payload });
     if (!result?.error) {
       const deliveryStatus = (result.data as any)?.deliveryStatus;
       if (deliveryStatus === "emailed") {
         toast.success("Customer hub emailed");
+        void triggerNotificationFeedback("success");
       } else {
         toast.warning("Customer hub was recorded, but email was not delivered");
+        void triggerNotificationFeedback("warning");
       }
       void refetchActivity();
     } else {
       toast.error(result.error.message ?? "Could not send customer hub");
+      void triggerNotificationFeedback("error");
     }
     return result;
   };
 
+  const handleShareClient = async () => {
+    if (!client) return;
+    await triggerSelectionFeedback();
+    const result = await shareNativeContent({
+      title: `${client.firstName} ${client.lastName}`,
+      text: [
+        [client.firstName, client.lastName].filter(Boolean).join(" ").trim(),
+        formatDisplayPhone(client.phone),
+        trimContactValue(client.email),
+        [client.address, client.city, client.state, client.zip].map(trimContactValue).filter(Boolean).join(", "),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    });
+
+    if (result === "copied") {
+      toast.success("Client contact copied");
+      void triggerNotificationFeedback("success");
+    } else if (result === "unavailable") {
+      toast.error("Sharing is not available on this device right now.");
+      void triggerNotificationFeedback("error");
+    }
+  };
+
   if (fetching) {
     return (
-      <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-64">
+      <div className="p-6 max-w-6xl mx-auto flex min-h-64 flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading client details...</p>
       </div>
     );
   }
@@ -557,6 +594,9 @@ export default function ClientDetailPage() {
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           Error loading client: {error.message}
         </div>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -691,6 +731,10 @@ export default function ClientDetailPage() {
                   New Quote
                 </Link>
               </Button>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => void handleShareClient()}>
+                <Share2 className="mr-1.5 h-4 w-4" />
+                Share Contact
+              </Button>
               {permissions.has("customers.write") ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -735,7 +779,7 @@ export default function ClientDetailPage() {
         </AlertDialog>
 
         <section className="max-w-full overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_320px]">
             <div className="min-w-0 space-y-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-4">
@@ -837,7 +881,7 @@ export default function ClientDetailPage() {
               <div className="mt-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Workflow</p>
               </div>
-              <div className="mt-3 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
                 <QuickWorkflowAction icon={CalendarPlus} title="New appointment" detail="" href={appointmentHref} />
                 <QuickWorkflowAction icon={Receipt} title="Create quote" detail="" href={newQuoteHref} />
                 <QuickWorkflowAction icon={FileText} title="Create invoice" detail="" href={newInvoiceHref} />
@@ -847,14 +891,14 @@ export default function ClientDetailPage() {
           </div>
         </section>
 
-        <div className="grid max-w-full gap-3 grid-cols-2 xl:grid-cols-4">
+        <div className="grid max-w-full gap-3 grid-cols-2 lg:grid-cols-4">
           <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "In progress" : "Clear"} />
           <WorkflowMetricCard icon={Receipt} label="Open quotes" value={`$${openQuoteValue.toFixed(2)}`} detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} open`} />
           <WorkflowMetricCard icon={FileText} label="Invoices to collect" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} awaiting collection`} />
           <WorkflowMetricCard icon={Car} label="Vehicles" value={String(vehicleList.length)} detail={vehicleList.length > 0 ? "On file" : "None"} />
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
           <div className="min-w-0 space-y-6">
             <Card className="max-w-full overflow-hidden border-white/65">
               <CardHeader className="pb-4">
@@ -962,6 +1006,19 @@ export default function ClientDetailPage() {
               latestQuote={latestQuote as Record<string, unknown> | undefined}
               openInvoiceValue={unpaidInvoiceValue}
               openQuoteValue={openQuoteValue}
+            />
+
+            <EntityCollaborationCard
+              entityType="client"
+              entityId={id}
+              records={((activityLogs ?? []) as any[])}
+              fetching={false}
+              canWrite={permissions.has("customers.write")}
+              title="Client photos & activity"
+              showNoteComposer={false}
+              onCreated={() => {
+                void refetchActivity();
+              }}
             />
 
             {vehiclesError ? (

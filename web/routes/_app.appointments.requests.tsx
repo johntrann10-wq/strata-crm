@@ -8,9 +8,13 @@ import {
   ChevronRight,
   Inbox,
   Loader2,
+  Mail,
+  MapPin,
   MessageSquareMore,
+  Phone,
   RefreshCcw,
   Send,
+  Share2,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -36,6 +40,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { clearAuthState, getAuthToken } from "@/lib/auth";
+import {
+  shareNativeContent,
+  triggerNotificationFeedback,
+  triggerSelectionFeedback,
+} from "@/lib/nativeInteractions";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
@@ -263,6 +272,51 @@ function formatDateLabel(value: string | null | undefined, timeZone?: string | n
     year: "numeric",
     timeZone: timeZone || undefined,
   }).format(parsed);
+}
+
+function trimContactValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatDisplayPhone(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  return trimmed;
+}
+
+function buildPhoneHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `tel:${normalized}` : null;
+}
+
+function buildSmsHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `sms:${normalized}` : null;
+}
+
+function buildEmailHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  return trimmed ? `mailto:${trimmed}` : null;
+}
+
+function buildMapsHref(parts: Array<string | null | undefined>): string | null {
+  const address = parts.map(trimContactValue).filter(Boolean).join(", ");
+  return address ? `https://maps.apple.com/?q=${encodeURIComponent(address)}` : null;
 }
 
 function formatAgeLabel(value: string): string {
@@ -698,8 +752,10 @@ function AppointmentRequestsContent() {
       applyRecordUpdate(payload.record);
       setApproveDialog({ open: false, message: "" });
       toast.success(payload.scheduledFor ? `Appointment created for ${payload.scheduledFor}.` : "Appointment created.");
+      void triggerNotificationFeedback("success");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not approve this requested slot.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -744,8 +800,10 @@ function AppointmentRequestsContent() {
         selectedSlots: [],
       });
       toast.success("Alternate times sent to the customer.");
+      void triggerNotificationFeedback("success");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send alternate times.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -773,8 +831,10 @@ function AppointmentRequestsContent() {
       applyRecordUpdate(payload.record);
       setAskNewTimeDialog({ open: false, message: "", expiresInHours: "72" });
       toast.success("A secure follow-up link was sent to the customer.");
+      void triggerNotificationFeedback("success");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not ask the customer for another time.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -795,8 +855,10 @@ function AppointmentRequestsContent() {
       applyRecordUpdate(payload.record);
       setDeclineDialog({ open: false, message: "" });
       toast.success("The booking request was declined.");
+      void triggerNotificationFeedback("warning");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not decline this request.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -810,6 +872,34 @@ function AppointmentRequestsContent() {
   const canRespondWithOwnerAction =
     canManage && !!selectedRecord && !["confirmed", "declined", "expired"].includes(selectedRecord.status);
   const canProposeAlternates = canRespondWithOwnerAction && selectedRequestPolicy.allowAlternateSlots;
+  const selectedCustomerPhoneLabel = formatDisplayPhone(selectedRecord?.customer.phone ?? null);
+  const selectedCustomerPhoneHref = buildPhoneHref(selectedRecord?.customer.phone ?? null);
+  const selectedCustomerSmsHref = buildSmsHref(selectedRecord?.customer.phone ?? null);
+  const selectedCustomerEmailHref = buildEmailHref(selectedRecord?.customer.email ?? null);
+  const selectedRequestMapsHref = buildMapsHref([
+    selectedRecord?.serviceAddress ?? null,
+    selectedRecord?.serviceCity ?? null,
+    selectedRecord?.serviceState ?? null,
+    selectedRecord?.serviceZip ?? null,
+  ]);
+  const selectedCustomerPortalHref = selectedRecord?.portalUrl || selectedRecord?.publicResponseUrl || selectedRecord?.confirmationUrl || null;
+
+  const handleShareSelectedRequest = async () => {
+    if (!selectedRecord) return;
+    await triggerSelectionFeedback();
+    const result = await shareNativeContent({
+      title: selectedRecord.serviceSummary || "Booking request",
+      text: `Customer request for ${[selectedRecord.customer.firstName, selectedRecord.customer.lastName].filter(Boolean).join(" ").trim() || "customer"}`,
+      url: selectedCustomerPortalHref ?? undefined,
+    });
+    if (result === "copied") {
+      toast.success("Request link copied");
+      void triggerNotificationFeedback("success");
+    } else if (result === "unavailable") {
+      toast.error("Sharing is not available on this device right now.");
+      void triggerNotificationFeedback("error");
+    }
+  };
 
   return (
     <div className="page-content page-section max-w-7xl">
@@ -837,7 +927,7 @@ function AppointmentRequestsContent() {
         <MetricCard label="Urgent" value={String(requestMetrics.urgentCount)} detail="Requests older than one day without a final answer." />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="overflow-hidden py-0">
           <CardHeader className="border-b border-slate-200/80 py-5">
             <div className="flex items-start justify-between gap-3">
@@ -1044,6 +1134,46 @@ function AppointmentRequestsContent() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6 py-6">
+                <div className="rounded-[1.3rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Customer actions</p>
+                      <p className="text-sm leading-6 text-slate-600">
+                        Respond from the queue without hunting for the customer’s phone, email, address, or request link.
+                      </p>
+                    </div>
+                    {selectedCustomerPortalHref ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => void handleShareSelectedRequest()}>
+                          <Share2 className="mr-2 h-4 w-4" />
+                          Share request
+                        </Button>
+                        <Button variant="outline" asChild>
+                          <a href={selectedCustomerPortalHref} target="_blank" rel="noreferrer">
+                            <ChevronRight className="mr-2 h-4 w-4" />
+                            Open customer page
+                          </a>
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <RequestActionTile icon={Phone} title="Call customer" detail={selectedCustomerPhoneLabel ?? "No phone"} href={selectedCustomerPhoneHref} />
+                    <RequestActionTile icon={MessageSquareMore} title="Text customer" detail={selectedCustomerPhoneLabel ?? "No phone"} href={selectedCustomerSmsHref} />
+                    <RequestActionTile icon={Mail} title="Email customer" detail={selectedRecord.customer.email || "No email"} href={selectedCustomerEmailHref} />
+                    <RequestActionTile
+                      icon={MapPin}
+                      title="Open in Maps"
+                      detail={
+                        [selectedRecord.serviceAddress, selectedRecord.serviceCity, selectedRecord.serviceState, selectedRecord.serviceZip]
+                          .filter(Boolean)
+                          .join(", ") || "No service address"
+                      }
+                      href={selectedRequestMapsHref}
+                    />
+                  </div>
+                </div>
+
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
                   <div className="rounded-[1.4rem] border border-orange-200/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.14),transparent_36%),linear-gradient(180deg,#fff7ed_0%,#ffffff_100%)] p-4 sm:p-5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Requested date and time</p>
@@ -1082,7 +1212,7 @@ function AppointmentRequestsContent() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-2">
+                <div className="grid gap-4 lg:grid-cols-2">
                   <Card className="gap-4 border-slate-200/80 bg-white py-0">
                     <CardHeader className="border-b border-slate-200/80 py-5">
                       <CardTitle>Customer and vehicle</CardTitle>
@@ -1151,7 +1281,7 @@ function AppointmentRequestsContent() {
                           <span>{formatDateLabel(availabilityHints.date, availabilityHints.timezone)} has {availabilityHints.slots.length} bookable options.</span>
                           <span>Duration {availabilityHints.durationMinutes} minutes</span>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           {availabilityHints.slots.slice(0, 9).map((slot) => (
                             <div key={slot.startTime} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                               <p className="text-sm font-medium text-slate-950">{slot.label}</p>
@@ -1425,6 +1555,53 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
       <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{detail}</p>
     </div>
+  );
+}
+
+function RequestActionTile({
+  icon: Icon,
+  title,
+  detail,
+  href,
+}: {
+  icon: typeof Phone;
+  title: string;
+  detail: string;
+  href?: string | null;
+}) {
+  const sharedClassName =
+    "flex items-center gap-3 rounded-[1rem] border px-4 py-3 text-left shadow-sm transition-colors";
+
+  const content = (
+    <>
+      <div className="rounded-full bg-orange-100 p-2 text-orange-700">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm font-medium text-slate-950">{title}</p>
+        <p className="truncate text-xs text-slate-500">{detail}</p>
+      </div>
+    </>
+  );
+
+  if (!href) {
+    return (
+      <div className={`${sharedClassName} cursor-not-allowed border-slate-200 bg-white/70 opacity-70`} aria-disabled="true">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      className={`${sharedClassName} border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50/50`}
+      onClick={() => {
+        void triggerSelectionFeedback();
+      }}
+    >
+      {content}
+    </a>
   );
 }
 

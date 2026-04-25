@@ -21,7 +21,7 @@ export default defineConfig({
     : shouldBootBackend
       ? [
         {
-          command: "set FRONTEND_URL=http://127.0.0.1:4173&& set PORT=3001&& set EMBEDDED_PG_EPHEMERAL=1&& npm.cmd --prefix backend run dev:with-db",
+          command: "node scripts/run-playwright-backend-dev.mjs",
           url: "http://127.0.0.1:3001/api/health",
           reuseExistingServer: !process.env.CI,
           timeout: 180000,
