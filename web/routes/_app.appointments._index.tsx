@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { endOfWeek, format, isToday, startOfWeek } from "date-fns";
 import { Link, useLocation, useNavigate, useOutletContext } from "react-router";
-import { CalendarRange, ChevronLeft, ChevronRight, Inbox, Mail, MessageSquare, Phone, Plus, Search, Users } from "lucide-react";
+import { ArrowUpRight, CalendarRange, ChevronLeft, ChevronRight, Inbox, Mail, MessageSquare, Phone, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -423,6 +423,7 @@ export default function AppointmentsPage() {
   const [activeFilter, setActiveFilter] = useState<ScheduleFilter>("all");
   const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
   const [inspectedDateKey, setInspectedDateKey] = useState<string | null>(null);
+  const [inspectedAppointmentId, setInspectedAppointmentId] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
@@ -533,6 +534,15 @@ export default function AppointmentsPage() {
     () => weekSnapshots.find((snapshot) => snapshot.date.toISOString() === inspectedDateKey) ?? null,
     [inspectedDateKey, weekSnapshots]
   );
+  const openDayInspector = useCallback((date: Date, appointmentId?: string) => {
+    void triggerSelectionFeedback();
+    setInspectedDateKey(date.toISOString());
+    setInspectedAppointmentId(appointmentId ?? null);
+  }, []);
+  const closeDayInspector = useCallback(() => {
+    setInspectedDateKey(null);
+    setInspectedAppointmentId(null);
+  }, []);
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
   const scheduleReturnTo = `${location.pathname}${location.search}`;
@@ -766,7 +776,7 @@ export default function AppointmentsPage() {
                   <WeeklyDaySection
                     key={snapshot.date.toISOString()}
                     snapshot={snapshot}
-                    onOpenDay={() => setInspectedDateKey(snapshot.date.toISOString())}
+                    onOpenDay={(appointmentId) => openDayInspector(snapshot.date, appointmentId)}
                     returnTo={scheduleReturnTo}
                   />
                 ))}
@@ -774,9 +784,9 @@ export default function AppointmentsPage() {
             </CardContent>
           </Card>
 
-          <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && setInspectedDateKey(null)}>
+          <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && closeDayInspector()}>
             <DialogContent
-              className="max-h-[88dvh] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:rounded-[1.5rem]"
+              className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:w-full sm:rounded-[1.5rem]"
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
@@ -788,7 +798,7 @@ export default function AppointmentsPage() {
                       Review the day timeline, revenue, and job load for this week snapshot without leaving the board.
                     </DialogDescription>
                   </DialogHeader>
-                  <ScheduleDayInspector snapshot={inspectedSnapshot} returnTo={scheduleReturnTo} />
+                  <ScheduleDayInspector snapshot={inspectedSnapshot} selectedAppointmentId={inspectedAppointmentId} returnTo={scheduleReturnTo} />
                 </>
               ) : null}
             </DialogContent>
@@ -807,7 +817,7 @@ function WeeklyDaySection({
   returnTo,
 }: {
   snapshot: DaySnapshot;
-  onOpenDay: () => void;
+  onOpenDay: (appointmentId?: string) => void;
   returnTo: string;
 }) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
@@ -850,7 +860,7 @@ function WeeklyDaySection({
                     key={`${group.label}-${appointment.id}`}
                     appointment={appointment}
                     referenceDate={snapshot.date}
-                    onOpenDay={onOpenDay}
+                    onOpenDay={() => onOpenDay(appointment.id)}
                     returnTo={returnTo}
                   />
                 ))}
@@ -939,7 +949,15 @@ function ScheduleBoardRow({
   );
 }
 
-function ScheduleDayInspector({ snapshot, returnTo }: { snapshot: DaySnapshot; returnTo: string }) {
+function ScheduleDayInspector({
+  snapshot,
+  selectedAppointmentId,
+  returnTo,
+}: {
+  snapshot: DaySnapshot;
+  selectedAppointmentId: string | null;
+  returnTo: string;
+}) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
     { label: "Drop-offs", items: snapshot.dropOffs },
@@ -947,34 +965,95 @@ function ScheduleDayInspector({ snapshot, returnTo }: { snapshot: DaySnapshot; r
     { label: "In shop", items: snapshot.inShop },
     { label: "Pickups", items: snapshot.pickups },
   ].filter((group) => group.items.length > 0);
+  const selectedAppointment = selectedAppointmentId
+    ? snapshot.jobs.find((appointment) => appointment.id === selectedAppointmentId) ?? null
+    : null;
+  const selectedGroupLabel =
+    selectedAppointment
+      ? groups.find((group) => group.items.some((appointment) => appointment.id === selectedAppointment.id))?.label ?? "Selected job"
+      : null;
+  const selectedCardRef = useRef<HTMLDivElement | null>(null);
+  const selectedHref = selectedAppointment
+    ? isCalendarBlockAppointment(selectedAppointment)
+      ? `/calendar?view=week&date=${encodeURIComponent(format(snapshot.date, "yyyy-MM-dd"))}`
+      : `/appointments/${selectedAppointment.id}?from=${encodeURIComponent(returnTo)}`
+    : "#";
+
+  useEffect(() => {
+    selectedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [selectedAppointmentId, snapshot.date]);
 
   return (
     <>
-      <DialogHeader className="border-b border-border/70 px-4 py-3 sm:px-5 sm:py-4">
-        <DialogTitle className="text-left">
-          {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
-        </DialogTitle>
-        <p className="text-xs text-muted-foreground sm:text-sm">
-          {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
-          {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
-        </p>
+      <DialogHeader className="border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Day inspector</p>
+            <DialogTitle className="mt-1 text-left text-base sm:text-lg">
+              {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
+            </DialogTitle>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+              {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
+              {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
+            </p>
+          </div>
+          {isToday(snapshot.date) ? (
+            <span className="shrink-0 rounded-full border border-primary/20 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+              Today
+            </span>
+          ) : null}
+        </div>
+
+        {selectedAppointment ? (
+          <div className="mt-3 rounded-2xl border border-primary/15 bg-primary/[0.055] p-3 text-left">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">{selectedGroupLabel}</p>
+                <p className="mt-1 break-words text-sm font-semibold leading-5 text-foreground">
+                  {getAppointmentLabel(selectedAppointment)}
+                </p>
+                <p className="mt-1 break-words text-xs text-muted-foreground">
+                  {joinMeta([getClientName(selectedAppointment) || "Internal", getVehicleLabel(selectedAppointment) || "No vehicle"])}
+                </p>
+              </div>
+              <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 rounded-full px-3 text-xs">
+                <Link
+                  to={selectedHref}
+                  onClick={() => {
+                    captureScheduleScrollPosition(returnTo);
+                  }}
+                >
+                  <ArrowUpRight className="mr-1.5 h-3.5 w-3.5" />
+                  Open
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </DialogHeader>
-      <div className="max-h-[calc(88dvh-5rem)] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[calc(88dvh-5.5rem)] sm:space-y-4 sm:px-5 sm:py-4">
+      <div className="app-native-scroll max-h-[calc(92dvh-9rem)] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[calc(92dvh-10rem)] sm:space-y-4 sm:px-5 sm:py-4">
         {groups.length === 0 ? (
-          <div className="text-sm text-muted-foreground">No jobs scheduled for this day.</div>
+          <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+            No jobs scheduled for this day.
+          </div>
         ) : (
           groups.map((group) => (
             <div key={group.label} className="space-y-1.5 sm:space-y-2">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">{group.label}</div>
               <div className="space-y-1.5 sm:space-y-2">
-                {group.items.map((appointment) => (
-                  <InspectorAppointmentCard
-                    key={`${group.label}-${appointment.id}`}
-                    appointment={appointment}
-                    snapshotDate={snapshot.date}
-                    returnTo={returnTo}
-                  />
-                ))}
+                {group.items.map((appointment) => {
+                  const selected = appointment.id === selectedAppointmentId;
+                  return (
+                    <InspectorAppointmentCard
+                      key={`${group.label}-${appointment.id}`}
+                      appointment={appointment}
+                      snapshotDate={snapshot.date}
+                      selected={selected}
+                      selectedCardRef={selected ? selectedCardRef : undefined}
+                      returnTo={returnTo}
+                    />
+                  );
+                })}
               </div>
             </div>
           ))
@@ -987,10 +1066,14 @@ function ScheduleDayInspector({ snapshot, returnTo }: { snapshot: DaySnapshot; r
 function InspectorAppointmentCard({
   appointment,
   snapshotDate,
+  selected = false,
+  selectedCardRef,
   returnTo,
 }: {
   appointment: AppointmentRecord;
   snapshotDate: Date;
+  selected?: boolean;
+  selectedCardRef?: RefObject<HTMLDivElement | null>;
   returnTo: string;
 }) {
   const navigate = useNavigate();
@@ -1009,9 +1092,11 @@ function InspectorAppointmentCard({
   return (
     <>
       <div
+        ref={selectedCardRef}
         role="button"
         tabIndex={0}
         aria-haspopup="dialog"
+        aria-current={selected ? "true" : undefined}
         onClick={(event) => {
           if (longPress.consumeIfLongPress(event)) return;
           openAppointment();
@@ -1029,7 +1114,12 @@ function InspectorAppointmentCard({
         onTouchCancel={longPress.clearTimer}
         onTouchMove={longPress.handleTouchMove}
         onContextMenu={longPress.openContextMenu}
-        className="block select-none rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 transition-[transform,background-color] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none"
+        className={cn(
+          "block select-none rounded-lg border px-2.5 py-2.5 transition-[transform,background-color,border-color,box-shadow] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none",
+          selected
+            ? "border-primary/35 bg-primary/[0.055] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+            : "border-border/60 bg-white/92"
+        )}
         style={PRESSABLE_CARD_STYLE}
         draggable={false}
       >
