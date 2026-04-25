@@ -43,6 +43,7 @@ import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
+import { canOpenExternalPaymentProvider } from "@/lib/mobileShell";
 import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
@@ -779,6 +780,11 @@ export default function AppointmentDetail() {
       next.delete("session_id");
       setSearchParams(next, { replace: true });
     };
+
+    if (!canOpenExternalPaymentProvider()) {
+      clearParams();
+      return;
+    }
 
     const run = async () => {
       if (paymentStatus === "success" && sessionId) {
@@ -1597,6 +1603,7 @@ export default function AppointmentDetail() {
 
   const handleStripeDepositCheckout = async () => {
     if (!appointment?.id) return;
+    if (!canOpenExternalPaymentProvider()) return;
     const result = await runCreateStripeDepositSession({ id: appointment.id });
     if (!result.error) {
       const url = (result.data as { url?: string } | undefined)?.url;
@@ -1906,7 +1913,10 @@ export default function AppointmentDetail() {
                   <DollarSign className="h-4 w-4 mr-2" />
                   {showsCollectPaymentLabel || depositAmountValue <= 0 ? "Collect Payment" : "Collect Deposit"}
                 </Button>
-                {!hasRecordedPayment && appointment.depositAmount != null && appointment.depositAmount > 0 ? (
+                {!hasRecordedPayment &&
+                appointment.depositAmount != null &&
+                appointment.depositAmount > 0 &&
+                canOpenExternalPaymentProvider() ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -2142,7 +2152,10 @@ export default function AppointmentDetail() {
                       <DollarSign className="mr-2 h-4 w-4" />
                       {showsCollectPaymentLabel || depositAmountValue <= 0 ? "Collect payment" : "Collect deposit"}
                     </Button>
-                    {!hasRecordedPayment && appointment.depositAmount != null && appointment.depositAmount > 0 ? (
+                    {!hasRecordedPayment &&
+                    appointment.depositAmount != null &&
+                    appointment.depositAmount > 0 &&
+                    canOpenExternalPaymentProvider() ? (
                       <Button
                         variant="outline"
                         className="justify-start"

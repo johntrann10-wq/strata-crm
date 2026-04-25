@@ -70,6 +70,7 @@ import { cn } from "@/lib/utils";
 import { getCurrentBusinessId } from "@/lib/auth";
 import { getTransactionalEmailErrorMessage } from "@/lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
+import { canOpenExternalPaymentProvider } from "@/lib/mobileShell";
 import { printAuthenticatedDocument } from "@/lib/printDocument";
 import { getInvoiceCollectionSummary } from "@/lib/paymentStates";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
@@ -464,6 +465,12 @@ export default function InvoiceDetailPage() {
   useEffect(() => {
     const stripePayment = searchParams.get("stripePayment");
     if (!stripePayment) return;
+    if (!canOpenExternalPaymentProvider()) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("stripePayment");
+      setSearchParams(next, { replace: true });
+      return;
+    }
     if (stripePayment === "success") {
       toast.success("Stripe payment submitted. Invoice status will update as soon as Stripe confirms it.");
       void refetch();
@@ -507,6 +514,7 @@ export default function InvoiceDetailPage() {
 
   const handleStripeCheckout = async () => {
     if (!invoice?.id) return;
+    if (!canOpenExternalPaymentProvider()) return;
     const result = await createStripePaymentSession({ id: invoice.id });
     if (!result.error) {
       const url = (result.data as { url?: string } | undefined)?.url;
@@ -1004,7 +1012,7 @@ export default function InvoiceDetailPage() {
             <CardContent className="p-0">
               {paymentsList.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  No payments recorded yet. Manual collections and Stripe payments will appear here.
+                  No payments recorded yet. Manual collections will appear here.
                 </div>
               ) : (
                 <Table>
@@ -1073,7 +1081,11 @@ export default function InvoiceDetailPage() {
               detail={collectionSummary.detail}
               amount={formatCurrency(remainingBalance)}
               primaryLabel="Collect payment"
-              tertiaryLabel={billingStatus?.stripeConnectReady && remainingBalance > 0 ? "Pay with Stripe" : undefined}
+              tertiaryLabel={
+                canOpenExternalPaymentProvider() && billingStatus?.stripeConnectReady && remainingBalance > 0
+                  ? "Pay with Stripe"
+                  : undefined
+              }
               secondaryLabel={status === "draft" ? "Send invoice first" : "Resend invoice"}
               onPrimary={handleOpenPaymentDialog}
               onTertiary={() => {

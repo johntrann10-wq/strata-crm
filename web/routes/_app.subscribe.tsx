@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router";
+import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "../api";
@@ -211,7 +211,23 @@ export default function SubscribePage() {
   };
 
   if (nativeShellSession) {
-    return <Navigate to="/settings?tab=account" replace />;
+    return (
+      <div className="mx-auto flex min-h-[60vh] max-w-xl items-center px-4 py-10">
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>Workspace status</CardTitle>
+            <CardDescription>
+              Your workspace access is managed on the web. Contact support or use the web dashboard for account management.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link to="/signed-in">Back to dashboard</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (checking) {

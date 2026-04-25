@@ -251,7 +251,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
     items: [
       { icon: Wrench, label: "Services", href: "/services", end: false, module: "services", permission: "services.read", description: "Manage services, packages, and pricing structure." },
       { icon: CalendarCheck2, label: "Booking page", href: "/app/booking", end: false, permission: "settings.read", description: "Shape the live booking flow, branding, and conversion settings." },
-      { icon: Settings, label: "Settings", href: "/settings", end: false, permission: "settings.read", description: "Update team, locations, business profile, and billing." },
+      { icon: Settings, label: "Settings", href: "/settings", end: false, permission: "settings.read", description: "Update team, locations, business profile, and workspace settings." },
     ],
   },
 ];
@@ -273,8 +273,8 @@ function shouldShowNavItem(
   return true;
 }
 
-function getNavSectionLabel(section: Pick<(typeof navSections)[number], "id" | "label">, nativeShellSession: boolean): string {
-  if (nativeShellSession && section.id === "sales") return "Sales";
+function getNavSectionLabel(section: Pick<(typeof navSections)[number], "id" | "label">, showWebBillingSurface: boolean): string {
+  if (!showWebBillingSurface && section.id === "sales") return "Sales";
   return section.label;
 }
 
@@ -793,7 +793,7 @@ const SidebarNav = memo(function SidebarNav({
               <div className="mb-1.5 flex items-center gap-2 px-3">
                 <span className="h-px flex-1 bg-white/8" />
                 <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
-                  {getNavSectionLabel(section, nativeShellSession)}
+                  {getNavSectionLabel(section, showWebBillingSurface)}
                 </div>
                 <span className="h-px w-6 bg-white/8" />
               </div>
@@ -1249,7 +1249,7 @@ function AppLayoutInner({
                 <div className="min-w-0">
                   <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
-                      {getNavSectionLabel(activeNavEntry.section, nativeShellSession)}
+                      {getNavSectionLabel(activeNavEntry.section, showWebBillingSurface)}
                     </span>
                   </div>
                   <h1 className="mt-0.5 text-balance text-[19px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
@@ -1602,6 +1602,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     currentBusinessId ?? "",
     { pause: !effectiveUserId || !currentBusinessId || !canReadSettings }
   );
+  const showWebBillingSurface = shouldShowWebBillingSurface();
   const allowWithoutBusiness = pathAllowsMissingBusiness(location.pathname);
   const allowWithoutSubscription =
     location.pathname === "/billing" ||
@@ -1729,7 +1730,13 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       !billingStatus.billingEnforced ||
       hasFullBillingAccess(billingStatus.accessState) ||
       ((billingStatus.status === "active" || billingStatus.status === "trialing") && billingStatus.accessState == null);
-    if (billingCheckDone && !allowWithoutSubscription && billingStatus?.billingEnforced && !hasAccess) {
+    if (
+      showWebBillingSurface &&
+      billingCheckDone &&
+      !allowWithoutSubscription &&
+      billingStatus?.billingEnforced &&
+      !hasAccess
+    ) {
       return "/subscribe";
     }
     if (!canAccessAppPath(location.pathname, currentPermissions, currentEnabledModules)) {
@@ -1753,6 +1760,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     currentMembership,
     billingStatus,
     billingCheckDone,
+    showWebBillingSurface,
     workspaceLoadError,
   ]);
 

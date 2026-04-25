@@ -249,7 +249,7 @@ export default function InvoicesIndexPage() {
             {isRefetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
           </span>
         }
-        subtitle="Manage billing, review collection follow-up, and keep invoice cash flow visible."
+        subtitle="Manage balances, review collection follow-up, and keep invoice cash flow visible."
         right={
           <Button asChild>
             <Link to={linkWithQueueState("/invoices/new")}>

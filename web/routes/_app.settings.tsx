@@ -1619,10 +1619,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
+    if (nativeShellSession && tab === "billing") {
+      setActiveTab("account");
+      return;
+    }
     if (tab) {
       setActiveTab(tab);
+      return;
     }
-  }, [searchParams]);
+    if (nativeShellSession) {
+      setActiveTab((current) => (current === "billing" ? "account" : current));
+    }
+  }, [nativeShellSession, searchParams]);
 
   useEffect(() => {
     const quickBooksState = searchParams.get("quickbooks");
@@ -2628,19 +2636,26 @@ export default function SettingsPage() {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-7 sm:overflow-visible">
+          <TabsList
+            className={cn(
+              "flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:overflow-visible",
+              nativeShellSession ? "sm:grid-cols-6" : "sm:grid-cols-7"
+            )}
+          >
             <TabsTrigger
               value="profile"
               className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
             >
               Business Profile
             </TabsTrigger>
-            <TabsTrigger
-              value="billing"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              {nativeShellSession ? "Workspace" : "Billing"}
-            </TabsTrigger>
+            {!nativeShellSession ? (
+              <TabsTrigger
+                value="billing"
+                className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
+              >
+                Billing
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger
               value="locations"
               className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
@@ -3465,7 +3480,9 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 sm:flex-row">
                   <Button asChild>
-                    <Link to="/settings?tab=billing">{nativeShellSession ? "Open workspace status" : "Open billing"}</Link>
+                    <Link to={nativeShellSession ? "/settings?tab=account" : "/settings?tab=billing"}>
+                      {nativeShellSession ? "Open account status" : "Open billing"}
+                    </Link>
                   </Button>
                   {nativeShellSession ? null : (
                     <Button asChild variant="outline">
@@ -3987,32 +4004,34 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="h-4 w-4 text-primary" />
-                          <p className="text-sm font-medium">Stripe payments</p>
+                  {!nativeShellSession ? (
+                    <div className="rounded-xl border bg-muted/20 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="h-4 w-4 text-primary" />
+                            <p className="text-sm font-medium">Stripe payments</p>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Connected-account payments, deposits, and billing status are managed from the billing tab.
+                          </p>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          Connected-account payments, deposits, and billing status are managed from the billing tab.
-                        </p>
+                        <Badge variant={billingStatus?.stripeConnectReady ? "default" : "secondary"}>
+                          {billingStatus?.stripeConnectReady ? "Connected" : billingStatus?.stripeConnectAccountId ? "Needs setup" : "Not connected"}
+                        </Badge>
                       </div>
-                      <Badge variant={billingStatus?.stripeConnectReady ? "default" : "secondary"}>
-                        {billingStatus?.stripeConnectReady ? "Connected" : billingStatus?.stripeConnectAccountId ? "Needs setup" : "Not connected"}
-                      </Badge>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <Button variant="outline" className="w-full sm:w-auto" onClick={() => setActiveTab("billing")}>
+                          Open billing controls
+                        </Button>
+                        {billingStatus?.stripeConnectAccountId ? (
+                          <p className="self-center text-xs text-muted-foreground">
+                            Account <span className="font-mono">{billingStatus.stripeConnectAccountId}</span>
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                      <Button variant="outline" className="w-full sm:w-auto" onClick={() => setActiveTab("billing")}>
-                        Open billing controls
-                      </Button>
-                      {billingStatus?.stripeConnectAccountId ? (
-                        <p className="self-center text-xs text-muted-foreground">
-                          Account <span className="font-mono">{billingStatus.stripeConnectAccountId}</span>
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
+                  ) : null}
 
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -5095,15 +5114,17 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </TabsContent>
-          <TabsContent value="billing" className="space-y-6">
-            <BillingTab
-              billingStatus={billingStatus}
-              setBillingStatus={setBillingStatus}
-              billingPortalLoading={billingPortalLoading}
-              setBillingPortalLoading={setBillingPortalLoading}
-              membershipRole={membershipRole}
-            />
-          </TabsContent>
+          {!nativeShellSession ? (
+            <TabsContent value="billing" className="space-y-6">
+              <BillingTab
+                billingStatus={billingStatus}
+                setBillingStatus={setBillingStatus}
+                billingPortalLoading={billingPortalLoading}
+                setBillingPortalLoading={setBillingPortalLoading}
+                membershipRole={membershipRole}
+              />
+            </TabsContent>
+          ) : null}
         </Tabs>
       </div>
 
