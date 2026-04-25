@@ -787,7 +787,7 @@ export default function AppointmentsPage() {
           <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && closeDayInspector()}>
             <DialogContent
               showCloseButton={false}
-              className="h-[min(92dvh,calc(100svh-1rem))] max-h-[calc(100svh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:h-[min(92dvh,calc(100svh-2rem))] sm:w-full sm:max-h-[calc(100svh-2rem)] sm:rounded-[1.5rem]"
+              className="bottom-0 top-auto h-[min(88dvh,calc(100svh-0.75rem))] max-h-[calc(100svh-0.75rem)] w-full max-w-full translate-y-0 overflow-hidden rounded-b-none rounded-t-[1.35rem] p-0 sm:bottom-auto sm:top-[50%] sm:h-[min(92dvh,calc(100svh-2rem))] sm:w-full sm:max-w-3xl sm:translate-y-[-50%] sm:rounded-[1.5rem]"
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
@@ -986,7 +986,7 @@ function ScheduleDayInspector({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <DialogHeader className="shrink-0 border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4">
+      <DialogHeader className="sticky top-0 z-10 shrink-0 border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Day inspector</p>

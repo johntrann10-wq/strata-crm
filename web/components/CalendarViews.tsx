@@ -752,7 +752,7 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
 
   return (
     <div className="pointer-events-none min-w-0 overflow-visible space-y-1 pb-0.5 sm:pb-1">
-      <div className="grid min-h-[8px] grid-cols-6 items-center gap-1 overflow-visible sm:min-h-[12px] sm:grid-cols-8">
+      <div className="flex min-h-[8px] flex-wrap items-center justify-center gap-0.5 overflow-visible sm:grid sm:min-h-[12px] sm:grid-cols-8 sm:justify-normal sm:gap-1">
         {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
@@ -775,16 +775,14 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
 
 function DayOverflowIndicator({ count, label }: { count: number; label: string }) {
   return (
-    <div className="pointer-events-none min-w-0 overflow-visible space-y-1 pb-0.5 sm:pb-1">
-      <div className="grid min-h-[8px] grid-cols-6 items-center gap-1 overflow-visible sm:min-h-[12px] sm:grid-cols-8">
-        <span
-          title={label}
-          aria-label={label}
-          className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-700 px-1 text-[8px] font-semibold leading-none tabular-nums text-white sm:h-4.5 sm:min-w-4.5 sm:text-[9px]"
-        >
-          {count}
-        </span>
-      </div>
+    <div className="pointer-events-none flex min-w-0 flex-col items-center overflow-visible space-y-1 pb-0.5 sm:items-start sm:pb-1">
+      <span
+        title={label}
+        aria-label={label}
+        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-700 px-1.5 text-[10px] font-semibold leading-none tabular-nums text-white sm:h-4.5 sm:min-w-4.5 sm:px-1 sm:text-[9px]"
+      >
+        {count}
+      </span>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
         {label}
       </span>
@@ -1211,17 +1209,7 @@ export function MonthView({
                       )}
 
                       <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
-                        {isMobileLayout && dayDensityItems.length > 0 ? (
-                          <span
-                            className={cn(
-                              "mx-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
-                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                            )}
-                            aria-label={dayCountLabel}
-                          >
-                            {dayDensityItems.length}
-                          </span>
-                        ) : shouldCollapseDayIndicators ? (
+                        {shouldCollapseDayIndicators ? (
                           <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
                         ) : (
                           <DayStatusDots appointments={dayDensityItems} />

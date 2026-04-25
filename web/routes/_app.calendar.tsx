@@ -723,6 +723,7 @@ export default function CalendarPage() {
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const layoutInitializedRef = useRef(false);
   const dayInspectorRef = useRef<HTMLElement | null>(null);
+  const mobileWeekScrollerRef = useRef<HTMLDivElement | null>(null);
   const lastInternalUrlSyncRef = useRef<{ view: "month" | "week"; date: string } | null>(null);
 
   useEffect(() => {
@@ -1376,6 +1377,17 @@ export default function CalendarPage() {
   const useFlowingMonthInspector = isMobileLayout && view === "month";
   const dayInspectorTitleId = `day-inspector-title-${view}`;
 
+  useEffect(() => {
+    if (!isMobileLayout || view !== "week") return;
+    const scroller = mobileWeekScrollerRef.current;
+    if (!scroller) return;
+    const selectedKey = toLocalDateString(selectedDate);
+    const selectedButton = Array.from(scroller.querySelectorAll<HTMLButtonElement>("[data-day-key]")).find(
+      (button) => button.dataset.dayKey === selectedKey
+    );
+    selectedButton?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [isMobileLayout, selectedDate, view]);
+
   const dayInspectorPanel = (
     <aside
       ref={dayInspectorRef}
@@ -1511,8 +1523,11 @@ export default function CalendarPage() {
           Sun-Sat
         </span>
       </div>
-      <div className="-mx-2 overflow-x-auto overscroll-x-contain px-2 pb-1 [-webkit-overflow-scrolling:touch]">
-        <div className="flex min-w-max snap-x snap-mandatory gap-2">
+      <div
+        ref={mobileWeekScrollerRef}
+        className="-mx-2 overflow-x-auto overscroll-x-contain scroll-smooth px-2 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div className="flex w-max snap-x snap-mandatory gap-2 pr-2">
         {mobileWeekDays.map((day) => {
           const dayKey = toLocalDateString(day);
           const selectedKey = toLocalDateString(selectedDate);
@@ -1524,6 +1539,7 @@ export default function CalendarPage() {
           return (
             <button
               key={dayKey}
+              data-day-key={dayKey}
               type="button"
               onClick={() => {
                 void triggerSelectionFeedback();
@@ -1531,7 +1547,7 @@ export default function CalendarPage() {
                 setCurrentDate(day);
               }}
               className={cn(
-                "native-touch-surface flex min-h-[4.7rem] w-[5.9rem] shrink-0 snap-start flex-col items-center justify-between rounded-[1rem] border px-2 py-2 text-center transition-colors",
+                "native-touch-surface flex min-h-[4.7rem] w-[6.15rem] shrink-0 snap-center touch-pan-x flex-col items-center justify-between rounded-[1rem] border px-2 py-2 text-center transition-colors",
                 isSelected
                   ? "border-foreground bg-foreground text-background shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
                   : "border-border/70 bg-white/84 text-foreground",
