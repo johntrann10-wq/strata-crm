@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from "react-router";
 import { ArrowUpRight, CalendarRange, ChevronLeft, ChevronRight, Inbox, Mail, MessageSquare, Phone, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -786,7 +786,8 @@ export default function AppointmentsPage() {
 
           <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && closeDayInspector()}>
             <DialogContent
-              className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:w-full sm:rounded-[1.5rem]"
+              showCloseButton={false}
+              className="h-[min(92dvh,calc(100svh-1rem))] max-h-[calc(100svh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:h-[min(92dvh,calc(100svh-2rem))] sm:w-full sm:max-h-[calc(100svh-2rem)] sm:rounded-[1.5rem]"
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
@@ -984,8 +985,8 @@ function ScheduleDayInspector({
   }, [selectedAppointmentId, snapshot.date]);
 
   return (
-    <>
-      <DialogHeader className="border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4">
+    <div className="flex h-full min-h-0 flex-col">
+      <DialogHeader className="shrink-0 border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Day inspector</p>
@@ -997,11 +998,18 @@ function ScheduleDayInspector({
               {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
             </p>
           </div>
-          {isToday(snapshot.date) ? (
-            <span className="shrink-0 rounded-full border border-primary/20 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-              Today
-            </span>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {isToday(snapshot.date) ? (
+              <span className="hidden rounded-full border border-primary/20 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary min-[390px]:inline-flex">
+                Today
+              </span>
+            ) : null}
+            <DialogClose asChild>
+              <Button type="button" variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs">
+                Close
+              </Button>
+            </DialogClose>
+          </div>
         </div>
 
         {selectedAppointment ? (
@@ -1031,7 +1039,7 @@ function ScheduleDayInspector({
           </div>
         ) : null}
       </DialogHeader>
-      <div className="app-native-scroll max-h-[calc(92dvh-9rem)] space-y-3 overflow-y-auto px-4 py-3 sm:max-h-[calc(92dvh-10rem)] sm:space-y-4 sm:px-5 sm:py-4">
+      <div className="app-native-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:px-5 sm:py-4">
         {groups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
             No jobs scheduled for this day.
@@ -1059,7 +1067,7 @@ function ScheduleDayInspector({
           ))
         )}
       </div>
-    </>
+    </div>
   );
 }
 
