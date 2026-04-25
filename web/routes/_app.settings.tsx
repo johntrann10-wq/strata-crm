@@ -1010,7 +1010,7 @@ function BillingTab({
             <div className="rounded-md bg-primary/10 p-2">
               <CreditCard className="h-5 w-5 text-primary" />
             </div>
-            <CardTitle>{nativeShellSession ? "Workspace billing" : "Plan &amp; Billing"}</CardTitle>
+            <CardTitle>{nativeShellSession ? "Workspace billing" : "Plan & Billing"}</CardTitle>
           </div>
           <CardDescription>
             {nativeShellSession
@@ -1119,29 +1119,34 @@ function BillingTab({
                   Billing management is intentionally kept out of the in-app review path.
                 </p>
               ) : (
-                <Button
-                  onClick={
-                    billingPrompt?.stage &&
-                    billingPrompt.stage !== "none" &&
-                    billingStatus.accessState === "active_trial"
-                      ? () => setBillingPromptOpen(true)
-                      : handleManageSubscription
-                  }
-                  disabled={billingPortalLoading || !canManageBilling}
-                >
-                  {billingPortalLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                  )}
-                  {billingStatus?.accessState === "active_trial"
-                    ? billingStatus.billingHasPaymentMethod
-                      ? "Manage billing"
-                      : "Add payment method"
-                    : billingStatus?.accessState === "canceled"
-                      ? "Reactivate subscription"
-                    : "Manage billing"}
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    onClick={
+                      billingPrompt?.stage &&
+                      billingPrompt.stage !== "none" &&
+                      billingStatus.accessState === "active_trial"
+                        ? () => setBillingPromptOpen(true)
+                        : handleManageSubscription
+                    }
+                    disabled={billingPortalLoading || !canManageBilling}
+                  >
+                    {billingPortalLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                    )}
+                    {billingStatus?.accessState === "active_trial"
+                      ? billingStatus.billingHasPaymentMethod
+                        ? "Manage billing"
+                        : "Add payment method"
+                      : billingStatus?.accessState === "canceled"
+                        ? "Reactivate subscription"
+                      : "Manage billing"}
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to="/subscribe">Subscription page</Link>
+                  </Button>
+                </div>
               )}
             </div>
           ) : billingStatus !== null ? (

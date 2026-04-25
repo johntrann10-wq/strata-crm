@@ -24,6 +24,7 @@ import {
   ClipboardList,
   FileText,
   Receipt,
+  CreditCard,
   Wrench,
   Settings,
   Menu,
@@ -151,6 +152,7 @@ type AppNavItem = {
   module?: string;
   permission?: string;
   notificationBucket?: "leads" | "calendar";
+  webOnly?: boolean;
   description: string;
 };
 
@@ -172,6 +174,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
       { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", permission: "quotes.read", description: "Turn estimates into approved work faster." },
       { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", permission: "invoices.read", description: "Stay on top of collections, sends, and cash flow." },
       { icon: Receipt, label: "Finances", href: "/finances", end: false, permission: "payments.read", description: "Track revenue, expenses, and the health of the money flow." },
+      { icon: CreditCard, label: "Subscription", href: "/subscribe", end: false, permission: "settings.read", webOnly: true, description: "Manage the Strata subscription, billing portal, and payment method." },
     ],
   },
   {
@@ -670,12 +673,14 @@ const SidebarNav = memo(function SidebarNav({
   notificationCounts?: Pick<AppNotificationCounts, "leads" | "calendar">;
 }) {
   const location = useLocation();
+  const nativeShellSession = isNativeShell();
   const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
   const visibleSections = navSections
     .map((section) => ({
       ...section,
       items: section.items.filter(
         (item) =>
+          (!item.webOnly || !nativeShellSession) &&
           (!item.module || enabledModules.has(item.module)) &&
           (!item.permission || permissions.has(item.permission))
       ),
@@ -883,6 +888,7 @@ function AppLayoutInner({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const nativeShellSession = isNativeShell();
   const resolvedBusiness = resolveWorkspaceBusiness(
     business as Record<string, unknown> | null | undefined,
     currentMembership
@@ -925,6 +931,7 @@ function AppLayoutInner({
   const activeNavEntry = useMemo(() => {
     for (const section of navSections) {
       for (const item of section.items) {
+        if (item.webOnly && nativeShellSession) continue;
         if (item.module && !enabledModules.has(item.module)) continue;
         if (item.permission && !permissions.has(item.permission)) continue;
         if (isNavItemActive(location.pathname, item)) {
@@ -937,6 +944,7 @@ function AppLayoutInner({
         ...section,
         items: section.items.filter(
           (item) =>
+            (!item.webOnly || !nativeShellSession) &&
             (!item.module || enabledModules.has(item.module)) &&
             (!item.permission || permissions.has(item.permission))
         ),
@@ -951,15 +959,16 @@ function AppLayoutInner({
       item: { icon: Settings, label: "Profile", href: "/profile", end: false, description: "Manage your account." },
       section: { id: "setup" as const, label: "Account", items: [] },
     };
-  }, [enabledModules, permissions, location.pathname]);
+  }, [enabledModules, nativeShellSession, permissions, location.pathname]);
   const activeSectionItems = useMemo(
     () =>
       activeNavEntry.section.items.filter(
         (item) =>
+          (!item.webOnly || !nativeShellSession) &&
           (!item.module || enabledModules.has(item.module)) &&
           (!item.permission || permissions.has(item.permission))
       ),
-    [activeNavEntry.section.items, enabledModules, permissions]
+    [activeNavEntry.section.items, enabledModules, nativeShellSession, permissions]
   );
   const activeLocationName = useMemo(
     () => locationRecords.find((entry) => entry.id === currentLocationId)?.name?.trim() || null,

@@ -35,6 +35,7 @@ export default function SubscribePage() {
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const nativeShellSession = isNativeShell();
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +46,7 @@ export default function SubscribePage() {
         if (cancelled) return;
         setBillingStatus(status);
         if (
+          nativeShellSession &&
           status &&
           (hasFullBillingAccess(status.accessState) ||
             (status.accessState == null && (status.status === "active" || status.status === "trialing")))
@@ -63,12 +65,11 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [nativeShellSession, navigate]);
 
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
   const billingPrompt = billingStatus?.billingPrompt ?? null;
-  const nativeShellSession = isNativeShell();
 
   const handleOpenBillingPortal = async () => {
     if (!canManageBilling) return;
@@ -116,10 +117,10 @@ export default function SubscribePage() {
       .then((status) => {
         if (cancelled) return;
         setBillingStatus(status);
-        if (
+        const hasHealthyAccess =
           hasFullBillingAccess(status.accessState) ||
-          (status.accessState == null && (status.status === "active" || status.status === "trialing"))
-        ) {
+          (status.accessState == null && (status.status === "active" || status.status === "trialing"));
+        if (nativeShellSession && hasHealthyAccess) {
           navigate("/signed-in", { replace: true });
           return;
         }
@@ -143,7 +144,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, searchParams, setSearchParams]);
+  }, [nativeShellSession, navigate, searchParams, setSearchParams]);
 
   const handleRetrySetup = async () => {
     setError(null);
@@ -152,7 +153,7 @@ export default function SubscribePage() {
       await api.billing.retryTrialSetup();
       const status = await api.billing.getStatus();
       setBillingStatus(status);
-      if (hasFullBillingAccess(status.accessState)) {
+      if (nativeShellSession && hasFullBillingAccess(status.accessState)) {
         navigate("/signed-in", { replace: true });
       }
     } catch (e) {
@@ -178,12 +179,12 @@ export default function SubscribePage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-primary" />
-            <CardTitle>{nativeShellSession ? "Workspace billing" : "Billing access"}</CardTitle>
+            <CardTitle>{nativeShellSession ? "Workspace billing" : "Subscription & billing"}</CardTitle>
           </div>
           <CardDescription>
             {nativeShellSession
               ? "Review workspace billing status here without leaving the mobile account flow."
-              : "Keep the workspace available without interrupting setup. Billing actions live here when Stripe needs attention."}
+              : "Manage your Strata subscription, payment method, and billing recovery from the web app."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -215,6 +216,13 @@ export default function SubscribePage() {
                   : daysLeft == null
                     ? "Your 30-day Strata trial is active."
                     : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your 30-day trial.`}
+              </p>
+            ) : null}
+            {billingStatus?.accessState === "active_paid" ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {nativeShellSession
+                  ? "Workspace access is active in the mobile app."
+                  : "Your subscription is active. Manage payment details, invoices, or cancellation from the billing portal."}
               </p>
             ) : null}
           </div>
@@ -264,7 +272,7 @@ export default function SubscribePage() {
           <p className="text-xs text-muted-foreground">
             {nativeShellSession
               ? "Workspace data stays intact. If billing still needs attention after review, contact support for help."
-              : "We keep your workspace and data intact. Once billing is healthy again, full access resumes automatically."}
+              : "We keep your workspace and data intact. Web owners and admins can return here any time to manage subscription access."}
           </p>
         </CardContent>
       </Card>
