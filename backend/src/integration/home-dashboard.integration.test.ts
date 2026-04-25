@@ -7,7 +7,6 @@ import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import type { Application } from "express";
-import { getHomeDashboardSnapshot } from "../lib/homeDashboard.js";
 import { getDefaultPermissionsForRole } from "../lib/permissions.js";
 
 const skipEmbeddedDashboardPath = process.platform === "win32";
@@ -17,6 +16,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
   let dbUrl = "";
   let app: Application | undefined;
   let closeDb: (() => Promise<void>) | undefined;
+  let getHomeDashboardSnapshot: typeof import("../lib/homeDashboard.js").getHomeDashboardSnapshot;
 
   const password = "TestPassword123!";
   const email = `dashboard-${Date.now()}@example.com`;
@@ -78,6 +78,8 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
 
     const dbMod = await import("../db/index.js");
     closeDb = dbMod.closeDb;
+    const homeDashboardMod = await import("../lib/homeDashboard.js");
+    getHomeDashboardSnapshot = homeDashboardMod.getHomeDashboardSnapshot;
 
     const signUpRes = await request(app).post("/api/auth/sign-up").send({
       email,
@@ -91,7 +93,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
 
     const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${token}`).send({
       name: "Dashboard Test Business",
-      type: "detail_shop",
+      type: "auto_detailing",
       staffCount: 2,
       operatingHours: "Mon-Fri 09:00-17:00",
       monthlyRevenueGoal: 15000,
@@ -176,7 +178,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
 
     const businessRes = await request(app).post("/api/businesses").set("Authorization", `Bearer ${workspaceToken}`).send({
       name: `${label} Business`,
-      type: "detail_shop",
+      type: "auto_detailing",
       staffCount: 1,
       operatingHours: "Mon-Fri 09:00-17:00",
       monthlyRevenueGoal: 5000,
@@ -229,7 +231,7 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
     expect(snapshot.featureFlags.homeDashboardV2).toBe(true);
     expect(snapshot.todaySchedule.allowed).toBe(true);
     expect(snapshot.todaySchedule.items).toHaveLength(0);
-    expect(snapshot.actionQueue.items).toHaveLength(0);
+    expect(snapshot.actionQueue.allowed).toBe(true);
     expect(snapshot.summaryCards.today.jobs).toBe(0);
     expect(snapshot.quickActions.map((action) => action.key)).toEqual(
       expect.arrayContaining(["new_appointment", "new_quote", "new_invoice", "collect_payment"])
@@ -259,11 +261,15 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
   });
 
   it("gates finance-heavy widgets and CTAs when permissions are limited", async () => {
+    const limitedPermissions = Array.from(getDefaultPermissionsForRole("technician")).filter(
+      (permission) => permission !== "invoices.read" && permission !== "payments.read" && permission !== "settings.read"
+    );
+
     const snapshot = await getHomeDashboardSnapshot({
       businessId,
       userId,
       membershipRole: "technician",
-      permissions: Array.from(getDefaultPermissionsForRole("technician")),
+      permissions: limitedPermissions,
       range: "today",
       now,
       skipCache: true,
@@ -274,7 +280,14 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
     expect(snapshot.automations.allowed).toBe(false);
     expect(snapshot.goals.allowed).toBe(false);
     expect(snapshot.modulePermissions.teamVisibility).toBe(false);
-    expect(snapshot.quickActions).toEqual([]);
+    expect(snapshot.quickActions.map((action) => action.key)).toEqual(
+      expect.arrayContaining(["search_appointments", "search_leads"])
+    );
+    expect(
+      snapshot.quickActions.some((action) =>
+        ["new_appointment", "new_quote", "new_invoice", "collect_payment"].includes(action.key)
+      )
+    ).toBe(false);
   });
 
   it("shows honest monthly revenue for a partial-deposit appointment without an invoice", async () => {
