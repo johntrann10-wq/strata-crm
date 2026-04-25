@@ -1001,6 +1001,27 @@ function BillingTab({
           daysLeftInTrial: billingPrompt.daysLeftInTrial,
         })
       : "";
+  const subscriptionActionLabel =
+    billingStatus?.accessState === "paused_missing_payment_method"
+      ? "Resume subscription"
+      : billingStatus?.accessState === "canceled"
+        ? "Reactivate subscription"
+        : billingStatus?.accessState === "active_trial"
+          ? billingStatus.billingHasPaymentMethod
+            ? "Manage billing"
+            : "Add payment method"
+          : "Manage subscription";
+  const handleSubscriptionAction = () => {
+    if (
+      billingPrompt?.stage &&
+      billingPrompt.stage !== "none" &&
+      billingStatus?.accessState === "active_trial"
+    ) {
+      setBillingPromptOpen(true);
+      return;
+    }
+    void handleManageSubscription();
+  };
 
   return (
     <div className="space-y-6">
@@ -1033,6 +1054,70 @@ function BillingTab({
               ) : null}
               {periodEnd && billingStatus.accessState === "active_paid" ? (
                 <span className="text-sm text-muted-foreground">Renews {periodEnd.toLocaleDateString()}</span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!nativeShellSession ? (
+            <div className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgba(249,115,22,0.10),rgba(255,255,255,0.94)_42%,rgba(14,165,233,0.08))] p-4 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Web subscription
+                    </p>
+                    <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                      Strata CRM plan management
+                    </h3>
+                    <p className="max-w-2xl text-sm text-muted-foreground">
+                      $29/month after the first month. Manage the workspace subscription, saved payment method, billing recovery, and Stripe customer portal from the web app.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={isActive ? "default" : "secondary"}>{billingAccessLabel}</Badge>
+                    {billingStatus?.accessState === "active_trial" ? (
+                      <Badge variant="outline">
+                        {trialDaysLeft == null
+                          ? "First month free"
+                          : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left in trial`}
+                      </Badge>
+                    ) : null}
+                    {billingStatus?.accessState === "active_paid" && periodEnd ? (
+                      <Badge variant="outline">Renews {periodEnd.toLocaleDateString()}</Badge>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[14rem]">
+                  <Button
+                    type="button"
+                    onClick={handleSubscriptionAction}
+                    disabled={billingPortalLoading || !canManageBilling || billingStatus === null}
+                    className="w-full justify-center"
+                  >
+                    {billingPortalLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                    )}
+                    {billingStatus === null ? "Loading billing" : subscriptionActionLabel}
+                  </Button>
+                  <Button asChild variant="outline" className="w-full justify-center bg-white/80">
+                    <Link to="/subscribe">Open subscription page</Link>
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {BILLING_FEATURES.map((feature) => (
+                  <div key={feature} className="flex items-center gap-2 rounded-xl border border-white/70 bg-white/72 px-3 py-2 text-xs font-medium text-foreground shadow-sm">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />
+                    <span className="min-w-0 truncate">{feature}</span>
+                  </div>
+                ))}
+              </div>
+              {!canManageBilling ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Ask an owner or admin to change the subscription or payment method.
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -1121,13 +1206,7 @@ function BillingTab({
               ) : (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Button
-                    onClick={
-                      billingPrompt?.stage &&
-                      billingPrompt.stage !== "none" &&
-                      billingStatus.accessState === "active_trial"
-                        ? () => setBillingPromptOpen(true)
-                        : handleManageSubscription
-                    }
+                    onClick={handleSubscriptionAction}
                     disabled={billingPortalLoading || !canManageBilling}
                   >
                     {billingPortalLoading ? (
@@ -1135,13 +1214,7 @@ function BillingTab({
                     ) : (
                       <ExternalLink className="mr-2 h-4 w-4" />
                     )}
-                    {billingStatus?.accessState === "active_trial"
-                      ? billingStatus.billingHasPaymentMethod
-                        ? "Manage billing"
-                        : "Add payment method"
-                      : billingStatus?.accessState === "canceled"
-                        ? "Reactivate subscription"
-                      : "Manage billing"}
+                    {subscriptionActionLabel}
                   </Button>
                   <Button asChild variant="outline">
                     <Link to="/subscribe">Subscription page</Link>
