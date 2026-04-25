@@ -1,6 +1,6 @@
 {
   "name": "strata",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "Strata CRM — SPA (web/) + Node API (backend/)",
   "license": "UNLICENSED",
   "private": true,
@@ -17,6 +17,7 @@
     "lint": "eslint .",
     "db:generate": "npm --prefix backend run db:generate",
     "db:migrate": "npm --prefix backend run db:migrate",
+    "seed:app-review-demo": "npm --prefix backend run seed:app-review-demo --",
     "test": "npm run test:backend",
     "test:backend": "npm --prefix backend run test",
     "test:e2e": "playwright test",
@@ -27,6 +28,8 @@
     "run": "node run-local.cjs"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
     "@capacitor/ios": "^8.3.1",

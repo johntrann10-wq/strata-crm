@@ -208,6 +208,7 @@ export function AppointmentInspectorPanel({
   emptyTitle = "Select a job",
   emptyDescription = "Pick any job to inspect the customer, vehicle, timing, money, and current stage.",
   compact = false,
+  presentation = "card",
   onAppointmentChange,
   onRequestClose,
 }: {
@@ -215,6 +216,7 @@ export function AppointmentInspectorPanel({
   emptyTitle?: string;
   emptyDescription?: string;
   compact?: boolean;
+  presentation?: "card" | "floating";
   onAppointmentChange?: (() => void | Promise<void>) | undefined;
   onRequestClose?: (() => void) | undefined;
 }) {
@@ -292,6 +294,7 @@ export function AppointmentInspectorPanel({
   const appointmentWithInvoice: AppointmentInspectorRecord = appointment
     ? { ...appointment, invoiceStatus: resolvedInvoiceStatus, invoicePaidAt: resolvedInvoicePaidAt }
     : appointment;
+  const isFloatingPresentation = presentation === "floating";
 
   const staffOptions = ((staffOptionsRaw ?? []) as Array<{ id: string; firstName?: string | null; lastName?: string | null }>).map((staff) => ({
     id: staff.id,
@@ -349,8 +352,11 @@ export function AppointmentInspectorPanel({
 
   if (!appointment) {
     return (
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className={cn("space-y-2", compact ? "p-3" : "p-4")}>
+      <Card className={cn(
+        "native-panel-card border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]",
+        isFloatingPresentation && "py-0 !border-0 !bg-transparent !shadow-none supports-[backdrop-filter]:!bg-transparent"
+      )}>
+        <CardContent className={cn("space-y-2", compact ? "p-3" : "p-4", isFloatingPresentation && "p-0")}>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Inspector</p>
           <p className="text-sm font-medium text-foreground">{emptyTitle}</p>
           <p className="text-sm text-muted-foreground">{emptyDescription}</p>
@@ -726,8 +732,11 @@ export function AppointmentInspectorPanel({
 
   return (
     <>
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className={cn(compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
+      <Card className={cn(
+        "native-panel-card border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]",
+        isFloatingPresentation && "py-0 !border-0 !bg-transparent !shadow-none supports-[backdrop-filter]:!bg-transparent"
+      )}>
+        <CardContent className={cn(compact ? "space-y-3 p-3" : "space-y-4 p-4", isFloatingPresentation && "p-0")}>
         <div className="space-y-1">
           <div className="flex items-start justify-between gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
@@ -748,7 +757,7 @@ export function AppointmentInspectorPanel({
         </div>
 
         <div className="grid gap-3 text-sm">
-          <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+          <div className="native-foreground-panel rounded-xl border border-border/60 bg-background/76 px-3 py-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Money</p>
@@ -792,7 +801,7 @@ export function AppointmentInspectorPanel({
         </div>
 
         {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
-          <div className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
+          <div className="native-foreground-panel space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Quick controls</p>
               {!compact ? <p className="text-xs text-muted-foreground">Move the job forward without leaving the board.</p> : null}
@@ -803,7 +812,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className="native-touch-surface rounded-xl"
                   onClick={() => void handleLifecycleUpdate("confirmed")}
                   disabled={updatingLifecycle || updatingPhase || completingAppointment}
                 >
@@ -815,7 +824,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className="native-touch-surface rounded-xl"
                   onClick={() => void handleLifecycleUpdate("in_progress")}
                   disabled={updatingLifecycle || updatingPhase || completingAppointment}
                 >
@@ -827,7 +836,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className="native-touch-surface rounded-xl"
                   onClick={() => void handleComplete()}
                   disabled={updatingLifecycle || updatingPhase || completingAppointment}
                 >
@@ -848,7 +857,7 @@ export function AppointmentInspectorPanel({
                         key={option.value}
                         size="sm"
                         variant={active ? "default" : "outline"}
-                        className="rounded-xl"
+                        className="native-touch-surface rounded-xl"
                         onClick={() => void handlePhaseUpdate(option.value)}
                         disabled={active || updatingLifecycle || updatingPhase || completingAppointment}
                       >
@@ -868,7 +877,7 @@ export function AppointmentInspectorPanel({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-xl"
+                    className="native-touch-surface rounded-xl"
                     onClick={openPriceDialog}
                     disabled={savingDeposit || recordingPayment || reversingPayment}
                   >
@@ -878,7 +887,7 @@ export function AppointmentInspectorPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl"
+                      className="native-touch-surface rounded-xl"
                       onClick={openDepositDialog}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
@@ -889,7 +898,7 @@ export function AppointmentInspectorPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl"
+                      className="native-touch-surface rounded-xl"
                       onClick={openPaymentDialog}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
@@ -901,7 +910,7 @@ export function AppointmentInspectorPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl"
+                      className="native-touch-surface rounded-xl"
                       onClick={() => void handleReversePayment()}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
@@ -919,7 +928,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className="native-touch-surface rounded-xl"
                   onClick={openTimingDialog}
                   disabled={updatingPhase || updatingLifecycle || completingAppointment}
                 >
@@ -928,7 +937,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className="native-touch-surface rounded-xl"
                   onClick={openDetailsDialog}
                   disabled={updatingPhase || updatingLifecycle || completingAppointment}
                 >
@@ -944,7 +953,7 @@ export function AppointmentInspectorPanel({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-xl"
+                    className="native-touch-surface rounded-xl"
                     onClick={() => void handleCancelAppointment()}
                     disabled={cancellingAppointment || deletingAppointment}
                   >
@@ -955,7 +964,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+                  className="native-touch-surface rounded-xl border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
                   onClick={() => void handleDeleteAppointment()}
                   disabled={cancellingAppointment || deletingAppointment}
                 >
@@ -1054,14 +1063,14 @@ export function AppointmentInspectorPanel({
         )}
 
         <div className={cn("gap-2", compact ? "grid grid-cols-1" : "flex flex-col")}>
-          <Button asChild className="w-full rounded-xl">
+          <Button asChild className="native-touch-surface w-full rounded-xl">
             <Link to={`/appointments/${appointment.id}`}>
               Open full details
               {!compact ? <ExternalLink className="ml-2 h-4 w-4" /> : null}
             </Link>
           </Button>
           {!compact ? (
-            <Button asChild variant="outline" className="w-full rounded-xl">
+            <Button asChild variant="outline" className="native-touch-surface w-full rounded-xl">
               <Link to={`/appointments/${appointment.id}`}>
                 Manage timing and payment
               </Link>

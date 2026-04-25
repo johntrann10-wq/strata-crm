@@ -37,6 +37,9 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { PageHeader } from "../components/shared/PageHeader";
 import { cn } from "@/lib/utils";
+import { shareNativeItems } from "@/lib/nativeFieldOps";
+import { isNativeShell, openNativeBrowserUrl } from "@/lib/mobileShell";
+import { buildPublicBookingUrl } from "@/lib/publicAppUrl";
 import {
   defaultBookingBranding,
   type BookingBrandAccentColorToken,
@@ -53,6 +56,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Share2,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -1373,9 +1377,36 @@ export default function ServicesPage() {
   );
   const isFirstLoad = (servicesFetching || categoriesFetching) && !servicesData && !categoriesData;
   const bookingUrl = useMemo(() => {
-    if (!businessId || typeof window === "undefined") return null;
-    return `${window.location.origin}/book/${businessId}`;
+    if (!businessId) return null;
+    return buildPublicBookingUrl(businessId);
   }, [businessId]);
+
+  const handleOpenLiveBooking = async () => {
+    if (!bookingUrl) return;
+    try {
+      if (isNativeShell()) {
+        await openNativeBrowserUrl(bookingUrl);
+        return;
+      }
+      window.open(bookingUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Could not open the live booking page.");
+    }
+  };
+
+  const handleShareLiveBooking = async () => {
+    if (!bookingUrl) return;
+    const shared = await shareNativeItems({
+      items: [bookingUrl],
+      subject: "Strata booking link",
+      title: "Share live booking page",
+    });
+    if (!shared) {
+      toast.error("Could not open the share sheet.");
+      return;
+    }
+    toast.success("Booking link ready to share.");
+  };
 
   const openCreateService = (categoryId?: string | null) => {
     if (!canEditServices) return;
@@ -1633,11 +1664,24 @@ export default function ServicesPage() {
                   Open booking builder
                 </Link>
               </Button>
-              <Button type="button" asChild disabled={!bookingUrl || !bookingSettings.bookingEnabled} className="rounded-xl">
-                <a href={bookingUrl && bookingSettings.bookingEnabled ? bookingUrl : "#"} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  View live
-                </a>
+              <Button
+                type="button"
+                disabled={!bookingUrl || !bookingSettings.bookingEnabled}
+                className="rounded-xl"
+                onClick={() => void handleOpenLiveBooking()}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View live
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!bookingUrl || !bookingSettings.bookingEnabled}
+                className="rounded-xl"
+                onClick={() => void handleShareLiveBooking()}
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                Share live link
               </Button>
             </div>
           </div>
@@ -2076,4 +2120,3 @@ export default function ServicesPage() {
     </div>
   );
 }
-

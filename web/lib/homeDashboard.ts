@@ -189,6 +189,8 @@ export type HomeDashboardSnapshot = {
   quickActions: Array<{
     key:
       | "new_appointment"
+      | "search_appointments"
+      | "search_leads"
       | "new_quote"
       | "new_invoice"
       | "add_client"
@@ -234,6 +236,7 @@ export type HomeDashboardSnapshot = {
         title: string;
         clientName: string;
         vehicleLabel: string;
+        status: "upcoming" | "inProgress" | "completed" | "cancelled";
         startTime: string;
         url: string;
       }>;

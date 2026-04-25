@@ -204,6 +204,44 @@ body,
   .mobile-support-card {
     @apply rounded-[1.1rem] border border-white/60 bg-background/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)];
   }
+  .native-panel-card {
+    @apply overflow-hidden border border-white/72 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_1px_2px_rgba(15,23,42,0.05),0_20px_48px_rgba(15,23,42,0.09)];
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.05),
+      0 20px 48px rgba(15, 23, 42, 0.09),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+  .native-touch-surface {
+    @apply select-none transition-[transform,box-shadow,background-color,border-color,opacity] duration-200 ease-out;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    transform-origin: center;
+    will-change: transform, box-shadow;
+  }
+  .native-touch-surface:hover {
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.05),
+      0 18px 44px rgba(15, 23, 42, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+  .native-touch-surface:active {
+    transform: translateY(1px) scale(0.988);
+  }
+  .native-sheet-shell {
+    @apply overflow-hidden border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(247,250,252,0.97))] shadow-[0_26px_70px_rgba(15,23,42,0.18)];
+    box-shadow:
+      0 26px 70px rgba(15, 23, 42, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  }
+  .native-sheet-handle {
+    @apply h-1.5 w-12 rounded-full bg-slate-300/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)];
+  }
+  .native-foreground-panel {
+    @apply rounded-[1.45rem] border border-white/72 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,250,252,0.92))] shadow-[0_18px_42px_rgba(15,23,42,0.08)];
+    box-shadow:
+      0 18px 42px rgba(15, 23, 42, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
 }
 
 @media (max-width: 767px) {
@@ -218,6 +256,15 @@ body,
   .kpi-card {
     border-radius: 1.05rem;
     padding: 1rem;
+  }
+}
+
+@media (hover: none) {
+  .native-touch-surface:hover {
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.05),
+      0 16px 40px rgba(15, 23, 42, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
   }
 }
 

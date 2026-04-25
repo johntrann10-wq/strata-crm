@@ -37,6 +37,13 @@ import { RelatedRecordsPanel } from "../components/shared/RelatedRecordsPanel";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { AppointmentHistoryCard, ClientEditForm, type FormState, VehiclesCard } from "../components/ClientDetailCards";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
+import { NativeContactActionsCard } from "@/components/mobile/NativeContactActionsCard";
+import { PhotoIntakeCard } from "@/components/mobile/PhotoIntakeCard";
+import {
+  readCachedClientDetail,
+  type ClientDetailCachePayload,
+  writeCachedClientDetail,
+} from "@/lib/mobileOffline";
 
 const blank: FormState = {
   firstName: "",
@@ -335,7 +342,7 @@ export default function ClientDetailPage() {
   const { setPageContext } = usePageContext();
   const isNestedVehicleRoute = id ? location.pathname.startsWith(`/clients/${id}/vehicles/`) : false;
 
-  const [{ data: client, fetching, error }, refetch] = useFindOne(api.client, id!, {
+  const [{ data: clientData, fetching, error }, refetch] = useFindOne(api.client, id!, {
     select: {
       id: true,
       firstName: true,
@@ -353,12 +360,12 @@ export default function ClientDetailPage() {
     },
   });
 
-  const [{ data: vehicles, fetching: vehiclesFetching, error: vehiclesError }] = useFindMany(api.vehicle, {
+  const [{ data: vehiclesData, fetching: vehiclesFetching, error: vehiclesError }] = useFindMany(api.vehicle, {
     filter: { clientId: { equals: id } },
     select: { id: true, make: true, model: true, year: true, color: true, licensePlate: true, mileage: true },
     pause: !id,
   });
-  const [{ data: appointments, fetching: appointmentsFetching, error: appointmentsError }] = useFindMany(api.appointment, {
+  const [{ data: appointmentsData, fetching: appointmentsFetching, error: appointmentsError }] = useFindMany(api.appointment, {
     clientId: id,
     sort: { startTime: "Descending" },
     first: 20,
@@ -379,30 +386,74 @@ export default function ClientDetailPage() {
     },
     pause: !id,
   });
-  const [{ data: quotes, fetching: quotesFetching, error: quotesError }] = useFindMany(api.quote, {
+  const [{ data: quotesData, fetching: quotesFetching, error: quotesError }] = useFindMany(api.quote, {
     clientId: id,
     sort: { createdAt: "Descending" },
     first: 10,
     pause: !id,
   } as any);
-  const [{ data: invoices, fetching: invoicesFetching, error: invoicesError }] = useFindMany(api.invoice, {
+  const [{ data: invoicesData, fetching: invoicesFetching, error: invoicesError }] = useFindMany(api.invoice, {
     clientId: id,
     sort: { createdAt: "Descending" },
     first: 10,
     pause: !id,
   } as any);
-  const [{ data: jobs, fetching: jobsFetching, error: jobsError }] = useFindMany(api.job, {
+  const [{ data: jobsData, fetching: jobsFetching, error: jobsError }] = useFindMany(api.job, {
     clientId: id,
     first: 10,
     pause: !id,
   } as any);
-  const [{ data: activityLogs }, refetchActivity] = useFindMany(
+  const [{ data: activityLogsData }, refetchActivity] = useFindMany(
     api.activityLog,
     { entityType: "client", entityId: id, first: 10, pause: !id } as any
   );
   const [{ fetching: saving, error: saveError }, runUpdate] = useAction(api.client.update);
   const [{ fetching: deleting }, runDelete] = useAction(api.client.delete);
   const [{ fetching: sendingPortal }, runSendPortal] = useAction(api.client.sendPortal);
+
+  const [cachedSnapshot, setCachedSnapshot] = useState<ClientDetailCachePayload | null>(null);
+  const client = (clientData ?? cachedSnapshot?.client ?? null) as Record<string, any> | null;
+  const vehicles = Array.isArray(vehiclesData) ? vehiclesData : cachedSnapshot?.vehicles ?? [];
+  const appointments = Array.isArray(appointmentsData) ? appointmentsData : cachedSnapshot?.appointments ?? [];
+  const quotes = Array.isArray(quotesData) ? quotesData : cachedSnapshot?.quotes ?? [];
+  const invoices = Array.isArray(invoicesData) ? invoicesData : cachedSnapshot?.invoices ?? [];
+  const jobs = Array.isArray(jobsData) ? jobsData : cachedSnapshot?.jobs ?? [];
+  const activityLogs = Array.isArray(activityLogsData) ? activityLogsData : cachedSnapshot?.activityLogs ?? [];
+  const showingCachedSnapshot = !clientData && Boolean(cachedSnapshot?.client);
+
+  useEffect(() => {
+    if (!id) return;
+    if (clientData) {
+      const nextSnapshot: ClientDetailCachePayload = {
+        client: (clientData as Record<string, unknown>) ?? null,
+        vehicles: Array.isArray(vehiclesData) ? (vehiclesData as Array<Record<string, unknown>>) : [],
+        appointments: Array.isArray(appointmentsData) ? (appointmentsData as Array<Record<string, unknown>>) : [],
+        quotes: Array.isArray(quotesData) ? (quotesData as Array<Record<string, unknown>>) : [],
+        invoices: Array.isArray(invoicesData) ? (invoicesData as Array<Record<string, unknown>>) : [],
+        jobs: Array.isArray(jobsData) ? (jobsData as Array<Record<string, unknown>>) : [],
+        activityLogs: Array.isArray(activityLogsData) ? (activityLogsData as Array<Record<string, unknown>>) : [],
+        cachedAt: new Date().toISOString(),
+      };
+      setCachedSnapshot(nextSnapshot);
+      writeCachedClientDetail(id, nextSnapshot);
+      return;
+    }
+
+    if (error || (!fetching && !clientData)) {
+      setCachedSnapshot(readCachedClientDetail(id));
+    }
+  }, [
+    activityLogsData,
+    appointmentsData,
+    clientData,
+    error,
+    fetching,
+    id,
+    invoicesData,
+    jobsData,
+    quotesData,
+    vehiclesData,
+  ]);
 
   useEffect(() => {
     if (client) setForm(toForm(client));
@@ -487,7 +538,7 @@ export default function ClientDetailPage() {
     return result;
   };
 
-  if (fetching) {
+  if (fetching && !client) {
     return (
       <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -495,7 +546,7 @@ export default function ClientDetailPage() {
     );
   }
 
-  if (error) {
+  if (error && !client) {
     return (
       <div className="p-6 max-w-6xl mx-auto space-y-4">
         <Link to="/clients"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
@@ -593,6 +644,21 @@ export default function ClientDetailPage() {
     quoteList: quoteList as Array<Record<string, any>>,
     apptList: apptList as Array<Record<string, any>>,
   });
+  const clientAddress = [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ");
+  const clientPhotoTargets = [
+    {
+      entityType: "client" as const,
+      entityId: client.id,
+      label: "Customer",
+      subtitle: "Keep customer-level photos or paperwork attached to the account.",
+    },
+    ...vehicleList.map((vehicle) => ({
+      entityType: "vehicle" as const,
+      entityId: String(vehicle.id),
+      label: getVehicleDisplayLabel(vehicle as Record<string, unknown>, "Vehicle"),
+      subtitle: "Attach VIN, condition, or recurring reference photos to this vehicle.",
+    })),
+  ];
 
   return (
     <div className="page-content">
@@ -671,8 +737,17 @@ export default function ClientDetailPage() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {showingCachedSnapshot ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-medium">Viewing cached customer data</p>
+            <p className="mt-1 text-amber-800">
+              The live customer record could not be reached, so this page is using the latest on-device snapshot.
+            </p>
+          </div>
+        ) : null}
+
         <section className="max-w-full overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_360px]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_360px]">
             <div className="min-w-0 space-y-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-4">
@@ -691,11 +766,11 @@ export default function ClientDetailPage() {
                   </div>
                 </div>
                 <div className="grid gap-2 sm:min-w-[220px]">
-                  <div className="min-w-0 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+                  <div className="native-touch-surface min-w-0 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Primary vehicle</p>
                     <p className="mt-1 break-words text-sm font-medium text-slate-900">{primaryVehicleLabel}</p>
                   </div>
-                  <div className="min-w-0 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+                  <div className="native-touch-surface min-w-0 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Next action</p>
                     <p className="mt-1 text-sm font-medium text-slate-900">{nextStepLabel}</p>
                   </div>
@@ -703,21 +778,21 @@ export default function ClientDetailPage() {
               </div>
 
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-                <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                <div className="native-touch-surface rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{formatCurrency(totalSpend)}</p>
                   <p className="mt-1 text-sm text-slate-600">
                     {apptList.length > 0 ? `${apptList.length} appointments` : "No appointments"}
                   </p>
                 </div>
-                <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                <div className="native-touch-surface rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open money</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">{openRevenueLabel}</p>
                   <p className="mt-1 text-sm text-slate-600">
                     {latestInvoice ? "Recent invoice" : latestQuote ? "Recent quote" : "No billing"}
                   </p>
                 </div>
-                <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+                <div className="native-touch-surface rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Vehicles</p>
                   <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.05em] text-slate-950">
                     {vehicleList.length > 0 ? String(vehicleList.length) : "0"}
@@ -732,7 +807,7 @@ export default function ClientDetailPage() {
             <div className="min-w-0 max-w-full overflow-hidden rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Actions</p>
               <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Client workflow</h3>
-              <div className="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
                 <QuickWorkflowAction icon={CalendarPlus} title="New appointment" detail="" href={appointmentHref} />
                 <QuickWorkflowAction icon={Receipt} title="Create quote" detail="" href={newQuoteHref} />
                 <QuickWorkflowAction icon={FileText} title="Create invoice" detail="" href={newInvoiceHref} />
@@ -742,16 +817,39 @@ export default function ClientDetailPage() {
           </div>
         </section>
 
-        <div className="grid max-w-full gap-3 grid-cols-2 xl:grid-cols-4">
+        <NativeContactActionsCard
+          title="Customer actions"
+          description="Call, text, email, map the stop, share customer details, or schedule a follow-up without leaving the client record."
+          contactName={clientDisplayName}
+          phone={client.phone}
+          email={client.email}
+          address={clientAddress || null}
+          reminderIdentifier={`client-follow-up-${client.id}`}
+          reminderTitle={`Follow up with ${clientDisplayName}`}
+          reminderBody={nextAppointment ? `Upcoming visit ${formatTimelineWhen((nextAppointment.startTime as string | null | undefined) ?? null)}` : "Customer follow-up"}
+          reminderSuggestedAt={(nextAppointment?.startTime as string | null | undefined) ?? null}
+          reminderButtonLabel="Add follow-up reminder"
+          shareItems={[
+            clientDisplayName ? `Customer: ${clientDisplayName}` : null,
+            client.phone ? `Phone: ${client.phone}` : null,
+            client.email ? `Email: ${client.email}` : null,
+            clientAddress ? `Address: ${clientAddress}` : null,
+          ].filter((item): item is string => Boolean(item))}
+          shareTitle="Share customer details"
+          shareSubject="Strata customer details"
+          shareButtonLabel="Share details"
+        />
+
+        <div className="grid max-w-full gap-3 grid-cols-2 lg:grid-cols-4">
           <WorkflowMetricCard icon={ClipboardList} label="Active jobs" value={String(activeJobsCount)} detail={activeJobsCount > 0 ? "In progress" : "Clear"} />
           <WorkflowMetricCard icon={Receipt} label="Open quotes" value={`$${openQuoteValue.toFixed(2)}`} detail={`${quoteList.filter((quote) => ["draft", "sent"].includes(String((quote as any).status ?? ""))).length} open`} />
           <WorkflowMetricCard icon={FileText} label="Invoices to collect" value={formatCurrency(unpaidInvoiceValue)} detail={`${invoiceList.filter((invoice) => ["sent", "partial"].includes(String((invoice as any).status ?? ""))).length} awaiting collection`} />
           <WorkflowMetricCard icon={Car} label="Vehicles" value={String(vehicleList.length)} detail={vehicleList.length > 0 ? "On file" : "None"} />
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
           <div className="min-w-0 space-y-6">
-            <Card className="max-w-full overflow-hidden border-white/65">
+            <Card className="native-panel-card max-w-full overflow-hidden border-white/65">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -849,7 +947,7 @@ export default function ClientDetailPage() {
             <RelatedRecordsPanel records={relatedRecords} loading={false} />
           </div>
 
-          <div className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:self-start">
             <RelationshipSnapshotCard
               nextAppointment={nextAppointment}
               lastAppointment={lastCompletedAppointment}
@@ -872,6 +970,11 @@ export default function ClientDetailPage() {
             ) : null}
             <VehiclesCard id={id} vehicles={vehicleList} />
 
+            <PhotoIntakeCard
+              targets={clientPhotoTargets}
+              description="Capture customer and vehicle intake photos from the native camera or attach from the device library."
+            />
+
             <TimelineCard title="Client timeline" items={clientTimeline} empty="No client history recorded yet." />
 
             <CommunicationCard
@@ -885,7 +988,7 @@ export default function ClientDetailPage() {
               onPrimarySend={handleSendPortal}
             />
 
-            <Card className="max-w-full overflow-hidden border-white/65">
+            <Card className="native-panel-card max-w-full overflow-hidden border-white/65">
               <CardHeader className="pb-4">
                 <CardTitle>Active workflow</CardTitle>
               </CardHeader>
@@ -894,7 +997,7 @@ export default function ClientDetailPage() {
                   <Link
                     key={(job as any).id}
                     to={`/jobs/${(job as any).id}`}
-                    className="flex items-center justify-between rounded-[1rem] border border-white/65 bg-white/70 px-3 py-3 transition-colors hover:bg-white/88"
+                    className="native-touch-surface flex items-center justify-between rounded-[1rem] border border-white/65 bg-white/70 px-3 py-3 transition-colors hover:bg-white/88"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{(job as any).title ?? (job as any).jobNumber ?? "Job"}</p>
@@ -935,7 +1038,7 @@ function RelationshipSnapshotCard({
   openQuoteValue: number;
 }) {
   return (
-    <Card className="max-w-full overflow-hidden border-white/65">
+    <Card className="native-panel-card max-w-full overflow-hidden border-white/65">
       <CardHeader className="pb-4">
         <CardTitle>Account snapshot</CardTitle>
       </CardHeader>
@@ -988,7 +1091,7 @@ function TimelineCard({
   };
 
   return (
-    <Card className="max-w-full overflow-hidden border-white/65">
+    <Card className="native-panel-card max-w-full overflow-hidden border-white/65">
       <CardHeader className="pb-4">
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -1030,7 +1133,7 @@ function TimelineCard({
 
 function SummaryField({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="max-w-full overflow-hidden rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+    <div className="native-touch-surface max-w-full overflow-hidden rounded-[1rem] border border-white/65 bg-white/76 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
       <p className="mt-1 break-words text-sm font-medium text-foreground">{value || "Not provided"}</p>
     </div>
@@ -1047,7 +1150,7 @@ function NotesPanel({
   empty: string;
 }) {
   return (
-    <div className="rounded-[1rem] border border-white/65 bg-white/76 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+    <div className="native-touch-surface rounded-[1rem] border border-white/65 bg-white/76 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
       <p className="mt-2 text-sm leading-6 text-foreground/90">{body || empty}</p>
     </div>
@@ -1066,7 +1169,7 @@ function WorkflowMetricCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-[1.35rem] border border-white/65 bg-white/82 p-4 shadow-[0_14px_32px_rgba(15,23,42,0.06)]">
+    <div className="native-touch-surface rounded-[1.35rem] border border-white/65 bg-white/82 p-4 shadow-[0_14px_32px_rgba(15,23,42,0.06)]">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="h-4 w-4 text-muted-foreground" />
@@ -1089,7 +1192,7 @@ function QuickWorkflowAction({
   href: string;
 }) {
   return (
-    <Link to={href} className="block rounded-[1rem] border border-white/65 bg-white/82 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:border-primary/30 hover:bg-white">
+    <Link to={href} className="native-touch-surface block rounded-[1rem] border border-white/65 bg-white/82 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:border-primary/30 hover:bg-white">
       <div className="flex items-start gap-3">
         <div className="rounded-lg bg-primary/10 p-2 text-primary">
           <Icon className="h-4 w-4" />
@@ -1121,7 +1224,7 @@ function RevenueFollowupCard({
   const toneClass = tone === "danger" ? "border-red-200 bg-red-50/80" : "border-amber-200 bg-amber-50/80";
 
   return (
-    <div className={`rounded-[1rem] border p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ${toneClass}`}>
+    <div className={`native-touch-surface rounded-[1rem] border p-4 shadow-[0_10px_24px_rgba(15,23,42,0.04)] ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useAction, useFindFirst } from "../hooks/useApi";
 import { api } from "../api";
 import { setCurrentBusinessId } from "../lib/auth";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
+import { AuthSupportLinks } from "@/components/auth/AuthSupportLinks";
 import {
   ArrowLeft,
   ArrowRight,
@@ -98,7 +99,7 @@ export default function OnboardingPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({ name: "", phone: "", email: "", address: "", city: "", state: "", zip: "" });
 
-  const [{ data: existingBusiness, fetching: businessLoading }] = useFindFirst(api.business, {
+  const [{ data: existingBusiness, fetching: businessLoading, error: businessError }, refetchBusiness] = useFindFirst(api.business, {
     select: { id: true, name: true, type: true, phone: true, email: true, address: true, city: true, state: true, zip: true, staffCount: true, operatingHours: true, onboardingComplete: true },
   } as any);
   const [{ fetching: creating, error }, createBusiness] = useAction(api.business.create);
@@ -187,20 +188,47 @@ export default function OnboardingPage() {
       await api.business.completeOnboarding(saved.id);
       setCurrentBusinessId(saved.id);
       toast.success("Workspace ready.");
-      window.location.replace("/signed-in");
+      navigate("/signed-in", { replace: true });
     } catch (submitError) {
       setValidationError(submitError instanceof Error ? submitError.message : "Could not finish setup.");
     }
   };
 
   if (businessLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#0f0f0f] px-4 text-sm text-[#9ca3af]">Loading your workspace setup...</div>;
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#0f0f0f] px-4 text-sm text-[#9ca3af]">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,#17191e_0%,#111318_100%)] px-6 py-7 text-center shadow-[0_26px_70px_rgba(0,0,0,0.30)]">
+          <p className="text-sm font-medium text-white">Loading your workspace setup…</p>
+          <p className="mt-2 text-sm text-[#9ca3af]">We&apos;re restoring your onboarding state so you can finish setup without losing progress.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (businessError) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#0f0f0f] px-4 py-8">
+        <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,#17191e_0%,#111318_100%)] px-6 py-7 text-center shadow-[0_26px_70px_rgba(0,0,0,0.30)]">
+          <p className="text-lg font-semibold text-white">We couldn&apos;t load your workspace setup.</p>
+          <p className="mt-2 text-sm leading-6 text-[#9ca3af]">{businessError.message || "The setup flow needs a fresh connection before we can continue."}</p>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Button type="button" onClick={() => void refetchBusiness()} className="h-11 rounded-lg bg-orange-500 px-6 font-semibold text-white hover:bg-orange-400">
+              Try again
+            </Button>
+            <Button asChild type="button" variant="outline" className="h-11 rounded-lg border-[#2a2a2a] bg-transparent px-6 text-zinc-300 hover:bg-[#1a1a1a] hover:text-white">
+              <Link to="/sign-in">Back to sign in</Link>
+            </Button>
+          </div>
+          <AuthSupportLinks tone="light" className="mt-5" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_20%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_18%),linear-gradient(180deg,#0b0d10_0%,#0f1115_55%,#11141a_100%)] text-white">
+    <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_20%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_18%),linear-gradient(180deg,#0b0d10_0%,#0f1115_55%,#11141a_100%)] text-white">
       <div className="border-b border-[#1f1f1f]">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:py-4">
           <StrataLogoLockup
             markClassName="h-8 w-8"
             wordmarkClassName="text-lg font-bold tracking-tight text-white"
@@ -420,8 +448,13 @@ export default function OnboardingPage() {
                   ) : null}
                 </div>
 
-                {validationError ? <p className="text-sm text-red-400">{validationError}</p> : null}
-                {error ? <p className="text-sm text-red-400">{error.message}</p> : null}
+                {validationError || error ? (
+                  <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-left">
+                    <p className="text-sm font-medium text-red-200">Setup couldn&apos;t be saved yet.</p>
+                    <p className="mt-1 text-sm text-red-200/95">{validationError ?? error?.message}</p>
+                    <p className="mt-2 text-xs text-red-100/70">Check the fields above and try again. If it keeps happening, support is linked below.</p>
+                  </div>
+                ) : null}
 
                 <div className="hidden gap-3 pt-2 sm:flex">
                   <Button type="button" variant="outline" onClick={() => setStep(1)} className="h-11 rounded-lg border-[#2a2a2a] px-6 text-zinc-300 hover:bg-[#1a1a1a] hover:text-white">
@@ -505,6 +538,11 @@ export default function OnboardingPage() {
             </div>
           </section>
         ) : null}
+
+        <div className="mt-10 px-3 text-center sm:px-0">
+          <p className="text-sm text-[#8b929f]">Privacy, terms, and support stay one tap away while you finish setup in the app.</p>
+          <AuthSupportLinks tone="light" className="mt-4" />
+        </div>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 border-t border-[#1f1f1f] bg-[#0f0f0f]/95 px-4 py-3 backdrop-blur sm:hidden" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>

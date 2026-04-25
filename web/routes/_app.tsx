@@ -39,7 +39,7 @@ import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CommandPaletteProvider, useCommandPalette } from "../components/shared/CommandPaletteContext";
 import { CommandPalette } from "../components/shared/CommandPalette";
@@ -66,6 +66,7 @@ import {
   hasFullBillingAccess,
   type BillingAccessState,
 } from "../lib/billingAccess";
+import { isNativeShell } from "../lib/mobileShell";
 import {
   canDismissBillingPrompt,
   getBillingPromptBody,
@@ -74,6 +75,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
+import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 
 type BillingStatus = {
   status: string | null;
@@ -282,15 +284,146 @@ function NotificationCenter({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     void onRefresh();
   }, [open, onRefresh]);
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 768px)");
+    const sync = () => setIsMobileViewport(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
+
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className={cn(
+        "relative rounded-full border-border/80 bg-background/85 shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+        compact ? "h-9 w-9" : "h-10 w-10"
+      )}
+      aria-label={counts.total > 0 ? `Open notifications (${counts.total} unread)` : "Open notifications"}
+    >
+      <Bell className={compact ? "h-4 w-4" : "h-4.5 w-4.5"} />
+      {counts.total > 0 ? (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -top-1 inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold text-white shadow-sm"
+        >
+          {counts.total > 9 ? "9+" : counts.total}
+        </span>
+      ) : null}
+    </Button>
+  );
+
+  const content = (
+    <>
+      <div className="border-b border-border/70 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Notifications</p>
+            <p className="text-xs text-muted-foreground">
+              {counts.total > 0 ? `${counts.total} unread.` : "Everything is caught up."}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs"
+            disabled={counts.total === 0}
+            onClick={() => void onMarkAllAsRead()}
+          >
+            <CheckCheck className="mr-1.5 h-3.5 w-3.5" />
+            Mark all read
+          </Button>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Badge variant="outline">{counts.total} total</Badge>
+          <Badge variant="outline">{counts.leads} leads</Badge>
+          <Badge variant="outline">{counts.calendar} calendar</Badge>
+        </div>
+      </div>
+      <div className="max-h-[24rem] overflow-y-auto px-3 py-3">
+        {loading && notifications.length === 0 ? (
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+            Loading notifications...
+          </div>
+        ) : notifications.length > 0 ? (
+          <div className="space-y-2">
+            {notifications.map((notification) => {
+              const href = getNotificationHref(notification);
+              const relativeTime = formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true });
+              return (
+                <div
+                  key={notification.id}
+                  className={cn(
+                    "rounded-xl border bg-background/95 px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors",
+                    notification.isRead
+                      ? "border-border/70"
+                      : "border-orange-200/70 bg-orange-50/35 ring-1 ring-inset ring-orange-100/70"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        void onOpenNotification(notification);
+                      }}
+                      disabled={!href}
+                      className={cn("min-w-0 flex-1 text-left", !href && "cursor-default")}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          {!notification.isRead ? <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" /> : null}
+                          <p className="truncate text-sm font-semibold text-foreground">{notification.title}</p>
+                        </div>
+                        <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          {relativeTime}
+                        </p>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{notification.message}</p>
+                    </button>
+                    {!notification.isRead ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 shrink-0 rounded-full px-2.5 text-[11px] font-semibold"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onMarkAsRead(notification);
+                        }}
+                      >
+                        Mark read
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-foreground">No notifications yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">New booking requests, leads, and appointment changes will land here.</p>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  if (isMobileViewport) {
+    return (
+      <>
         <Button
           type="button"
           variant="outline"
@@ -300,6 +433,7 @@ function NotificationCenter({
             compact ? "h-9 w-9" : "h-10 w-10"
           )}
           aria-label={counts.total > 0 ? `Open notifications (${counts.total} unread)` : "Open notifications"}
+          onClick={() => setOpen(true)}
         >
           <Bell className={compact ? "h-4 w-4" : "h-4.5 w-4.5"} />
           {counts.total > 0 ? (
@@ -311,92 +445,31 @@ function NotificationCenter({
             </span>
           ) : null}
         </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1rem))] rounded-2xl border border-border/80 p-0 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-        <div className="border-b border-border/70 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Notifications</p>
-              <p className="text-xs text-muted-foreground">
-                {counts.total > 0 ? `${counts.total} unread.` : "Everything is caught up."}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-xs"
-              disabled={counts.total === 0}
-              onClick={() => void onMarkAllAsRead()}
-            >
-              <CheckCheck className="mr-1.5 h-3.5 w-3.5" />
-              Mark all read
-            </Button>
-          </div>
-        </div>
-        <div className="max-h-[24rem] overflow-y-auto px-3 py-3">
-          {loading && notifications.length === 0 ? (
-            <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-              Loading notifications...
-            </div>
-          ) : notifications.length > 0 ? (
-            <div className="space-y-2">
-              {notifications.map((notification) => {
-                const href = getNotificationHref(notification);
-                const relativeTime = formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true });
-                return (
-                  <div
-                    key={notification.id}
-                    className={cn(
-                      "rounded-2xl border px-3 py-3 transition-colors",
-                      notification.isRead
-                        ? "border-border/70 bg-background"
-                        : "border-orange-200/80 bg-orange-50/70"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpen(false);
-                          void onOpenNotification(notification);
-                        }}
-                        disabled={!href}
-                        className={cn("min-w-0 flex-1 text-left", !href && "cursor-default")}
-                      >
-                        <div className="flex items-center gap-2">
-                          {!notification.isRead ? <span className="h-2 w-2 rounded-full bg-orange-500" /> : null}
-                          <p className="truncate text-sm font-semibold text-foreground">{notification.title}</p>
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{notification.message}</p>
-                        <p className="mt-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{relativeTime}</p>
-                      </button>
-                      {!notification.isRead ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 shrink-0 px-2 text-xs"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void onMarkAsRead(notification);
-                          }}
-                        >
-                          Read
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-foreground">No notifications yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">New booking requests, leads, and appointment changes will land here.</p>
-            </div>
-          )}
-        </div>
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetContent side="bottom" className="gap-0 px-0">
+            <SheetHeader className="border-b border-border/70 px-4 pb-4">
+              <SheetTitle>Notifications</SheetTitle>
+              <SheetDescription>
+                Lead alerts and schedule changes stay visible here even after the native badge nudges you back in.
+              </SheetDescription>
+            </SheetHeader>
+            {content}
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        align={compact ? "center" : "end"}
+        sideOffset={compact ? 8 : 6}
+        collisionPadding={8}
+        className="w-[min(24rem,calc(100vw-1rem))] rounded-2xl border border-border/80 p-0 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+      >
+        {content}
       </PopoverContent>
     </Popover>
   );
@@ -431,6 +504,7 @@ function BillingStatusBanner({
   }, [billingPrompt?.stage, billingPrompt?.visible, dismissedLocally]);
 
   if (!billingStatus) return null;
+  if (isNativeShell()) return null;
 
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
 
@@ -565,6 +639,8 @@ function BillingStatusBanner({
 
 const SidebarNav = memo(function SidebarNav({
   onItemClick,
+  onCloseMenu,
+  isMobile = false,
   enabledModules,
   permissions,
   onOpenCommandPalette,
@@ -578,6 +654,8 @@ const SidebarNav = memo(function SidebarNav({
   notificationCounts,
 }: {
   onItemClick?: () => void;
+  onCloseMenu?: () => void;
+  isMobile?: boolean;
   enabledModules: Set<string>;
   permissions: Set<string>;
   onOpenCommandPalette: () => void;
@@ -604,22 +682,50 @@ const SidebarNav = memo(function SidebarNav({
     .filter((section) => section.items.length > 0);
 
   return (
-    <div className="flex flex-col h-full bg-[hsl(220,20%,10%)]">
-      <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4">
-        <Link to={homeHref} className="flex items-center gap-2.5" onClick={onItemClick}>
-          <StrataLogoLockup
-            markClassName="h-9 w-9"
-            wordmarkClassName="text-[15px] font-semibold tracking-tight text-white"
-            sublabel="Shop OS"
-            sublabelClassName="text-white/38"
-          />
-        </Link>
+    <div className="flex min-h-full flex-col bg-[hsl(220,20%,10%)]">
+      <div
+        className={cn(
+          "border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4",
+          isMobile && "pt-[max(0.75rem,env(safe-area-inset-top))]"
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <Link
+            to={homeHref}
+            className="native-touch-surface flex min-w-0 items-center gap-2.5"
+            onClick={() => {
+              void triggerNativeHaptic("light");
+              onItemClick?.();
+            }}
+          >
+            <StrataLogoLockup
+              markClassName="h-9 w-9"
+              wordmarkClassName="text-[15px] font-semibold tracking-tight text-white"
+              sublabel="Shop OS"
+              sublabelClassName="text-white/38"
+            />
+          </Link>
+          {isMobile && onCloseMenu ? (
+            <button
+              type="button"
+              onClick={() => {
+                void triggerNativeHaptic("medium");
+                onCloseMenu();
+              }}
+              aria-label="Close navigation menu"
+              className="native-touch-surface inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/6 text-white/70 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+          ) : null}
+        </div>
         <div className="mt-4 grid gap-2">
           <Button
             type="button"
             variant="secondary"
-            className="w-full justify-start border border-white/8 bg-white/6 text-white hover:bg-white/10"
+            className="native-touch-surface w-full justify-start border border-white/8 bg-white/6 text-white hover:bg-white/10"
             onClick={() => {
+              void triggerNativeHaptic("light");
               onOpenCommandPalette();
               onItemClick?.();
             }}
@@ -627,8 +733,14 @@ const SidebarNav = memo(function SidebarNav({
             <SearchIcon className="h-4 w-4" />
             Search or jump
           </Button>
-          <Button asChild className="w-full justify-start">
-            <Link to="/appointments/new" onClick={onItemClick}>
+          <Button asChild className="native-touch-surface w-full justify-start">
+            <Link
+              to="/appointments/new"
+              onClick={() => {
+                void triggerNativeHaptic("light");
+                onItemClick?.();
+              }}
+            >
               <Plus className="h-4 w-4" />
               New appointment
             </Link>
@@ -656,11 +768,14 @@ const SidebarNav = memo(function SidebarNav({
                     to={href}
                     end={end}
                     reloadDocument={reloadDocument}
-                    onClick={onItemClick}
+                    onClick={() => {
+                      void triggerNativeHaptic("light");
+                      onItemClick?.();
+                    }}
                     aria-label={unreadCount > 0 ? `${label} (${unreadCount} unread)` : label}
                     className={({ isActive }) =>
                       cn(
-                        "group flex w-full items-center gap-3 rounded-[1rem] px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
+                        "native-touch-surface group flex w-full items-center gap-3 rounded-[1rem] px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
                         isActive
                           ? "bg-white/10 text-white shadow-[0_10px_28px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.06)]"
                           : "text-white/50 hover:bg-white/6 hover:text-white/85"
@@ -799,6 +914,7 @@ function AppLayoutInner({
   const [{ data: locations }] = useFindMany(api.location, {
     first: 100,
     sort: { name: "Ascending" },
+    suppressAuthInvalidation: true,
     pause: !businessId,
   } as any);
   const locationRecords = useMemo(
@@ -932,13 +1048,23 @@ function AppLayoutInner({
       </aside>
 
       {/* Mobile sidebar - Sheet that slides in from the left */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+      <Sheet
+        open={mobileOpen}
+        onOpenChange={(open) => {
+          setMobileOpen(open);
+          void triggerNativeHaptic(open ? "light" : "medium");
+        }}
+      >
         <SheetContent
           side="left"
-          className="p-0 bg-zinc-900 border-zinc-700 [&>button]:text-zinc-400 [&>button]:hover:text-white"
+          swipeToClose
+          onSwipeClose={() => setMobileOpen(false)}
+          className="gap-0 overflow-hidden border-white/10 bg-[hsl(220,20%,10%)] [&>button]:hidden"
         >
           <SidebarNav
             onItemClick={() => setMobileOpen(false)}
+            onCloseMenu={() => setMobileOpen(false)}
+            isMobile
             enabledModules={enabledModules}
             permissions={permissions}
             onOpenCommandPalette={() => setOpen(true)}
@@ -964,8 +1090,11 @@ function AppLayoutInner({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 rounded-full"
-              onClick={() => setMobileOpen(true)}
+              className="native-touch-surface h-8 w-8 shrink-0 rounded-full"
+              onClick={() => {
+                void triggerNativeHaptic("light");
+                setMobileOpen(true);
+              }}
               aria-label="Open navigation menu"
             >
               <Menu className="h-4.5 w-4.5" />
@@ -1116,7 +1245,7 @@ function AppLayoutInner({
 
         <BillingStatusBanner billingStatus={billingStatus} membershipRole={membershipRole} />
 
-        <main className="flex-1 overflow-x-hidden md:overflow-y-auto">
+        <main className="app-native-scroll flex-1 overflow-x-hidden md:overflow-y-auto">
           <AppErrorBoundary>
             <div className="w-full min-h-full">
               <Outlet context={outletCtx} />
@@ -1304,6 +1433,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         lastName: true,
         email: true,
         googleProfileId: true,
+        appleSubject: true,
+        appleEmailIsPrivateRelay: true,
         hasPassword: true,
         accountDeletionRequestedAt: true,
         accountDeletionRequestNote: true,
@@ -1598,4 +1729,3 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     </CommandPaletteProvider>
   );
 }
-

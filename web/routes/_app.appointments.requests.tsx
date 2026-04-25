@@ -16,8 +16,15 @@ import {
 } from "lucide-react";
 import { API_BASE } from "@/api";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
+import { NativeContactActionsCard } from "@/components/mobile/NativeContactActionsCard";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  selectorGroupClassName,
+  selectorPillButtonClassName,
+  selectorSelectContentClassName,
+  selectorSelectTriggerClassName,
+} from "@/components/shared/selectorStyles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -36,6 +43,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { clearAuthState, getAuthToken } from "@/lib/auth";
+import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
@@ -465,6 +473,24 @@ function buildBookingRequestAppointmentHref(record: OwnerBookingRequestRecord): 
   return `/appointments/new?${params.toString()}`;
 }
 
+function customerDisplayName(record: OwnerBookingRequestRecord): string {
+  return [record.customer.firstName, record.customer.lastName].filter(Boolean).join(" ") || "Customer";
+}
+
+function serviceAddressLabel(record: OwnerBookingRequestRecord): string {
+  return [record.serviceAddress, record.serviceCity, record.serviceState, record.serviceZip].filter(Boolean).join(", ");
+}
+
+function buildBookingRequestShareItems(record: OwnerBookingRequestRecord): string[] {
+  return [
+    `${customerDisplayName(record)} · ${record.serviceSummary || "Booking request"}`,
+    record.requestedTimingSummary ? `Requested timing: ${record.requestedTimingSummary}` : "",
+    record.vehicle.summary ? `Vehicle: ${record.vehicle.summary}` : "",
+    serviceAddressLabel(record) ? `Service address: ${serviceAddressLabel(record)}` : "",
+    record.portalUrl || record.confirmationUrl || record.publicResponseUrl,
+  ].filter(Boolean);
+}
+
 export default function AppointmentRequestsPage() {
   const outletContext = useOutletContext<AuthOutletContext>();
   if (!outletContext.permissions.has("appointments.read")) {
@@ -552,7 +578,7 @@ function AppointmentRequestsContent() {
     if (!selectedRequestId || !visibleRecords.some((record) => record.id === selectedRequestId)) {
       const next = new URLSearchParams(searchParams);
       next.set("request", visibleRecords[0].id);
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     }
   }, [searchParams, selectedRequestId, setSearchParams, visibleRecords]);
 
@@ -800,6 +826,12 @@ function AppointmentRequestsContent() {
   const canRespondWithOwnerAction =
     canManage && !!selectedRecord && !["confirmed", "declined", "expired"].includes(selectedRecord.status);
   const canProposeAlternates = canRespondWithOwnerAction && selectedRequestPolicy.allowAlternateSlots;
+  const selectedCustomerName = selectedRecord ? customerDisplayName(selectedRecord) : "";
+  const selectedServiceAddress = selectedRecord ? serviceAddressLabel(selectedRecord) : "";
+  const selectedShareItems = useMemo(
+    () => (selectedRecord ? buildBookingRequestShareItems(selectedRecord) : []),
+    [selectedRecord]
+  );
 
   return (
     <div className="page-content page-section max-w-7xl">
@@ -827,13 +859,13 @@ function AppointmentRequestsContent() {
         <MetricCard label="Urgent" value={String(requestMetrics.urgentCount)} detail="Requests older than one day without a final answer." />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <Card className="overflow-hidden py-0">
+      <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <Card className="native-panel-card overflow-hidden py-0 lg:sticky lg:top-24 lg:self-start">
           <CardHeader className="border-b border-slate-200/80 py-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Request inbox</CardTitle>
-                <CardDescription>Requested time is front and center so the team can act fast.</CardDescription>
+                <CardDescription>Review the queue like an operating inbox, with timing and customer context visible before you open the full thread.</CardDescription>
               </div>
               <Badge variant="outline" className="rounded-full px-3 py-1">
                 {records.length} total
@@ -846,18 +878,13 @@ function AppointmentRequestsContent() {
                 placeholder="Search customer, vehicle, service, or timing"
                 className="h-11 rounded-xl"
               />
-              <div className="flex flex-wrap gap-2">
+              <div className={selectorGroupClassName()}>
                 {STATUS_FILTERS.map((filter) => (
                   <button
                     key={filter.id}
                     type="button"
                     onClick={() => setStatusFilter(filter.id)}
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                      statusFilter === filter.id
-                        ? "border-orange-300 bg-orange-50 text-orange-900"
-                        : "border-slate-200 bg-white text-slate-600 hover:text-slate-900"
-                    )}
+                    className={selectorPillButtonClassName(statusFilter === filter.id, "native-touch-surface")}
                   >
                     {filter.label}
                   </button>
@@ -868,7 +895,7 @@ function AppointmentRequestsContent() {
               </p>
             </div>
           </CardHeader>
-          <CardContent className="px-0">
+          <CardContent className="px-0 lg:max-h-[calc(100vh-16rem)] lg:overflow-y-auto">
             {listLoading ? (
               <div className="space-y-3 px-5 py-5 sm:px-6">
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -912,10 +939,11 @@ function AppointmentRequestsContent() {
                       onClick={() => {
                         const next = new URLSearchParams(searchParams);
                         next.set("request", record.id);
-                        setSearchParams(next);
+                        setSearchParams(next, { preventScrollReset: true });
+                        void triggerNativeHaptic(active ? "light" : "medium");
                       }}
                       className={cn(
-                        "flex w-full flex-col gap-3 px-5 py-4 text-left transition-colors sm:px-6",
+                        "native-touch-surface touch-manipulation flex w-full flex-col gap-3 px-5 py-4 text-left transition-colors sm:px-6",
                         active ? "bg-orange-50/60" : "bg-white hover:bg-slate-50/80"
                       )}
                     >
@@ -950,9 +978,9 @@ function AppointmentRequestsContent() {
             )}
           </CardContent>
         </Card>
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {detailLoading && !selectedRecord ? (
-            <Card>
+            <Card className="native-panel-card">
               <CardHeader>
                 <CardTitle>Loading request</CardTitle>
                 <CardDescription>Pulling together service, vehicle, and requested timing.</CardDescription>
@@ -970,7 +998,7 @@ function AppointmentRequestsContent() {
               }
             />
           ) : selectedRecord ? (
-            <Card>
+            <Card className="native-panel-card">
               <CardHeader className="border-b border-slate-200/80">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-3">
@@ -995,7 +1023,7 @@ function AppointmentRequestsContent() {
                   </div>
                   <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto lg:flex-col">
                     {selectedRecord.appointmentId ? (
-                      <Button asChild>
+                      <Button asChild className="native-touch-surface">
                         <Link to={`/appointments/${selectedRecord.appointmentId}`}>
                           <CheckCircle2 className="mr-2 h-4 w-4" />
                           Open appointment
@@ -1004,27 +1032,27 @@ function AppointmentRequestsContent() {
                     ) : null}
                     {canRespondWithOwnerAction ? (
                       <>
-                        <Button variant="outline" asChild>
+                        <Button variant="outline" asChild className="native-touch-surface">
                           <Link to={buildBookingRequestAppointmentHref(selectedRecord)}>
                             <CalendarClock className="mr-2 h-4 w-4" />
                             Create appointment
                           </Link>
                         </Button>
-                        <Button onClick={() => setApproveDialog({ open: true, message: "" })} disabled={!canApproveRequestedSlot}>
+                        <Button className="native-touch-surface" onClick={() => setApproveDialog({ open: true, message: "" })} disabled={!canApproveRequestedSlot}>
                           <ShieldCheck className="mr-2 h-4 w-4" />
                           Approve requested slot
                         </Button>
                         {canProposeAlternates ? (
-                          <Button variant="outline" onClick={openAlternateDialog}>
+                          <Button variant="outline" className="native-touch-surface" onClick={openAlternateDialog}>
                             <Send className="mr-2 h-4 w-4" />
                             Propose alternate times
                           </Button>
                         ) : null}
-                        <Button variant="outline" onClick={openAskNewTimeDialog}>
+                        <Button variant="outline" className="native-touch-surface" onClick={openAskNewTimeDialog}>
                           <MessageSquareMore className="mr-2 h-4 w-4" />
                           Ask for another day
                         </Button>
-                        <Button variant="outline" onClick={() => setDeclineDialog({ open: true, message: "" })}>
+                        <Button variant="outline" className="native-touch-surface" onClick={() => setDeclineDialog({ open: true, message: "" })}>
                           <XCircle className="mr-2 h-4 w-4" />
                           Decline request
                         </Button>
@@ -1034,8 +1062,8 @@ function AppointmentRequestsContent() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6 py-6">
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
-                  <div className="rounded-[1.4rem] border border-orange-200/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.14),transparent_36%),linear-gradient(180deg,#fff7ed_0%,#ffffff_100%)] p-4 sm:p-5">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.02fr)_minmax(320px,0.98fr)]">
+                  <div className="native-panel-card rounded-[1.4rem] border border-orange-200/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.14),transparent_36%),linear-gradient(180deg,#fff7ed_0%,#ffffff_100%)] p-4 sm:p-5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Requested date and time</p>
                     <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
                       {selectedRecord.requestedTimingSummary || "Customer asked for a follow-up"}
@@ -1061,25 +1089,44 @@ function AppointmentRequestsContent() {
                       />
                     </div>
                   </div>
-                  <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Request health</p>
-                    <div className="mt-3 space-y-3">
-                      <DetailRow label="Created" value={formatDateTime(selectedRecord.submittedAt, selectedRecord.customerTimezone)} />
-                      <DetailRow label="Owner response" value={formatDateTime(selectedRecord.ownerRespondedAt, selectedRecord.customerTimezone)} />
-                      <DetailRow label="Customer response" value={formatDateTime(selectedRecord.customerRespondedAt, selectedRecord.customerTimezone)} />
-                      <DetailRow label="Offer expires" value={formatDateTime(selectedRecord.expiresAt, selectedRecord.customerTimezone)} />
+                  <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+                    <div className="native-panel-card rounded-[1.4rem] border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Request health</p>
+                      <div className="mt-3 space-y-3">
+                        <DetailRow label="Created" value={formatDateTime(selectedRecord.submittedAt, selectedRecord.customerTimezone)} />
+                        <DetailRow label="Owner response" value={formatDateTime(selectedRecord.ownerRespondedAt, selectedRecord.customerTimezone)} />
+                        <DetailRow label="Customer response" value={formatDateTime(selectedRecord.customerRespondedAt, selectedRecord.customerTimezone)} />
+                        <DetailRow label="Offer expires" value={formatDateTime(selectedRecord.expiresAt, selectedRecord.customerTimezone)} />
+                      </div>
                     </div>
+                    <NativeContactActionsCard
+                      title="Customer actions"
+                      description="Call, text, map the stop, share the live request, or schedule a follow-up reminder without leaving the queue."
+                      contactName={selectedCustomerName}
+                      phone={selectedRecord.customer.phone}
+                      email={selectedRecord.customer.email}
+                      address={selectedServiceAddress}
+                      reminderIdentifier={`booking-request-${selectedRecord.id}`}
+                      reminderTitle={selectedCustomerName ? `Follow up with ${selectedCustomerName}` : "Follow up on booking request"}
+                      reminderBody={selectedRecord.requestedTimingSummary || selectedRecord.serviceSummary || undefined}
+                      reminderSuggestedAt={selectedRecord.expiresAt ?? selectedRecord.requestedTimeStart}
+                      reminderButtonLabel="Add follow-up reminder"
+                      shareItems={selectedShareItems}
+                      shareSubject={selectedRecord.serviceSummary || "Booking request"}
+                      shareTitle="Share booking request"
+                      shareButtonLabel="Share request"
+                    />
                   </div>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <Card className="gap-4 border-slate-200/80 bg-white py-0">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Card className="native-panel-card gap-4 border-slate-200/80 bg-white py-0">
                     <CardHeader className="border-b border-slate-200/80 py-5">
                       <CardTitle>Customer and vehicle</CardTitle>
                       <CardDescription>The team should never have to hunt for who or what this request is for.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3 py-5">
-                      <DetailRow label="Customer" value={[selectedRecord.customer.firstName, selectedRecord.customer.lastName].filter(Boolean).join(" ") || "Unknown customer"} />
+                      <DetailRow label="Customer" value={selectedCustomerName || "Unknown customer"} />
                       <DetailRow label="Email" value={selectedRecord.customer.email} />
                       <DetailRow label="Phone" value={selectedRecord.customer.phone} />
                       <DetailRow label="Vehicle" value={selectedRecord.vehicle.summary || "Vehicle not supplied"} />
@@ -1087,13 +1134,13 @@ function AppointmentRequestsContent() {
                       {selectedRecord.serviceMode === "mobile" ? (
                         <DetailRow
                           label="Service address"
-                          value={[selectedRecord.serviceAddress, selectedRecord.serviceCity, selectedRecord.serviceState, selectedRecord.serviceZip].filter(Boolean).join(", ") || "No mobile-service address provided"}
+                          value={selectedServiceAddress || "No mobile-service address provided"}
                         />
                       ) : null}
                     </CardContent>
                   </Card>
 
-                  <Card className="gap-4 border-slate-200/80 bg-white py-0">
+                  <Card className="native-panel-card gap-4 border-slate-200/80 bg-white py-0">
                     <CardHeader className="border-b border-slate-200/80 py-5">
                       <CardTitle>Request notes</CardTitle>
                       <CardDescription>Everything the customer or team already shared stays attached to the request.</CardDescription>
@@ -1122,7 +1169,7 @@ function AppointmentRequestsContent() {
                     </CardContent>
                   </Card>
                 </div>
-                <Card className="gap-4 border-slate-200/80 bg-white py-0">
+                <Card className="native-panel-card gap-4 border-slate-200/80 bg-white py-0">
                   <CardHeader className="border-b border-slate-200/80 py-5">
                     <CardTitle>Availability hints</CardTitle>
                     <CardDescription>Quick options for the requested day so the owner can approve or counter without leaving the queue.</CardDescription>
@@ -1141,9 +1188,9 @@ function AppointmentRequestsContent() {
                           <span>{formatDateLabel(availabilityHints.date, availabilityHints.timezone)} has {availabilityHints.slots.length} bookable options.</span>
                           <span>Duration {availabilityHints.durationMinutes} minutes</span>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           {availabilityHints.slots.slice(0, 9).map((slot) => (
-                            <div key={slot.startTime} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <div key={slot.startTime} className="native-touch-surface rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                               <p className="text-sm font-medium text-slate-950">{slot.label}</p>
                               <p className="mt-1 text-xs text-slate-500">
                                 {formatDateTime(slot.startTime, availabilityHints.timezone, { hour: "numeric", minute: "2-digit" })} to {formatDateTime(slot.endTime, availabilityHints.timezone, { hour: "numeric", minute: "2-digit" })}
@@ -1161,14 +1208,14 @@ function AppointmentRequestsContent() {
                 </Card>
 
                 {selectedRecord.alternateSlotOptions.length > 0 ? (
-                  <Card className="gap-4 border-slate-200/80 bg-white py-0">
+                  <Card className="native-panel-card gap-4 border-slate-200/80 bg-white py-0">
                     <CardHeader className="border-b border-slate-200/80 py-5">
                       <CardTitle>Current alternate options</CardTitle>
                       <CardDescription>These are the live alternate times currently attached to the request.</CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-3 py-5 sm:grid-cols-2">
                       {selectedRecord.alternateSlotOptions.map((option) => (
-                        <div key={option.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div key={option.id} className="native-touch-surface rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                           <p className="text-sm font-medium text-slate-950">{option.label}</p>
                           <p className="mt-1 text-xs text-slate-500">Expires {formatDateTime(option.expiresAt, selectedRecord.customerTimezone)}</p>
                         </div>
@@ -1253,10 +1300,10 @@ function AppointmentRequestsContent() {
               <div className="space-y-2">
                 <Label>Offer expires</Label>
                 <Select value={alternateDialog.expiresInHours} onValueChange={(value) => setAlternateDialog((current) => ({ ...current, expiresInHours: value }))}>
-                  <SelectTrigger className="rounded-xl">
+                  <SelectTrigger className={selectorSelectTriggerClassName("w-full")}>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={selectorSelectContentClassName()}>
                     {PROPOSE_EXPIRY_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                     ))}
@@ -1358,10 +1405,10 @@ function AppointmentRequestsContent() {
             <div className="space-y-2">
               <Label>Response window</Label>
               <Select value={askNewTimeDialog.expiresInHours} onValueChange={(value) => setAskNewTimeDialog((current) => ({ ...current, expiresInHours: value }))}>
-                <SelectTrigger className="rounded-xl">
+                <SelectTrigger className={selectorSelectTriggerClassName("w-full")}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={selectorSelectContentClassName()}>
                   {ASK_NEW_TIME_EXPIRY_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
@@ -1410,7 +1457,7 @@ function AppointmentRequestsContent() {
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-[1.45rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+    <div className="native-panel-card rounded-[1.45rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{detail}</p>

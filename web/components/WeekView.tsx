@@ -108,6 +108,8 @@ export function WeekView({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
+      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain">
+        <div className="flex h-full min-w-[46rem] flex-col md:min-w-0">
       <div className="sticky top-0 z-10 grid grid-cols-[68px_repeat(7,minmax(0,1fr))] border-b border-border/70 bg-background/95 backdrop-blur-sm">
         <div className="border-r border-border/60 px-3 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Hours</p>
@@ -323,6 +325,7 @@ export function WeekView({
                     key={apt.id}
                     apt={apt}
                     dayContext={day}
+                    layout="week"
                     onClick={(event) => {
                       event.stopPropagation();
                       onApptClick(apt);
@@ -334,6 +337,8 @@ export function WeekView({
               </div>
             );
           })}
+        </div>
+      </div>
         </div>
       </div>
     </div>

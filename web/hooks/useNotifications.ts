@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/api";
+import { notifyNativeUnreadNotification, syncNativeBadgeCount } from "@/lib/nativeFieldOps";
 
 export type AppNotificationRecord = {
   id: string;
@@ -27,6 +28,30 @@ const EMPTY_COUNTS: AppNotificationCounts = {
 };
 const NOTIFICATION_RETRY_BACKOFF_MS = 60_000;
 const NOTIFICATION_SUSPEND_STORAGE_KEY = "strata.notifications.suspendedUntil";
+const NATIVE_NOTIFICATION_SEEN_IDS_KEY = "strata.notifications.nativeSeenIds";
+
+function readNativeNotificationSeenIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const rawValue = window.localStorage.getItem(NATIVE_NOTIFICATION_SEEN_IDS_KEY);
+    if (!rawValue) return new Set();
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeNativeNotificationSeenIds(ids: Set<string>): void {
+  if (typeof window === "undefined") return;
+  const payload = Array.from(ids).slice(-200);
+  try {
+    window.localStorage.setItem(NATIVE_NOTIFICATION_SEEN_IDS_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore local storage failures.
+  }
+}
 
 function readNotificationsSuspendedUntil(): number {
   if (typeof window === "undefined") return 0;
@@ -103,6 +128,8 @@ export function useNotifications(enabled: boolean) {
   const refreshInFlight = useRef(false);
   const refreshAbortRef = useRef<AbortController | null>(null);
   const suspendedUntilRef = useRef(readNotificationsSuspendedUntil());
+  const nativeSeenIdsRef = useRef<Set<string>>(readNativeNotificationSeenIds());
+  const hasHydratedUnreadRef = useRef(false);
 
   const notificationsTemporarilyUnavailable = useCallback(() => {
     suspendedUntilRef.current = Math.max(suspendedUntilRef.current, readNotificationsSuspendedUntil());
@@ -227,10 +254,12 @@ export function useNotifications(enabled: boolean) {
       abortRefresh();
       suspendedUntilRef.current = 0;
       writeNotificationsSuspendedUntil(0);
+      hasHydratedUnreadRef.current = false;
       notificationsRef.current = [];
       countsRef.current = EMPTY_COUNTS;
       setNotifications([]);
       setCounts(EMPTY_COUNTS);
+      void syncNativeBadgeCount(0);
       return;
     }
 
@@ -258,6 +287,39 @@ export function useNotifications(enabled: boolean) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [abortRefresh, enabled, refresh]);
+
+  useEffect(() => {
+    void syncNativeBadgeCount(counts.total);
+  }, [counts.total]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const unreadNotifications = notifications.filter((notification) => !notification.isRead);
+
+    if (!hasHydratedUnreadRef.current) {
+      unreadNotifications.forEach((notification) => nativeSeenIdsRef.current.add(notification.id));
+      writeNativeNotificationSeenIds(nativeSeenIdsRef.current);
+      hasHydratedUnreadRef.current = true;
+      return;
+    }
+
+    const nextNotifications = unreadNotifications.filter((notification) => !nativeSeenIdsRef.current.has(notification.id));
+    if (nextNotifications.length === 0) return;
+
+    nextNotifications.forEach((notification) => nativeSeenIdsRef.current.add(notification.id));
+    writeNativeNotificationSeenIds(nativeSeenIdsRef.current);
+
+    void Promise.all(
+      nextNotifications.map((notification, index) =>
+        notifyNativeUnreadNotification({
+          identifier: `strata-notification-${notification.id}`,
+          title: notification.title,
+          body: notification.message,
+          badgeCount: Math.max(1, counts.total + index),
+        })
+      )
+    );
+  }, [counts.total, enabled, notifications]);
 
   return {
     notifications,

@@ -16,6 +16,7 @@ import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
+import { selectorTabsListClassName, selectorTabsTriggerClassName } from "../components/shared/selectorStyles";
 import { formatFreshness, formatShortDate, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
 import { getInvoiceCollectionSummary } from "../lib/paymentStates";
 
@@ -286,7 +287,7 @@ export default function InvoicesIndexPage() {
             debouncedSearch ? `Search: ${debouncedSearch}` : null,
           ]
             .filter(Boolean)
-            .join(" • ") || null
+            .join(" - ") || null
         }
         onClear={() => {
           setSearch("");
@@ -335,16 +336,16 @@ export default function InvoicesIndexPage() {
         <CardContent className="p-0">
           <div className="px-4 pt-4">
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FilterTab)}>
-              <TabsList className="mb-4 flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-8 xl:w-full">
+              <TabsList className={selectorTabsListClassName("mb-4 w-full")}>
                 {FILTER_TABS.map((tab) => (
                   <TabsTrigger
                     key={tab}
                     value={tab}
-                    className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 capitalize data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5"
+                    className={selectorTabsTriggerClassName("capitalize")}
                   >
                     {tab}
                     {tab === "overdue" && overdueInvoices.length > 0 ? (
-                      <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-100 px-1.5 text-[10px] font-medium leading-none text-red-700">
                         {overdueInvoices.length}
                       </span>
                     ) : null}
@@ -551,12 +552,12 @@ export default function InvoicesIndexPage() {
                                   <div className="font-medium">{formatCurrency(primaryAmount)}</div>
                                   <div className="text-xs text-muted-foreground">
                                     Total {formatCurrency(invoice.total)}
-                                    {hasPaymentHistory ? ` • Paid ${formatCurrency(paid)}` : ""}
+                                    {hasPaymentHistory ? ` - Paid ${formatCurrency(paid)}` : ""}
                                   </div>
                                   <div className="text-xs text-muted-foreground">{collectionSummary.detail}</div>
                                   {lastSent || lastPaid ? (
                                     <div className="text-xs text-muted-foreground">
-                                      {[lastSent, lastPaid].filter(Boolean).join(" • ")}
+                                      {[lastSent, lastPaid].filter(Boolean).join(" - ")}
                                     </div>
                                   ) : null}
                                 </div>
@@ -725,4 +726,3 @@ function InvoiceMobileCard({
     </div>
   );
 }
-

@@ -91,6 +91,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
+import { isNativeShell } from "../lib/mobileShell";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
@@ -991,6 +992,7 @@ function BillingTab({
   const canManageStripeConnect = membershipRole === "owner" || membershipRole === "admin";
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
   const billingPrompt = billingStatus?.billingPrompt ?? null;
+  const nativeShellSession = isNativeShell();
   const promptBody =
     billingPrompt?.stage && billingPrompt.stage !== "none"
       ? getBillingPromptBody({
@@ -1008,10 +1010,12 @@ function BillingTab({
             <div className="rounded-md bg-primary/10 p-2">
               <CreditCard className="h-5 w-5 text-primary" />
             </div>
-            <CardTitle>Plan &amp; Billing</CardTitle>
+            <CardTitle>{nativeShellSession ? "Workspace billing" : "Plan &amp; Billing"}</CardTitle>
           </div>
           <CardDescription>
-            Strata is $29/month. First month free. Manage your subscription and payment method below.
+            {nativeShellSession
+              ? "Review workspace billing status here. Customer payment tools stay available separately."
+              : "Strata is $29/month. First month free. Manage your subscription and payment method below."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1033,7 +1037,7 @@ function BillingTab({
             </div>
           ) : null}
 
-          {billingStatus && billingPrompt?.stage && billingPrompt.stage !== "none" ? (
+          {billingStatus && !nativeShellSession && billingPrompt?.stage && billingPrompt.stage !== "none" ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-medium text-amber-950">
                 {getBillingPromptHeadline(billingPrompt.stage)}
@@ -1060,78 +1064,104 @@ function BillingTab({
             </div>
           ) : null}
 
-          <div>
-            <p className="mb-3 text-sm font-medium">Everything included:</p>
-            <ul className="space-y-2">
-              {BILLING_FEATURES.map((feature) => (
-                <li key={feature} className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {!nativeShellSession ? (
+            <>
+              <div>
+                <p className="mb-3 text-sm font-medium">Everything included:</p>
+                <ul className="space-y-2">
+                  {BILLING_FEATURES.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-          <Separator />
+              <Separator />
+            </>
+          ) : null}
 
           {billingStatus?.accessState === "pending_setup_failure" ? (
             <div className="space-y-3">
               <p className="text-sm text-amber-700 dark:text-amber-300">
                 {billingStatus.billingSetupError?.trim() || "Strata could not finish Stripe setup automatically yet."}
               </p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button onClick={handleRetryBillingSetup} disabled={billingRetryLoading || !canManageBilling}>
-                  {billingRetryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                  Retry billing setup
-                </Button>
-                <Button asChild variant="outline">
-                  <Link to="/subscribe">Open billing recovery</Link>
-                </Button>
-              </div>
+              {nativeShellSession ? (
+                <p className="text-sm text-muted-foreground">
+                  Contact support if workspace billing still needs attention after this review build.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button onClick={handleRetryBillingSetup} disabled={billingRetryLoading || !canManageBilling}>
+                    {billingRetryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Retry billing setup
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to="/subscribe">Open billing recovery</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           ) : isActive ? (
             <div className="space-y-3">
               {billingStatus?.accessState === "active_trial" ? (
                 <p className="text-sm text-muted-foreground">
-                  {billingStatus.billingHasPaymentMethod
-                    ? "A payment method is already saved. Your trial stays active until the paid plan begins automatically."
-                    : "Your workspace is fully usable now. Add a payment method whenever you're ready so the trial can roll into a paid plan smoothly."}
+                  {nativeShellSession
+                    ? "Workspace access is active in the mobile app."
+                    : billingStatus.billingHasPaymentMethod
+                      ? "A payment method is already saved. Your trial stays active until the paid plan begins automatically."
+                      : "Your workspace is fully usable now. Add a payment method whenever you're ready so the trial can roll into a paid plan smoothly."}
                 </p>
               ) : null}
-              <Button
-                onClick={
-                  billingPrompt?.stage &&
-                  billingPrompt.stage !== "none" &&
-                  billingStatus.accessState === "active_trial"
-                    ? () => setBillingPromptOpen(true)
-                    : handleManageSubscription
-                }
-                disabled={billingPortalLoading || !canManageBilling}
-              >
-                {billingPortalLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                )}
-                {billingStatus?.accessState === "active_trial"
-                  ? billingStatus.billingHasPaymentMethod
-                    ? "Manage billing"
-                    : "Add payment method"
-                  : billingStatus?.accessState === "canceled"
-                    ? "Reactivate subscription"
-                  : "Manage billing"}
-              </Button>
+              {nativeShellSession ? (
+                <p className="text-sm text-muted-foreground">
+                  Billing management is intentionally kept out of the in-app review path.
+                </p>
+              ) : (
+                <Button
+                  onClick={
+                    billingPrompt?.stage &&
+                    billingPrompt.stage !== "none" &&
+                    billingStatus.accessState === "active_trial"
+                      ? () => setBillingPromptOpen(true)
+                      : handleManageSubscription
+                  }
+                  disabled={billingPortalLoading || !canManageBilling}
+                >
+                  {billingPortalLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                  )}
+                  {billingStatus?.accessState === "active_trial"
+                    ? billingStatus.billingHasPaymentMethod
+                      ? "Manage billing"
+                      : "Add payment method"
+                    : billingStatus?.accessState === "canceled"
+                      ? "Reactivate subscription"
+                    : "Manage billing"}
+                </Button>
+              )}
             </div>
           ) : billingStatus !== null ? (
             <div className="space-y-2">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                {billingStatus.accessState === "paused_missing_payment_method"
-                  ? "The trial ended without a saved payment method. Add one to resume full access."
-                  : "Billing is inactive for this workspace. Your data is saved and ready to resume."}
+                {nativeShellSession
+                  ? "Workspace billing needs attention."
+                  : billingStatus.accessState === "paused_missing_payment_method"
+                    ? "The trial ended without a saved payment method. Add one to resume full access."
+                    : "Billing is inactive for this workspace. Your data is saved and ready to resume."}
               </p>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/subscribe">Open billing recovery</Link>
-              </Button>
+              {nativeShellSession ? (
+                <p className="text-sm text-muted-foreground">
+                  Contact support if the workspace still needs billing help outside the review flow.
+                </p>
+              ) : (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/subscribe">Open billing recovery</Link>
+                </Button>
+              )}
             </div>
           ) : null}
 
@@ -1143,32 +1173,34 @@ function BillingTab({
         </CardContent>
       </Card>
 
-      <BillingPromptDialog
-        open={billingPromptOpen}
-        onOpenChange={setBillingPromptOpen}
-        stage={billingPrompt?.stage ?? "none"}
-        body={promptBody}
-        canManageBilling={canManageBilling}
-        loading={billingPortalLoading}
-        onContinue={() => {
-          const promptStage = billingPrompt?.stage;
-          if (!promptStage || promptStage === "none") return;
-          void (async () => {
-            setBillingPortalLoading(true);
-            try {
-              const result = await api.billing.createPortalSessionForPrompt({
-                promptStage,
-                entryPoint: "settings",
-              });
-              if (result?.url) window.location.href = result.url;
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Could not open billing portal.");
-            } finally {
-              setBillingPortalLoading(false);
-            }
-          })();
-        }}
-      />
+      {nativeShellSession ? null : (
+        <BillingPromptDialog
+          open={billingPromptOpen}
+          onOpenChange={setBillingPromptOpen}
+          stage={billingPrompt?.stage ?? "none"}
+          body={promptBody}
+          canManageBilling={canManageBilling}
+          loading={billingPortalLoading}
+          onContinue={() => {
+            const promptStage = billingPrompt?.stage;
+            if (!promptStage || promptStage === "none") return;
+            void (async () => {
+              setBillingPortalLoading(true);
+              try {
+                const result = await api.billing.createPortalSessionForPrompt({
+                  promptStage,
+                  entryPoint: "settings",
+                });
+                if (result?.url) window.location.href = result.url;
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not open billing portal.");
+              } finally {
+                setBillingPortalLoading(false);
+              }
+            })();
+          }}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -2562,7 +2594,7 @@ export default function SettingsPage() {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-6 sm:overflow-visible">
+          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-7 sm:overflow-visible">
             <TabsTrigger
               value="profile"
               className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
@@ -2599,7 +2631,39 @@ export default function SettingsPage() {
             >
               Automations
             </TabsTrigger>
+            <TabsTrigger
+              value="account"
+              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
+            >
+              Account
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="account" className="space-y-6">
+            <Card className="border-destructive/20 bg-destructive/[0.03]">
+              <CardHeader>
+                <CardTitle>Account &amp; deletion</CardTitle>
+                <CardDescription>
+                  Manage your personal login methods, privacy details, and permanent account deletion from one clear place.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+                  Deleting your account permanently removes sign-in access, linked Apple or Google identities, notifications,
+                  and workspace memberships. If legally required billing or tax history must remain, Strata keeps only the
+                  minimum retained records in anonymized form.
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button asChild>
+                    <Link to="/profile">Open account settings</Link>
+                  </Button>
+                  <Button asChild variant="destructive">
+                    <Link to="/profile#delete-account">Delete account</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="profile" className="space-y-6">
             <Card>
@@ -3357,21 +3421,25 @@ export default function SettingsPage() {
                     <div className="rounded-md bg-amber-500/10 p-2">
                       <CreditCard className="h-5 w-5 text-amber-700" />
                     </div>
-                    <CardTitle>Billing access required</CardTitle>
+                  <CardTitle>Billing access required</CardTitle>
                   </div>
                   <CardDescription>
-                    Integrations stay read-protected until billing is active again. Open Billing to restore full workspace access.
+                    {isNativeShell()
+                      ? "Integrations stay read-protected until workspace billing is healthy again."
+                      : "Integrations stay read-protected until billing is active again. Open Billing to restore full workspace access."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 sm:flex-row">
                   <Button asChild>
                     <Link to="/settings?tab=billing">Open billing</Link>
                   </Button>
-                  <Button asChild variant="outline">
-                    <Link to="/subscribe">
-                      {billingStatus?.accessState === "canceled" ? "Reactivate subscription" : "Open recovery"}
-                    </Link>
-                  </Button>
+                  {isNativeShell() ? null : (
+                    <Button asChild variant="outline">
+                      <Link to="/subscribe">
+                        {billingStatus?.accessState === "canceled" ? "Reactivate subscription" : "Open recovery"}
+                      </Link>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : null}

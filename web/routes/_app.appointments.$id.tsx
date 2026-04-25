@@ -1,7 +1,7 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useCallback, useMemo } from "react";
 import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { toast } from "sonner";
 import type { AuthOutletContext } from "./_app";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +49,9 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
+import { NativeContactActionsCard } from "@/components/mobile/NativeContactActionsCard";
+import { AppointmentQuickActionsCard, type AppointmentQuickAction } from "@/components/mobile/AppointmentQuickActionsCard";
+import { PhotoIntakeCard } from "@/components/mobile/PhotoIntakeCard";
 import {
   buildQuarterHourOptions,
   FormDatePicker,
@@ -56,6 +59,16 @@ import {
   toDateInputValue,
 } from "../components/appointments/SchedulingControls";
 import { getIntakePreset } from "../lib/intakePresets";
+import {
+  flushPendingAppointmentMutations,
+  getPendingAppointmentOverlay,
+  listPendingAppointmentMutations,
+  queuePendingAppointmentMutation,
+  readCachedAppointmentDetail,
+  type AppointmentDetailCachePayload,
+  writeCachedAppointmentDetail,
+} from "@/lib/mobileOffline";
+import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 import {
   ClientCard,
   VehicleCard,
@@ -207,6 +220,13 @@ function isOlderThanDays(value: string | Date | null | undefined, days: number):
   const parsed = safeDate(value);
   if (!parsed) return false;
   return Date.now() - parsed.getTime() >= days * 24 * 60 * 60 * 1000;
+}
+
+function isTransientAppointmentConnectionError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 0 || error.code === "REQUEST_ABORTED";
+  }
+  return error instanceof Error && /network|offline|fetch|load failed|abort/i.test(error.message);
 }
 
 type AppointmentDetailRecord = {
@@ -543,7 +563,7 @@ export default function AppointmentDetail() {
     return () => media.removeEventListener?.("change", sync);
   }, []);
 
-  const [{ data: appointment, fetching, error }, refetchAppointment] = useFindOne(
+  const [{ data: appointmentData, fetching, error }, refetchAppointment] = useFindOne(
     api.appointment,
     id!,
     {
@@ -611,7 +631,7 @@ export default function AppointmentDetail() {
     }
   );
 
-  const [{ data: appointmentServices }] = useFindMany(api.appointmentService, {
+  const [{ data: appointmentServicesData }] = useFindMany(api.appointmentService, {
     filter: { appointmentId: { equals: id } },
     first: 50,
     live: true,
@@ -629,7 +649,7 @@ export default function AppointmentDetail() {
     },
   });
 
-  const [{ data: invoice, fetching: invoiceFetching }] = useFindFirst(api.invoice, {
+  const [{ data: invoiceData, fetching: invoiceFetching }] = useFindFirst(api.invoice, {
     live: true,
     filter: { appointmentId: { equals: id } },
     select: {
@@ -641,7 +661,7 @@ export default function AppointmentDetail() {
       lastPaidAt: true,
     },
   });
-  const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
+  const [{ data: activityLogsData, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
     entityType: "appointment",
     entityId: id ?? "",
     first: 25,
@@ -649,7 +669,7 @@ export default function AppointmentDetail() {
     pause: !id,
   } as any);
 
-  const [{ data: quote, fetching: quoteFetching }] = useFindFirst(api.quote, {
+  const [{ data: quoteData, fetching: quoteFetching }] = useFindFirst(api.quote, {
     live: true,
     filter: { appointmentId: { equals: id } },
     select: {
@@ -662,17 +682,17 @@ export default function AppointmentDetail() {
   });
 
   const [{ data: staffForEdit }] = useFindMany(api.staff, {
-    filter: { businessId: { equals: appointment?.business?.id } },
+    filter: { businessId: { equals: appointmentData?.business?.id } },
     select: { id: true, firstName: true, lastName: true },
     first: 50,
-    pause: !appointment?.business?.id,
+    pause: !appointmentData?.business?.id,
   } as any);
   const [{ data: clientsForEdit, fetching: clientsForEditFetching }] = useFindMany(api.client, {
-    filter: { businessId: { equals: appointment?.business?.id } },
+    filter: { businessId: { equals: appointmentData?.business?.id } },
     select: { id: true, firstName: true, lastName: true, phone: true, email: true },
     sort: { firstName: "Ascending" },
     first: 200,
-    pause: !appointment?.business?.id,
+    pause: !appointmentData?.business?.id,
   } as any);
   const [{ data: vehiclesForEdit, fetching: vehiclesForEditFetching }] = useFindMany(api.vehicle, {
     filter: editClientId ? { clientId: { equals: editClientId } } : { id: { equals: "" } },
@@ -684,7 +704,7 @@ export default function AppointmentDetail() {
   const [{ data: serviceCatalog, fetching: servicesFetching }] = useFindMany(api.service, {
     first: 200,
     sort: { createdAt: "Descending" },
-    pause: !appointment?.business?.id,
+    pause: !appointmentData?.business?.id,
   } as any);
 
   const [{ fetching: updatingStatus }, runUpdateStatus] = useAction(api.appointment.updateStatus);
@@ -709,6 +729,97 @@ export default function AppointmentDetail() {
   const [{ fetching: confirmingStripeDeposit }, runConfirmStripeDeposit] = useAction(
     api.appointment.confirmStripeDepositSession
   );
+
+  const [cachedSnapshot, setCachedSnapshot] = useState<AppointmentDetailCachePayload | null>(null);
+  const [pendingMutationCount, setPendingMutationCount] = useState(0);
+  const [pendingAppointmentOverlay, setPendingAppointmentOverlay] = useState<Record<string, unknown>>({});
+  const [quickActionKey, setQuickActionKey] = useState<string | null>(null);
+
+  const refreshPendingMutationCount = useCallback(() => {
+    if (!id) {
+      setPendingMutationCount(0);
+      setPendingAppointmentOverlay({});
+      return;
+    }
+    setPendingMutationCount(listPendingAppointmentMutations(id).length);
+    setPendingAppointmentOverlay(getPendingAppointmentOverlay(id));
+  }, [id]);
+
+  const appointment = useMemo(
+    () =>
+      appointmentData != null
+        ? ({ ...(appointmentData as Record<string, unknown>), ...pendingAppointmentOverlay } as typeof appointmentData)
+        : cachedSnapshot?.appointment != null
+          ? ({ ...(cachedSnapshot.appointment as Record<string, unknown>), ...pendingAppointmentOverlay } as typeof appointmentData)
+          : null,
+    [appointmentData, cachedSnapshot, pendingAppointmentOverlay]
+  );
+  const appointmentServices = Array.isArray(appointmentServicesData)
+    ? appointmentServicesData
+    : cachedSnapshot?.appointmentServices ?? [];
+  const invoice = invoiceData ?? cachedSnapshot?.invoice ?? null;
+  const quote = quoteData ?? cachedSnapshot?.quote ?? null;
+  const activityLogs = Array.isArray(activityLogsData)
+    ? activityLogsData
+    : cachedSnapshot?.activityLogs ?? [];
+  const showingCachedSnapshot = !appointmentData && Boolean(cachedSnapshot?.appointment);
+
+  useEffect(() => {
+    if (!id) return;
+    if (appointmentData) {
+      const nextSnapshot: AppointmentDetailCachePayload = {
+        appointment: (appointmentData as Record<string, unknown>) ?? null,
+        appointmentServices: Array.isArray(appointmentServicesData) ? (appointmentServicesData as Array<Record<string, unknown>>) : [],
+        invoice: (invoiceData as Record<string, unknown> | null | undefined) ?? null,
+        quote: (quoteData as Record<string, unknown> | null | undefined) ?? null,
+        activityLogs: Array.isArray(activityLogsData) ? (activityLogsData as Array<Record<string, unknown>>) : [],
+        cachedAt: new Date().toISOString(),
+      };
+      setCachedSnapshot(nextSnapshot);
+      writeCachedAppointmentDetail(id, nextSnapshot);
+      return;
+    }
+
+    if (error || (!fetching && !appointmentData)) {
+      setCachedSnapshot(readCachedAppointmentDetail(id));
+    }
+  }, [activityLogsData, appointmentData, appointmentServicesData, error, fetching, id, invoiceData, quoteData]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    refreshPendingMutationCount();
+
+    let cancelled = false;
+    const flushQueuedMutations = async (showToast: boolean) => {
+      const result = await flushPendingAppointmentMutations();
+      if (cancelled) return;
+      refreshPendingMutationCount();
+      if (result.flushed > 0) {
+        if (showToast) {
+          toast.success(
+            result.flushed === 1
+              ? "Queued appointment change synced."
+              : `${result.flushed} queued appointment changes synced.`
+          );
+        }
+        void refetchAppointment();
+        void refetchActivity();
+      }
+    };
+
+    void flushQueuedMutations(false);
+
+    const handleOnline = () => {
+      void flushQueuedMutations(true);
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [id, refetchActivity, refetchAppointment, refreshPendingMutationCount]);
 
   useEffect(() => {
     if (appointment) {
@@ -1084,7 +1195,7 @@ export default function AppointmentDetail() {
     );
   }
 
-  if (fetching) {
+  if (fetching && !appointment) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1092,7 +1203,7 @@ export default function AppointmentDetail() {
     );
   }
 
-  if (error || !appointment) {
+  if ((error && !appointment) || !appointment) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <p className="text-destructive text-lg font-medium">
@@ -1464,11 +1575,217 @@ export default function AppointmentDetail() {
     }
   };
 
+  const runNativeQuickAction = async (params: {
+    key: string;
+    mutations: Array<{ kind: "status" | "patch"; payload: Record<string, unknown> }>;
+    successMessage: string;
+    queuedMessage: string;
+    failureMessage: string;
+  }) => {
+    if (!appointment?.id) return;
+
+    setQuickActionKey(params.key);
+    try {
+      for (let index = 0; index < params.mutations.length; index += 1) {
+        const mutation = params.mutations[index];
+        try {
+          if (mutation.kind === "status") {
+            await api.appointment.updateStatus({
+              id: appointment.id,
+              ...mutation.payload,
+            });
+          } else {
+            await api.appointment.update({
+              id: appointment.id,
+              ...mutation.payload,
+            });
+          }
+        } catch (error) {
+          if (isTransientAppointmentConnectionError(error)) {
+            params.mutations.slice(index).forEach((queuedMutation) => {
+              queuePendingAppointmentMutation({
+                kind: queuedMutation.kind,
+                appointmentId: appointment.id,
+                payload: queuedMutation.payload,
+              });
+            });
+            refreshPendingMutationCount();
+            toast.message(params.queuedMessage);
+            await triggerNativeHaptic("warning");
+            return;
+          }
+          throw error;
+        }
+      }
+
+      toast.success(params.successMessage);
+      await triggerNativeHaptic("success");
+      void refetchAppointment();
+      void refetchActivity();
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? `${params.failureMessage}: ${error.message}`
+          : params.failureMessage;
+      toast.error(message);
+      await triggerNativeHaptic("error");
+    } finally {
+      setQuickActionKey(null);
+    }
+  };
+
+  const appointmentQuickActions: AppointmentQuickAction[] = !isInternalAppointment
+    ? [
+        {
+          key: "arrived",
+          label: "Mark arrived",
+          description: "Check the vehicle in and keep it visible in the shop.",
+          icon: User,
+          active: Boolean((appointment as any).vehicleOnSite),
+          disabled: appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "no-show",
+          onClick: () =>
+            void runNativeQuickAction({
+              key: "arrived",
+              mutations: [
+                ...(appointment.status === "scheduled"
+                  ? [{ kind: "status" as const, payload: { status: "confirmed" } }]
+                  : []),
+                { kind: "patch" as const, payload: { vehicleOnSite: true } },
+              ],
+              successMessage: "Vehicle marked arrived.",
+              queuedMessage: "Arrival update queued until the connection stabilizes.",
+              failureMessage: "Could not mark this vehicle arrived",
+            }),
+        },
+        {
+          key: "start-job",
+          label: "Start job",
+          description: "Move the appointment into active work.",
+          icon: Clock,
+          active: appointment.status === "in_progress" && String((appointment as any).jobPhase ?? "scheduled") === "active_work",
+          disabled: appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "no-show",
+          onClick: () =>
+            void runNativeQuickAction({
+              key: "start-job",
+              mutations: [
+                ...(appointment.status !== "in_progress"
+                  ? [{ kind: "status" as const, payload: { status: "in_progress" } }]
+                  : []),
+                {
+                  kind: "patch" as const,
+                  payload: {
+                    vehicleOnSite: true,
+                    jobPhase: "active_work",
+                    jobStartTime: (appointment as any).jobStartTime ?? new Date().toISOString(),
+                  },
+                },
+              ],
+              successMessage: "Job started.",
+              queuedMessage: "Start-job update queued until you're back online.",
+              failureMessage: "Could not start this job",
+            }),
+        },
+        {
+          key: "waiting",
+          label: "Mark waiting",
+          description: "Keep the job visible while work pauses between steps.",
+          icon: Clock,
+          active: String((appointment as any).jobPhase ?? "scheduled") === "waiting",
+          disabled: appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "no-show",
+          onClick: () =>
+            void runNativeQuickAction({
+              key: "waiting",
+              mutations: [
+                ...(appointment.status !== "in_progress"
+                  ? [{ kind: "status" as const, payload: { status: "in_progress" } }]
+                  : []),
+                { kind: "patch" as const, payload: { vehicleOnSite: true, jobPhase: "waiting" } },
+              ],
+              successMessage: "Job marked waiting.",
+              queuedMessage: "Waiting status queued for resend.",
+              failureMessage: "Could not update this job to waiting",
+            }),
+        },
+        {
+          key: "curing",
+          label: "Mark curing",
+          description: "Track cure time without losing the active vehicle context.",
+          icon: RotateCcw,
+          active: String((appointment as any).jobPhase ?? "scheduled") === "curing",
+          disabled: appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "no-show",
+          onClick: () =>
+            void runNativeQuickAction({
+              key: "curing",
+              mutations: [
+                ...(appointment.status !== "in_progress"
+                  ? [{ kind: "status" as const, payload: { status: "in_progress" } }]
+                  : []),
+                { kind: "patch" as const, payload: { vehicleOnSite: true, jobPhase: "curing" } },
+              ],
+              successMessage: "Job marked curing.",
+              queuedMessage: "Curing status queued for resend.",
+              failureMessage: "Could not update this job to curing",
+            }),
+        },
+        {
+          key: "pickup-ready",
+          label: "Ready for pickup",
+          description: "Let the team know the vehicle is ready to leave the shop.",
+          icon: CalendarDays,
+          active: String((appointment as any).jobPhase ?? "scheduled") === "pickup_ready",
+          disabled: appointment.status === "completed" || appointment.status === "cancelled" || appointment.status === "no-show",
+          onClick: () =>
+            void runNativeQuickAction({
+              key: "pickup-ready",
+              mutations: [
+                ...(appointment.status !== "in_progress"
+                  ? [{ kind: "status" as const, payload: { status: "in_progress" } }]
+                  : []),
+                {
+                  kind: "patch" as const,
+                  payload: {
+                    vehicleOnSite: true,
+                    jobPhase: "pickup_ready",
+                    pickupReadyTime: new Date().toISOString(),
+                  },
+                },
+              ],
+              successMessage: "Marked ready for pickup.",
+              queuedMessage: "Pickup-ready update queued for resend.",
+              failureMessage: "Could not mark this job ready for pickup",
+            }),
+        },
+        {
+          key: "collect-payment",
+          label: showsCollectPaymentLabel || depositAmountValue <= 0 ? "Collect payment note" : "Collect deposit note",
+          description: "Open the existing payment note flow without leaving the appointment.",
+          icon: DollarSign,
+          disabled: appointment.status === "cancelled" || appointment.status === "no-show",
+          onClick: () => {
+            setQuickActionKey("collect-payment");
+            handleOpenDepositDialog();
+            void triggerNativeHaptic("light");
+            window.setTimeout(() => setQuickActionKey(null), 150);
+          },
+        },
+      ]
+    : [];
+
+  const appointmentPhotoTargets = [
+    { entityType: "appointment" as const, entityId: appointment.id, label: "Appointment", subtitle: "Keep intake and completion photos attached directly to this visit." },
+    ...(appointment.client?.id
+      ? [{ entityType: "client" as const, entityId: appointment.client.id, label: "Customer", subtitle: "Attach customer-level photos or documents that should outlive this one appointment." }]
+      : []),
+    ...(appointment.vehicle?.id
+      ? [{ entityType: "vehicle" as const, entityId: appointment.vehicle.id, label: "Vehicle", subtitle: "Use the vehicle record for condition, VIN, or recurring reference photos." }]
+      : []),
+  ];
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
       <section className="overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.14),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_320px]">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
@@ -1495,19 +1812,19 @@ export default function AppointmentDetail() {
               ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+              <div className="native-touch-surface rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   {isInternalAppointment ? "Block" : "Booked for"}
                 </p>
                 <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
                 <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
               </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+              <div className="native-touch-surface rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
                 <p className="mt-2 text-base font-semibold text-slate-950">{formatDate(appointment.startTime)}</p>
                 <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
               </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
+              <div className="native-touch-surface rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   {isInternalAppointment ? "Coverage" : "Work in play"}
                 </p>
@@ -2069,6 +2386,71 @@ export default function AppointmentDetail() {
         paymentRecorded={hasRecordedPayment}
       />
 
+      {showingCachedSnapshot ? (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="space-y-1">
+            <p className="font-medium">Viewing cached appointment data</p>
+            <p className="text-amber-800">
+              The latest live record could not be reached, so this screen is showing the most recent on-device snapshot.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingMutationCount > 0 ? (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+          <div className="space-y-1">
+            <p className="font-medium">
+              {pendingMutationCount === 1 ? "1 appointment update is queued" : `${pendingMutationCount} appointment updates are queued`}
+            </p>
+            <p className="text-blue-800">
+              Native quick actions keep working while the connection is unstable, and queued changes will resend automatically.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {!isInternalAppointment ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <NativeContactActionsCard
+            title="Customer actions"
+            description="Call, text, email, map the service address, or add a follow-up reminder straight from the appointment."
+            contactName={appointment.client ? `${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim() : null}
+            phone={appointment.client?.phone ?? null}
+            email={appointment.client?.email ?? null}
+            address={appointment.isMobile ? appointment.mobileAddress ?? null : null}
+            reminderIdentifier={`appointment-follow-up-${appointment.id}`}
+            reminderTitle={appointment.client ? `Follow up with ${appointment.client.firstName ?? "customer"}` : "Follow up on appointment"}
+            reminderBody={pageTitle}
+            reminderSuggestedAt={(appointment as any).pickupReadyTime ?? appointment.startTime ?? null}
+            shareItems={[
+              pageTitle ? `Appointment: ${pageTitle}` : null,
+              appointment.client ? `Customer: ${`${appointment.client.firstName ?? ""} ${appointment.client.lastName ?? ""}`.trim()}` : null,
+              appointment.client?.phone ? `Phone: ${appointment.client.phone}` : null,
+              appointment.client?.email ? `Email: ${appointment.client.email}` : null,
+              appointment.isMobile && appointment.mobileAddress ? `Address: ${appointment.mobileAddress}` : null,
+            ].filter((item): item is string => Boolean(item))}
+            shareTitle="Share customer details"
+            shareSubject="Strata appointment details"
+            shareButtonLabel="Share details"
+          />
+          <AppointmentQuickActionsCard
+            actions={appointmentQuickActions}
+            loadingKey={quickActionKey}
+            queuedCount={pendingMutationCount}
+          />
+        </div>
+      ) : null}
+
+      {!isInternalAppointment ? (
+        <PhotoIntakeCard
+          targets={appointmentPhotoTargets}
+          description="Capture intake proof, damage notes, and finished-work photos from the native camera or library flow."
+        />
+      ) : null}
+
       {!isInternalAppointment && (hasPlaceholderClient || hasPlaceholderVehicle || missingLinkedRecords) && (
         <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <div className="flex items-start gap-2">
@@ -2150,7 +2532,7 @@ export default function AppointmentDetail() {
             {/* Left column */}
             <div className="lg:col-span-2 space-y-6">
               {/* Appointment Info Card */}
-              <Card>
+              <Card className="native-panel-card">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Appointment Info</CardTitle>
@@ -2341,7 +2723,7 @@ export default function AppointmentDetail() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="native-panel-card">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Services</CardTitle>
@@ -2440,7 +2822,7 @@ export default function AppointmentDetail() {
               </Card>
 
               {/* Notes Card */}
-              <Card>
+              <Card className="native-panel-card">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-3">
                     <CardTitle className="text-base">Notes</CardTitle>
@@ -2554,9 +2936,9 @@ export default function AppointmentDetail() {
             </div>
 
             {/* Right column */}
-            <div className="space-y-4">
+            <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
               {isInternalAppointment ? (
-                <Card>
+                <Card className="native-panel-card">
                   <CardHeader>
                     <CardTitle className="text-base">Block details</CardTitle>
                   </CardHeader>

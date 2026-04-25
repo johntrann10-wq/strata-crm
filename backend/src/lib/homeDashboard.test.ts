@@ -244,6 +244,8 @@ describe("home dashboard domain logic", () => {
 
     expect(buildQuickActions(ownerPermissions, [...ownerRawPermissions]).map((action) => action.key)).toEqual([
       "new_appointment",
+      "search_appointments",
+      "search_leads",
       "new_quote",
       "new_invoice",
       "add_client",
@@ -251,7 +253,10 @@ describe("home dashboard domain logic", () => {
       "collect_payment",
       "send_reminder",
     ]);
-    expect(buildQuickActions(technicianPermissions, [...technicianRawPermissions]).map((action) => action.key)).toEqual([]);
+    expect(buildQuickActions(technicianPermissions, [...technicianRawPermissions]).map((action) => action.key)).toEqual([
+      "search_appointments",
+      "search_leads",
+    ]);
   });
 
   it("builds a weekly appointment overview grouped by business day", () => {

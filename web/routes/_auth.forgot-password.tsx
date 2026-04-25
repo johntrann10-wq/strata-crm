@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/api";
+import { AuthSupportLinks } from "@/components/auth/AuthSupportLinks";
 import { useAction } from "@/hooks/useApi";
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -32,7 +33,7 @@ export default function ForgotPasswordRoute() {
   };
 
   return (
-    <div className="w-full max-w-sm">
+    <div className="mx-auto w-full max-w-[24rem] sm:max-w-md">
       <div className="mx-auto mb-8 flex flex-col items-center gap-3">
         <StrataLogoLockup
           className="flex-col gap-3"
@@ -48,7 +49,7 @@ export default function ForgotPasswordRoute() {
         </p>
       </div>
 
-      <Card className="rounded-2xl border border-border p-8 shadow-sm">
+      <Card className="rounded-[1.75rem] border-white/70 bg-white/94 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.10)] sm:p-8">
         {sent ? (
           <div className="space-y-4 text-center">
             <p className="text-sm text-foreground">If an account exists for <span className="font-medium">{email.trim()}</span>, a password reset link has been sent.</p>
@@ -84,6 +85,7 @@ export default function ForgotPasswordRoute() {
       <p className="mt-6 text-center text-[13px] text-muted-foreground">
         Remembered it? <Link to={`/sign-in${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`} className="font-medium text-foreground hover:underline">Back to sign in</Link>
       </p>
+      <AuthSupportLinks className="mt-4" />
     </div>
   );
 }

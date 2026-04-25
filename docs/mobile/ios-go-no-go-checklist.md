@@ -14,7 +14,7 @@ Use this checklist as the strict gate for Strata's first iOS hybrid-shell launch
 | Stripe and billing web return routes are shell-compatible | code | partial | Existing HTTPS routes are ready, but the shell does not yet reclaim them with universal links | Billing, invoice, and payment returns continue using normal frontend HTTPS routes and are documented for native handoff |
 | Safe-area and app-shell viewport behavior exists | code | done | None on the web side | [`root.tsx`](../../web/root.tsx) and [`app.css`](../../web/app.css) provide edge-to-edge meta tags and shell-only safe-area adjustments |
 | Remote client diagnostics exist | code | partial | Backend ingestion exists, but no native crash SDK or operational alerting is configured yet | Browser/runtime diagnostics can be sent to `/api/client-diagnostics/report` when enabled |
-| Privacy, terms, support, and deletion initiation are visible in-app | code | partial | Deletion is request-based and still requires manual fulfillment ops | Privacy/terms/support are reachable from auth and app-return screens, and signed-in users can initiate deletion from profile |
+| Privacy, terms, support, and in-app account deletion are visible | code | partial | The flow is implemented, but it still needs a final physical-device pass with the seeded review account | Privacy/terms/support are reachable from auth and app-return screens, and signed-in users can fully delete the account from `Settings > Account` / Profile without leaving the app |
 | Mobile QA checklist exists | code | done | None on the web side | [`ios-device-qa-checklist.md`](./ios-device-qa-checklist.md) exists with iPhone-specific test coverage |
 
 ## Native config required
@@ -57,7 +57,7 @@ Use this checklist as the strict gate for Strata's first iOS hybrid-shell launch
 | Stripe billing and payment return routes are validated | ops | partial | The web routes exist, but real native reopen behavior is not configured or tested | Stripe return URLs point to the production frontend HTTPS routes that the app will reclaim via universal links |
 | Production app-shell env values are set | ops | missing | Only example values exist in the repo | Final production values exist for app id, app name, app return path, diagnostics toggles, and any shell server URL needs |
 | Remote diagnostics destination is monitored | ops | partial | Client diagnostics can reach the backend, but no operator runbook or alert routing is in place | Backend logs for `client-diagnostics` are visible in the production monitoring path and someone owns response |
-| Support workflow for deletion requests exists | ops | partial | The UI can initiate deletion requests, but operational handling still needs confirmation | A support owner and response path exist for deletion requests submitted from profile |
+| In-app account deletion is review-ready | ops | partial | The UI flow exists, but it still needs a device-verified pass with the seeded review account | Account deletion is reachable from `Settings > Account`, completes in-app, signs the user out, and retains only legally required billing or tax records in anonymized form |
 
 ## Real-device QA required
 
@@ -91,5 +91,5 @@ Use this checklist as the strict gate for Strata's first iOS hybrid-shell launch
 | --- | --- | --- | --- | --- |
 | TestFlight build has passed real-device QA | QA | missing | No TestFlight build exists yet | The same build or a direct successor has completed the QA checklist |
 | App Store metadata is complete | ops | missing | Listing content is not prepared yet | App name, subtitle, description, privacy info, support URL, screenshots, and review notes are ready |
-| Privacy / support / deletion review story is complete | ops | partial | The UI exists, but the review narrative and support process still need to be finalized | Review notes explain privacy/support/deletion clearly and support can respond to deletion requests |
+| Privacy / support / deletion review story is complete | ops | partial | The UI exists, but the final recording and reviewer notes still need to be attached to the submission | Review notes explain privacy/support/deletion clearly, the seeded reviewer path is documented, and the in-app deletion demo is ready if Apple requests it |
 | Submission-only regressions are cleared | QA | missing | No TestFlight soak or submission dry run has happened yet | Final smoke pass after archive upload shows no new blocking issues |

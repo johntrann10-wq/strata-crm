@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useOutletContext, useSearchParams } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlertCircle, CalendarPlus, RefreshCw } from "lucide-react";
+import { AlertCircle, CalendarPlus, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { RouteErrorBoundary } from "@/components/app/RouteErrorBoundary";
 import {
@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
+import { isNativeShell } from "@/lib/mobileShell";
+import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 import type { AuthOutletContext } from "./_app";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import { recordReliabilityDiagnostic } from "@/lib/reliabilityDiagnostics";
@@ -74,10 +76,15 @@ function getRoleLabel(role: string | null | undefined) {
 export default function DashboardHomeRoute() {
   const outletContext = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const nativeShellSession = isNativeShell();
   const canViewDashboard = outletContext.permissions.has("dashboard.view");
   const canReadPayments = outletContext.permissions.has("payments.read");
 
-  const range = isValidRange(searchParams.get("range")) ? searchParams.get("range") : "today";
+  const range = nativeShellSession
+    ? "today"
+    : isValidRange(searchParams.get("range"))
+      ? searchParams.get("range")
+      : "today";
   const canFilterTeam = outletContext.permissions.has("team.read");
   const teamMemberId = canFilterTeam ? searchParams.get("team") ?? "all" : "all";
   const weekStartDate = isValidDateKey(searchParams.get("weekStart")) ? searchParams.get("weekStart") : null;
@@ -107,6 +114,7 @@ export default function DashboardHomeRoute() {
   const [{ data, fetching, error }, runDashboard] = useAction(api.getHomeDashboard);
   const [{ data: financeDashboardData, fetching: financeFetching, error: financeError }, runFinanceDashboard] = useGlobalAction(api.getFinanceDashboard);
   const [, runPreferenceUpdate] = useAction(api.updateHomeDashboardPreferences);
+  const [showInsights, setShowInsights] = useState(() => !nativeShellSession);
   const snapshot = (data ?? null) as HomeDashboardSnapshot | null;
   const financeDashboard = (financeDashboardData ?? null) as FinanceDashboardSummary | null;
   const lastMarkedSeenRef = useRef<string | null>(null);
@@ -276,6 +284,7 @@ export default function DashboardHomeRoute() {
       || snapshot.bookingsOverview.depositsDueAmount > 0
       || snapshot.bookingsOverview.funnel.length > 0
     );
+  const shouldRenderInsights = pageLoading || hasMeaningfulMonthlyRevenue || hasMeaningfulBookingsOverview;
 
   if (!canViewDashboard) {
     return <Navigate to={getPreferredAuthorizedAppPath(outletContext.permissions, outletContext.enabledModules)} replace />;
@@ -290,6 +299,7 @@ export default function DashboardHomeRoute() {
         roleLabel={getRoleLabel(snapshot?.context.role ?? outletContext.membershipRole)}
         range={range}
         onRangeChange={setRange}
+        showRangeSelector={!nativeShellSession}
         teamOptions={staffOptions}
         teamMemberId={teamMemberId}
         onTeamChange={setTeam}
@@ -328,10 +338,15 @@ export default function DashboardHomeRoute() {
       ) : (
         <div className="surface-panel overflow-hidden rounded-[1.9rem] border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_20px_50px_rgba(15,23,42,0.07)] sm:p-5">
           <div className="space-y-4">
-            <HomeOverviewKpiStrip snapshot={snapshot} loading={pageLoading} error={snapshot?.widgetErrors?.summary_today ? new Error(snapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
+            <HomeCompactQuickActions
+              snapshot={snapshot}
+              loading={pageLoading || staffFetching}
+              error={snapshot?.widgetErrors?.quick_actions ? new Error(snapshot.widgetErrors.quick_actions.message) : null}
+              onRetry={() => void refreshDashboard("force")}
+            />
 
-            <div className="grid gap-4 xl:grid-cols-12">
-              <div className="xl:col-span-8">
+            <div className="grid gap-4 lg:grid-cols-12">
+              <div className="lg:col-span-8">
                 <HomeWeeklyAppointmentOverviewCard
                   snapshot={snapshot}
                   loading={pageLoading}
@@ -342,7 +357,7 @@ export default function DashboardHomeRoute() {
                   onChangeWeek={setWeekStart}
                 />
               </div>
-              <div className="xl:col-span-4">
+              <div className="lg:col-span-4">
                 <HomeUpcomingAttentionPanel
                   snapshot={snapshot}
                   range={range}
@@ -360,31 +375,7 @@ export default function DashboardHomeRoute() {
               </div>
             </div>
 
-            {pageLoading || hasMeaningfulMonthlyRevenue || hasMeaningfulBookingsOverview ? (
-              <div className="grid gap-4 xl:grid-cols-12">
-                {pageLoading || hasMeaningfulMonthlyRevenue ? (
-                  <div className="xl:col-span-8">
-                    <HomeMonthlyRevenueChartCard
-                      snapshot={snapshot}
-                      financeDashboard={financeDashboard}
-                      loading={pageLoading || (canReadPayments && financeFetching && !financeDashboard)}
-                      error={financeError as Error | null}
-                      onRetry={() => void refreshDashboard("force")}
-                    />
-                  </div>
-                ) : null}
-                {pageLoading || hasMeaningfulBookingsOverview ? (
-                  <div className="xl:col-span-4">
-                    <HomeBookingsOverviewCard
-                      snapshot={snapshot}
-                      loading={pageLoading}
-                      error={snapshot?.widgetErrors?.pipeline ? new Error(snapshot.widgetErrors.pipeline.message) : null}
-                      onRetry={() => void refreshDashboard("force")}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            <HomeOverviewKpiStrip snapshot={snapshot} loading={pageLoading} error={snapshot?.widgetErrors?.summary_today ? new Error(snapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
 
             <HomeBottomPanels
               snapshot={snapshot}
@@ -393,12 +384,57 @@ export default function DashboardHomeRoute() {
               onRetry={() => void refreshDashboard("force")}
             />
 
-            <HomeCompactQuickActions
-              snapshot={snapshot}
-              loading={pageLoading || staffFetching}
-              error={snapshot?.widgetErrors?.quick_actions ? new Error(snapshot.widgetErrors.quick_actions.message) : null}
-              onRetry={() => void refreshDashboard("force")}
-            />
+            {shouldRenderInsights ? (
+              <div className="native-panel-card rounded-[1.6rem] border border-slate-200/75 bg-white/92 p-4 sm:p-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInsights((current) => !current);
+                    void triggerNativeHaptic("light");
+                  }}
+                  className="native-touch-surface flex w-full items-start justify-between gap-4 rounded-[1.2rem] border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-left"
+                  aria-expanded={showInsights}
+                >
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Business insights</p>
+                    <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-slate-950">
+                      {showInsights ? "Hide deeper booking and finance trends" : "Open deeper booking and finance trends"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Keep the first screen focused on today's operating board, then expand into revenue and booking performance when you need owner context.
+                    </p>
+                  </div>
+                  <span className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/90 text-slate-500">
+                    {showInsights ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </span>
+                </button>
+                {showInsights ? (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-12">
+                    {pageLoading || hasMeaningfulMonthlyRevenue ? (
+                      <div className="lg:col-span-8">
+                        <HomeMonthlyRevenueChartCard
+                          snapshot={snapshot}
+                          financeDashboard={financeDashboard}
+                          loading={pageLoading || (canReadPayments && financeFetching && !financeDashboard)}
+                          error={financeError as Error | null}
+                          onRetry={() => void refreshDashboard("force")}
+                        />
+                      </div>
+                    ) : null}
+                    {pageLoading || hasMeaningfulBookingsOverview ? (
+                      <div className="lg:col-span-4">
+                        <HomeBookingsOverviewCard
+                          snapshot={snapshot}
+                          loading={pageLoading}
+                          error={snapshot?.widgetErrors?.pipeline ? new Error(snapshot.widgetErrors.pipeline.message) : null}
+                          onRetry={() => void refreshDashboard("force")}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       )}

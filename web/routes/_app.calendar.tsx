@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, ChevronLeft, ChevronRight, MapPin, Plus } from "lucide-react";
@@ -7,17 +7,22 @@ import { useAction, useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { cn } from "@/lib/utils";
 import { AppointmentInspectorPanel } from "@/components/appointments/AppointmentInspectorPanel";
+import {
+  selectorPillButtonClassName,
+  selectorSelectTriggerClassName,
+  selectorShellClassName,
+} from "@/components/shared/selectorStyles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import {
   type ApptRecord,
   ConflictBanner,
-  DayView,
-  getMonthGrid,
   MonthView,
+  WeekView,
   detectConflicts,
   getCalendarAppointmentAmount,
   getCalendarDayRevenue,
@@ -39,6 +44,7 @@ import {
 } from "@/lib/calendarJobSpans";
 import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
+import { triggerNativeHaptic } from "@/lib/nativeFieldOps";
 
 function toLocalDateString(date: Date): string {
   const year = date.getFullYear();
@@ -81,6 +87,32 @@ function InlineMetricPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MobileInlineStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-white/86 px-2.5 py-1 text-[11px] shadow-sm">
+      <span className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+      <span className="font-semibold text-foreground">{value}</span>
+    </div>
+  );
+}
+
+type InspectorSwipeGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  axis: "pending" | "horizontal" | "vertical";
+  captured: boolean;
+};
+
+function isCalendarSwipeInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest(
+      "button, a, input, textarea, select, label, summary, [role='button'], [role='menuitem'], [data-calendar-swipe-ignore='true']"
+    )
+  );
+}
+
 function AgendaPreviewRow({
   appointment,
   kind,
@@ -100,7 +132,8 @@ function AgendaPreviewRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-start gap-3 rounded-2xl border border-border/60 bg-white/82 px-3 py-3 text-left transition-colors hover:bg-white",
+        "native-touch-surface flex w-full items-start gap-3 rounded-[1.2rem] border border-border/60 bg-white/88 px-3 py-3 text-left transition-all hover:bg-white/96",
+        "[-webkit-touch-callout:none] touch-manipulation",
         selected && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
       )}
     >
@@ -185,7 +218,7 @@ function eachDateInclusive(startValue: string, endValue: string): Date[] {
 
 function mobileDateInputClassName(isMobileLayout: boolean) {
   return cn(
-    "w-full min-w-0 max-w-full rounded-xl border border-input/90 bg-background text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] hover:border-border focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
+    selectorSelectTriggerClassName("w-full min-w-0 max-w-full [font-variant-numeric:tabular-nums]"),
     isMobileLayout
       ? "h-11 appearance-none px-3"
       : "h-11 px-3"
@@ -199,14 +232,16 @@ export default function CalendarPage() {
   const requestedView = searchParams.get("view");
   const requestedDate = parseOptionalDateInput(searchParams.get("date"));
   const initialView =
-    requestedView === "month" || requestedView === "day"
-      ? requestedView
+    requestedView === "month"
+      ? "month"
+      : requestedView === "week" || requestedView === "day"
+        ? "week"
       : null;
 
   const [currentDate, setCurrentDate] = useState(() => requestedDate ?? new Date());
   const [visibleMonthDate, setVisibleMonthDate] = useState(() => toMonthAnchor(requestedDate ?? new Date()));
   const [selectedDate, setSelectedDate] = useState(() => requestedDate ?? new Date());
-  const [view, setView] = useState<"month" | "day">(initialView ?? "month");
+  const [view, setView] = useState<"month" | "week">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -221,11 +256,19 @@ export default function CalendarPage() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [isAppointmentInspectorOpen, setIsAppointmentInspectorOpen] = useState(false);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const [inspectorSwipeOffset, setInspectorSwipeOffset] = useState(0);
+  const [inspectorSwipeAnimating, setInspectorSwipeAnimating] = useState(false);
+  const inspectorSwipeRef = useRef<InspectorSwipeGesture | null>(null);
   const layoutInitializedRef = useRef(false);
-  const lastInternalUrlSyncRef = useRef<{ view: "month" | "day"; date: string } | null>(null);
+  const lastInternalUrlSyncRef = useRef<{ view: "month" | "week"; date: string } | null>(null);
 
   useEffect(() => {
-    const nextView = requestedView === "month" || requestedView === "day" ? requestedView : null;
+    const nextView =
+      requestedView === "month"
+        ? "month"
+        : requestedView === "week" || requestedView === "day"
+          ? "week"
+          : null;
     if (!nextView || nextView === view) return;
     setView(nextView);
   }, [requestedView, view]);
@@ -246,8 +289,8 @@ export default function CalendarPage() {
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (next.get("view") === "week") {
-      next.set("view", "month");
+    if (next.get("view") === "day") {
+      next.set("view", "week");
       setSearchParams(next, { replace: true, preventScrollReset: true });
       return;
     }
@@ -270,7 +313,7 @@ export default function CalendarPage() {
       }
       return;
     }
-    if (view === "day") {
+    if (view === "week") {
       if (toLocalDateString(selectedDate) !== requestedKey) {
         setSelectedDate(requestedDate);
       }
@@ -297,7 +340,7 @@ export default function CalendarPage() {
   }, [currentDate, requestedDate, selectedDate, view, visibleMonthDate]);
 
   useEffect(() => {
-    if (view !== "day") return;
+    if (view !== "week") return;
     if (toLocalDateString(currentDate) === toLocalDateString(selectedDate)) return;
     setCurrentDate(selectedDate);
   }, [currentDate, selectedDate, view]);
@@ -438,7 +481,7 @@ export default function CalendarPage() {
   const [{ fetching: unblockingBlock }, updateAppointmentStatus] = useAction(api.appointment.updateStatus);
   const timeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const timeSelectTriggerClassName =
-    "h-11 rounded-xl border-input/90 text-sm font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
+    selectorSelectTriggerClassName("h-11 w-full [font-variant-numeric:tabular-nums]");
 
   async function handleReschedule(appointmentId: string, newStart: Date, newEnd: Date | null) {
     const result = await runReschedule({ id: appointmentId, startTime: newStart, endTime: newEnd ?? undefined });
@@ -499,9 +542,10 @@ export default function CalendarPage() {
     setSelectedDate(today);
   }
 
-  function handleViewChange(nextView: "month" | "day") {
+  function handleViewChange(nextView: "month" | "week") {
     if (nextView === view) return;
-    if (nextView === "day") {
+    void triggerNativeHaptic("light");
+    if (nextView === "week") {
       setCurrentDate(selectedDate);
     } else {
       setVisibleMonthDate(toMonthAnchor(selectedDate));
@@ -514,7 +558,7 @@ export default function CalendarPage() {
     setCurrentDate(date);
     const shouldShiftVisibleMonth =
       date.getMonth() !== visibleMonthDate.getMonth() || date.getFullYear() !== visibleMonthDate.getFullYear();
-    if (view === "day" || shouldShiftVisibleMonth) {
+    if (view === "week" || shouldShiftVisibleMonth) {
       if (view === "month") {
         setVisibleMonthDate(toMonthAnchor(date));
       }
@@ -540,6 +584,7 @@ export default function CalendarPage() {
   }
 
   function handleApptClick(apt: ApptRecord) {
+    void triggerNativeHaptic("light");
     if (isCalendarBlockAppointment(apt)) {
       setSelectedBlock(apt);
       return;
@@ -549,6 +594,7 @@ export default function CalendarPage() {
   }
 
   function handleNewAppointment() {
+    void triggerNativeHaptic("light");
     const targetDate = view === "month" ? selectedDate : currentDate;
     const iso = toLocalDateString(targetDate);
     navigate(`/appointments/new?date=${encodeURIComponent(iso)}${
@@ -557,6 +603,7 @@ export default function CalendarPage() {
   }
 
   function handleOpenBlockDialog() {
+    void triggerNativeHaptic("light");
     const targetDate = view === "month" ? selectedDate : currentDate;
     const selectedDate = toLocalDateString(targetDate);
     setEditingBlockId(null);
@@ -762,15 +809,6 @@ export default function CalendarPage() {
       }, 0),
     [selectedMonthAppointments, selectedMonthRange]
   );
-  const mobileMonthWeekCount = useMemo(
-    () =>
-      getMonthGrid(visibleMonthDate, {
-        trimTrailingFullNextMonthWeek: true,
-      }).length,
-    [visibleMonthDate]
-  );
-  const mobileMonthHeightClassName =
-    mobileMonthWeekCount >= 6 ? "h-[25.5rem]" : mobileMonthWeekCount === 5 ? "h-[21.75rem]" : "h-[18rem]";
   const desktopMonthHeightClassName = "sm:h-[31rem] lg:h-[34rem] xl:h-[clamp(35rem,56dvh,42rem)]";
   const busiestMonthDay = useMemo(() => {
     const counts = new Map<string, { date: Date; count: number }>();
@@ -792,7 +830,7 @@ export default function CalendarPage() {
     }
     return Array.from(counts.values()).sort((a, b) => b.count - a.count)[0] ?? null;
   }, [selectedMonthAppointments, visibleMonthDate]);
-  const availableViews = isMobileLayout ? (["day", "month"] as const) : (["day", "month"] as const);
+  const availableViews = ["month", "week"] as const;
   const selectedAppointment = useMemo(
     () =>
       isAppointmentInspectorOpen
@@ -800,6 +838,97 @@ export default function CalendarPage() {
         : null,
     [appointments, selectedAppointmentId, isAppointmentInspectorOpen]
   );
+  const inspectorAppointments = useMemo(
+    () => selectableDayAgendaItems.map(({ appointment }) => appointment),
+    [selectableDayAgendaItems]
+  );
+  const inspectorAppointmentIndex = useMemo(
+    () => inspectorAppointments.findIndex((appointment) => appointment.id === selectedAppointmentId),
+    [inspectorAppointments, selectedAppointmentId]
+  );
+  const inspectorAppointmentCount = inspectorAppointments.length;
+  const canSwipeToPreviousAppointment = inspectorAppointmentIndex > 0;
+  const canSwipeToNextAppointment =
+    inspectorAppointmentIndex >= 0 && inspectorAppointmentIndex < inspectorAppointmentCount - 1;
+
+  function releaseInspectorSwipe() {
+    inspectorSwipeRef.current = null;
+    setInspectorSwipeAnimating(true);
+    setInspectorSwipeOffset(0);
+  }
+
+  function selectInspectorAppointmentByDirection(direction: -1 | 1) {
+    if (inspectorAppointmentCount <= 1 || inspectorAppointmentIndex < 0) return false;
+    const nextIndex = inspectorAppointmentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= inspectorAppointmentCount) return false;
+    setInspectorSwipeAnimating(true);
+    setSelectedAppointmentId(inspectorAppointments[nextIndex].id);
+    setInspectorSwipeOffset(0);
+    void triggerNativeHaptic("light");
+    return true;
+  }
+
+  function handleInspectorSwipePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!isMobileLayout || inspectorAppointmentCount <= 1 || event.pointerType === "mouse") return;
+    if (isCalendarSwipeInteractiveTarget(event.target)) return;
+    inspectorSwipeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      axis: "pending",
+      captured: false,
+    };
+    setInspectorSwipeAnimating(false);
+  }
+
+  function handleInspectorSwipePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const gesture = inspectorSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    if (gesture.axis === "pending") {
+      if (absY > Math.max(absX * 1.1, 12)) {
+        gesture.axis = "vertical";
+        return;
+      }
+      if (absX <= Math.max(absY * 1.35, 18)) return;
+      gesture.axis = "horizontal";
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        gesture.captured = true;
+      } catch {
+        gesture.captured = false;
+      }
+    }
+
+    if (gesture.axis !== "horizontal") return;
+    event.preventDefault();
+
+    const direction = deltaX < 0 ? 1 : -1;
+    const canMove = direction === 1 ? canSwipeToNextAppointment : canSwipeToPreviousAppointment;
+    const resistedOffset = canMove ? deltaX : deltaX * 0.24;
+    setInspectorSwipeOffset(Math.max(-96, Math.min(96, resistedOffset)));
+  }
+
+  function handleInspectorSwipePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const gesture = inspectorSwipeRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    if (gesture.axis === "horizontal" && Math.abs(inspectorSwipeOffset) >= 52) {
+      const direction = inspectorSwipeOffset < 0 ? 1 : -1;
+      selectInspectorAppointmentByDirection(direction);
+    }
+
+    releaseInspectorSwipe();
+  }
+
+  function handleInspectorSwipePointerCancel() {
+    releaseInspectorSwipe();
+  }
 
   useEffect(() => {
     if (!selectedAppointmentId) return;
@@ -809,6 +938,13 @@ export default function CalendarPage() {
     setIsAppointmentInspectorOpen(false);
   }, [selectableDayAgendaItems, selectedAppointmentId]);
 
+  useEffect(() => {
+    if (isAppointmentInspectorOpen) return;
+    inspectorSwipeRef.current = null;
+    setInspectorSwipeOffset(0);
+    setInspectorSwipeAnimating(false);
+  }, [isAppointmentInspectorOpen]);
+
   const dayInspectorTitleId = `day-inspector-title-${view}`;
 
   const dayInspectorPanel = (
@@ -816,17 +952,24 @@ export default function CalendarPage() {
       role="complementary"
       aria-label="Day inspector"
       aria-labelledby={dayInspectorTitleId}
-      className="flex h-full min-h-0 flex-col overflow-hidden"
+      className="native-foreground-panel flex h-full min-h-0 flex-col overflow-hidden"
     >
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
+        <div
+          className={cn(
+            "sticky top-0 z-10 flex flex-wrap items-start justify-between border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.92))]",
+            isMobileLayout ? "gap-2 px-2.5 pb-2 pt-2.5" : "gap-3 px-3 pb-3 pt-3"
+          )}
+        >
           <div className="space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Day inspector</p>
-            <h3 id={dayInspectorTitleId} className="truncate text-base font-semibold text-foreground">{formatPanelDate(inspectorDate)}</h3>
+            <h3 id={dayInspectorTitleId} className={cn("truncate font-semibold text-foreground", isMobileLayout ? "text-sm" : "text-base")}>
+              {formatPanelDate(inspectorDate)}
+            </h3>
           </div>
           {isMobileLayout ? (
-            <div className="flex flex-wrap gap-2 text-xs">
-              <InlineMetricPill label="Revenue" value={formatCurrency(selectedDayRevenue)} />
-              <InlineMetricPill label="Jobs" value={String(selectedDayAgendaItems.length)} />
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              <MobileInlineStat label="Jobs" value={String(selectedDayAgendaItems.length)} />
+              <MobileInlineStat label="Revenue" value={formatCurrency(selectedDayRevenue)} />
             </div>
           ) : (
             <div className="flex flex-wrap gap-2 text-xs">
@@ -848,19 +991,19 @@ export default function CalendarPage() {
             </div>
           )}
       </div>
-      <div className="mt-3 min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", isMobileLayout ? "px-2.5 pb-2.5 pt-2.5" : "px-3 pb-3 pt-3")}>
         <div className="grid h-full min-h-0 gap-3 grid-cols-1">
           <div
             className={cn(
-              "flex h-full min-h-0 flex-col overflow-hidden rounded-[1.3rem] border border-border/60 bg-white/72",
-              isMobileLayout ? "min-h-[18.5rem] p-2.5" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
+              "flex h-full min-h-0 flex-col overflow-hidden rounded-[1.3rem] border border-border/60 bg-white/82 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]",
+              isMobileLayout ? "min-h-[14.25rem] p-2" : "min-h-[22rem] p-3 xl:min-h-[25rem]"
             )}
           >
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className={cn("flex items-center justify-between gap-3", isMobileLayout ? "mb-2" : "mb-3")}>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {view === "month" ? "Selected date" : "Today plan"}
+                Selected date
               </p>
-              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              <span className={cn("rounded-full border border-border/70 bg-background font-medium text-muted-foreground", isMobileLayout ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]")}>
                 {selectedDayAgendaItems.length}
               </span>
             </div>
@@ -869,7 +1012,7 @@ export default function CalendarPage() {
                 className={cn(
                   "min-h-0 flex-1 space-y-2 overflow-y-auto scroll-pb-8 pb-2",
                   isMobileLayout
-                    ? "touch-pan-y overscroll-contain px-1 pb-4 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
+                    ? "touch-pan-y overscroll-contain px-0.5 pb-3 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
                     : "pr-1 pt-0.5"
                 )}
               >
@@ -887,7 +1030,7 @@ export default function CalendarPage() {
               </div>
             ) : (
               <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
-                <p className="text-sm font-medium text-foreground">No appointments on this {view === "month" ? "date" : "day"}</p>
+                <p className="text-sm font-medium text-foreground">No appointments on this date</p>
                 {view === "month" && busiestMonthDay ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Busiest day this month: {formatPanelDate(busiestMonthDay.date)} ({busiestMonthDay.count})
@@ -903,73 +1046,78 @@ export default function CalendarPage() {
 
   return (
     <div className="page-content flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="page-section flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="surface-panel shrink-0 overflow-hidden rounded-[1.7rem]">
-          <div className="border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 flex-1 flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
+      <div className="page-section flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden sm:gap-3">
+        <div className={cn("surface-panel shrink-0 overflow-hidden", isMobileLayout ? "rounded-[1.15rem]" : "rounded-[1.35rem] sm:rounded-[1.7rem]")}>
+          <div
+            className={cn(
+              "bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))]",
+              isMobileLayout ? "px-2.5 py-2" : "border-b border-white/60 px-4 py-3 sm:px-5"
+            )}
+          >
+            <div className={cn("flex flex-col", isMobileLayout ? "gap-2.5" : "gap-3 xl:flex-row xl:items-center xl:justify-between")}>
+              <div className={cn("flex min-w-0 flex-1 flex-col", isMobileLayout ? "gap-2" : "gap-3")}>
+                <div className={cn("flex flex-wrap items-center", isMobileLayout ? "gap-1.5" : "gap-2")}>
+                  <h1 className={cn("font-semibold tracking-[-0.02em] text-foreground", isMobileLayout ? "text-sm" : "text-lg sm:text-xl")}>
                     {getHeaderTitle(visibleDate, view)}
                   </h1>
                   {activeLocationName ? (
-                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <span className={cn("inline-flex items-center gap-1.5 text-muted-foreground", isMobileLayout ? "text-[11px]" : "text-sm")}>
                       <MapPin className="h-3.5 w-3.5" />
                       {activeLocationName}
                     </span>
                   ) : null}
                 </div>
 
-                <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-                  <div className="inline-flex w-full items-center justify-between rounded-full border border-white/70 bg-white/78 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_rgba(15,23,42,0.04)] sm:w-auto sm:justify-start">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handlePrev} aria-label="Previous">
+                <div className={cn(isMobileLayout ? "grid gap-2" : "flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center")}>
+                  <div className={selectorShellClassName(isMobileLayout ? "w-full justify-between" : "w-full sm:w-auto sm:justify-start")}>
+                    <Button variant="ghost" size="icon" className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-8 w-8")} onClick={handlePrev} aria-label="Previous">
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button
                       variant={isToday ? "default" : "secondary"}
                       size="sm"
-                      className="h-8 rounded-full px-4"
+                      className={cn("rounded-full", isMobileLayout ? "h-6.5 px-3 text-[11px]" : "h-8 px-4")}
                       onClick={handleToday}
                     >
                       Today
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleNext} aria-label="Next">
+                    <Button variant="ghost" size="icon" className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-8 w-8")} onClick={handleNext} aria-label="Next">
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
 
-                  <div className="inline-flex w-full items-center overflow-x-auto rounded-full border border-white/70 bg-white/78 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_rgba(15,23,42,0.04)] sm:w-auto">
-                    {availableViews.map((calendarView) => (
-                      <button
-                        key={calendarView}
-                        type="button"
-                        onClick={() => handleViewChange(calendarView)}
-                        className={cn(
-                          "shrink-0 rounded-full px-4 py-1.5 text-sm font-medium capitalize transition-colors",
-                          view === calendarView
-                            ? "bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        )}
-                      >
-                        {calendarView === "month" ? "Month" : "Day"}
-                      </button>
-                    ))}
-                  </div>
+                  {availableViews.length > 1 ? (
+                    <div className={selectorShellClassName(isMobileLayout ? "w-full flex-nowrap" : "w-full sm:w-auto")}>
+                      {availableViews.map((calendarView) => (
+                        <button
+                          key={calendarView}
+                          type="button"
+                          onClick={() => handleViewChange(calendarView)}
+                          className={selectorPillButtonClassName(
+                            view === calendarView,
+                            cn("shrink-0 capitalize", isMobileLayout ? "min-h-8 flex-1 px-3 py-1.5 text-xs" : "px-4 py-1.5 text-sm")
+                          )}
+                        >
+                          {calendarView === "month" ? "Month" : "Week"}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 sm:flex-row xl:shrink-0">
-                <Button className="h-10 rounded-2xl px-4" onClick={handleNewAppointment}>
+              <div className={cn("flex", isMobileLayout ? "gap-2" : "flex-col gap-2 sm:flex-row xl:shrink-0")}>
+                <Button className={cn("rounded-2xl px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")} onClick={handleNewAppointment}>
                   <Plus className="mr-2 h-4 w-4" />
-                  New appointment
+                  {isMobileLayout ? "New" : "New appointment"}
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-10 rounded-2xl border-border/70 bg-white/82 px-4"
+                  className={cn("rounded-2xl border-border/70 bg-white/82 px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")}
                   onClick={handleOpenBlockDialog}
                 >
                   <Ban className="mr-2 h-4 w-4" />
-                  Block time
+                  {isMobileLayout ? "Block" : "Block time"}
                 </Button>
               </div>
             </div>
@@ -1006,105 +1154,186 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        {view === "month" ? (
           <div
             className={cn(
-              "surface-panel shrink-0 overflow-hidden rounded-[1.7rem] p-3",
-              (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
+              "min-h-0 flex-1 gap-3 overflow-hidden",
+              isMobileLayout ? "grid grid-rows-[minmax(0,1.45fr)_minmax(13.5rem,0.85fr)]" : "grid lg:grid-cols-[minmax(0,1fr)_24rem]"
             )}
           >
+            <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+              <div
+                className={cn(
+                  "surface-panel min-h-0 overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
+                  (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
+                )}
+              >
+                <div className={cn("overflow-hidden", isMobileLayout ? "h-full min-h-0" : desktopMonthHeightClassName)}>
+                  <MonthView
+                    currentDate={visibleMonthDate}
+                    selectedDate={selectedDate}
+                    selectedAppointmentId={selectedAppointmentId}
+                    appointments={appointments}
+                    onDayClick={handleDayClick}
+                    onApptClick={handleApptClick}
+                    conflictIds={activeConflicts}
+                    isMobileLayout={isMobileLayout}
+                  />
+                </div>
+              </div>
+              <div className={cn("flex shrink-0 justify-start", isMobileLayout && "hidden")}>
+                <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
+              </div>
+            </div>
+
             <div
               className={cn(
-                "overflow-hidden",
-                view === "month"
-                  ? `${mobileMonthHeightClassName} ${desktopMonthHeightClassName}`
-                  : "h-[21.5rem] sm:h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]"
+                "min-h-0 overflow-hidden",
+                isMobileLayout ? "surface-panel rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3" : "flex h-full min-h-[24rem] lg:min-h-0"
               )}
             >
-              {view === "month" ? (
-                <MonthView
-                  currentDate={visibleMonthDate}
-                  selectedDate={selectedDate}
-                  selectedAppointmentId={selectedAppointmentId}
-                  appointments={appointments}
-                  onDayClick={handleDayClick}
-                  onApptClick={handleApptClick}
-                  conflictIds={activeConflicts}
-                  isMobileLayout={isMobileLayout}
-                />
-              ) : null}
-              {view === "day" ? (
-                <DayView
+              {isMobileLayout ? dayInspectorPanel : <div className="flex min-h-0 flex-1">{dayInspectorPanel}</div>}
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            <div
+              className={cn(
+                "surface-panel min-h-0 overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
+                (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
+              )}
+            >
+              <div className={cn("overflow-hidden", isMobileLayout ? "h-full min-h-0" : "h-[23rem] xl:h-[clamp(24rem,46dvh,34rem)]")}>
+                <WeekView
                   currentDate={currentDate}
                   appointments={appointments}
                   onSlotClick={handleSlotClick}
                   onApptClick={handleApptClick}
-                  selectedAppointmentId={selectedAppointmentId}
-                  isMobileLayout={isMobileLayout}
+                  onDayClick={(date) => {
+                    setSelectedDate(date);
+                    setCurrentDate(date);
+                  }}
                   onReschedule={handleReschedule}
                   conflictIds={activeConflicts}
                 />
-              ) : null}
+              </div>
             </div>
           </div>
-
-          {view === "month" ? (
-            <div className="flex shrink-0 justify-start">
-              <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
-            </div>
-          ) : null}
-
-          {view === "month" ? (
-            <div
-              className={cn(
-                "surface-panel min-h-0 overflow-hidden rounded-[1.7rem] p-4",
-                isMobileLayout ? "h-[26rem] min-h-[26rem] p-3" : "min-h-[24rem] flex-1 xl:min-h-[28rem]"
-              )}
-            >
-              {dayInspectorPanel}
-            </div>
-          ) : null}
-        </div>
+        )}
       </div>
 
-      <Dialog
+      <Sheet
         open={isAppointmentInspectorOpen}
         onOpenChange={(open) => {
           setIsAppointmentInspectorOpen(open);
           if (!open) setSelectedAppointmentId(null);
         }}
       >
-        <DialogContent className="flex h-[92dvh] max-w-none flex-col overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]">
-          <DialogHeader className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-4 text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Appointment inspector</p>
-            <DialogTitle className="mt-1 text-lg font-semibold text-foreground">
-              {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Review appointment money, customer, vehicle, timing, and status details for the selected calendar job.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {isAppointmentInspectorOpen ? (
-              <AppointmentInspectorPanel
-                appointment={selectedAppointment}
-                emptyTitle="Select an appointment"
-                emptyDescription={
-                  view === "month"
-                    ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
-                    : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+        <SheetContent
+          side={isMobileLayout ? "bottom" : "right"}
+          swipeToClose
+          showHandle={false}
+          onSwipeClose={() => {
+            setIsAppointmentInspectorOpen(false);
+            setSelectedAppointmentId(null);
+          }}
+          className={cn(
+            "gap-0 !border-0 !bg-transparent !shadow-none p-2 [&>button]:right-5 [&>button]:top-5 [&>button]:z-30 [&>button]:rounded-full [&>button]:bg-white/85 [&>button]:backdrop-blur-xl",
+            isMobileLayout
+              ? "max-h-[92dvh] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+              : "sm:inset-y-5 sm:right-5 sm:h-auto sm:max-h-[calc(100dvh-2.5rem)] sm:w-[min(92vw,34rem)] sm:max-w-[34rem] sm:p-0 lg:w-[36rem] lg:max-w-[36rem]"
+          )}
+        >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-white/75 bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.91))] shadow-[0_28px_80px_rgba(15,23,42,0.26),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-2xl">
+            <div className="flex shrink-0 justify-center pt-3">
+              <span aria-hidden="true" className="native-sheet-handle" />
+            </div>
+            <div className="shrink-0 border-b border-white/65 px-5 pb-3 pt-2 text-left">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Floating inspector</p>
+                  <SheetTitle className="mt-1 truncate pr-4 text-lg font-semibold tracking-[-0.03em] text-foreground">
+                    {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
+                  </SheetTitle>
+                </div>
+                {inspectorAppointmentCount > 1 ? (
+                  <div className="mr-8 flex shrink-0 items-center gap-1.5" data-calendar-swipe-ignore="true">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full border-white/70 bg-white/82 shadow-sm"
+                      onClick={() => selectInspectorAppointmentByDirection(-1)}
+                      disabled={!canSwipeToPreviousAppointment}
+                      aria-label="Previous appointment"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <span className="rounded-full border border-white/70 bg-white/82 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm">
+                      {Math.max(inspectorAppointmentIndex + 1, 1)}/{inspectorAppointmentCount}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full border-white/70 bg-white/82 shadow-sm"
+                      onClick={() => selectInspectorAppointmentByDirection(1)}
+                      disabled={!canSwipeToNextAppointment}
+                      aria-label="Next appointment"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <SheetDescription className="sr-only">
+                Review appointment money, customer, vehicle, timing, and status details for the selected calendar job.
+              </SheetDescription>
+            </div>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-4 touch-pan-y"
+              onPointerDown={handleInspectorSwipePointerDown}
+              onPointerMove={handleInspectorSwipePointerMove}
+              onPointerUp={handleInspectorSwipePointerUp}
+              onPointerCancel={handleInspectorSwipePointerCancel}
+            >
+              <div
+                className={cn(
+                  "min-h-full will-change-transform",
+                  inspectorSwipeAnimating ? "transition-[opacity,transform] duration-200 ease-out" : "transition-none"
+                )}
+                style={
+                  isMobileLayout
+                    ? {
+                        transform: `translate3d(${inspectorSwipeOffset}px, 0, 0)`,
+                        opacity: String(1 - Math.min(Math.abs(inspectorSwipeOffset), 96) / 420),
+                      }
+                    : undefined
                 }
-                compact={isMobileLayout}
-                onAppointmentChange={() => refetchAppointments()}
-                onRequestClose={() => {
-                  setIsAppointmentInspectorOpen(false);
-                  setSelectedAppointmentId(null);
-                }}
-              />
-            ) : null}
+              >
+                {isAppointmentInspectorOpen ? (
+                  <AppointmentInspectorPanel
+                    appointment={selectedAppointment}
+                    emptyTitle="Select an appointment"
+                    emptyDescription={
+                      view === "month"
+                        ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
+                        : "Choose a job from the week board to inspect money, customer, vehicle, timing, and stage."
+                    }
+                    compact={isMobileLayout}
+                    presentation="floating"
+                    onAppointmentChange={() => refetchAppointments()}
+                    onRequestClose={() => {
+                      setIsAppointmentInspectorOpen(false);
+                      setSelectedAppointmentId(null);
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <Dialog
         open={showBlockDialog}

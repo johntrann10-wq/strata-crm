@@ -12,6 +12,7 @@ export default tseslint.config(
       ".gadget/**",
       "build/**",
       "backend/dist/**",
+      "ios/App/App/public/**",
       ".react-router/**",
       "playwright-report/**",
       "test-results/**",

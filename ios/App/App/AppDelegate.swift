@@ -1,13 +1,14 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
-@UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+@main
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        UNUserNotificationCenter.current().delegate = self
         return true
     }
 
@@ -29,6 +30,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
     }
 
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+    }
+
     func applicationWillTerminate(_ application: UIApplication) {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
@@ -44,6 +49,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Feel free to add additional processing here, but if you want the App API to support
         // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .list, .sound])
+            return
+        }
+        completionHandler([.alert, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        completionHandler()
     }
 
 }

@@ -7,6 +7,7 @@ import { CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { getBillingAccessLabel, getTrialDaysLeft, hasFullBillingAccess, type BillingAccessState } from "../lib/billingAccess";
 import type { AuthOutletContext } from "./_app";
 import type { BillingActivationMilestone, BillingPromptState } from "../lib/billingPrompts";
+import { isNativeShell } from "../lib/mobileShell";
 
 type BillingStatus = {
   status: string | null;
@@ -67,6 +68,7 @@ export default function SubscribePage() {
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
   const billingPrompt = billingStatus?.billingPrompt ?? null;
+  const nativeShellSession = isNativeShell();
 
   const handleOpenBillingPortal = async () => {
     if (!canManageBilling) return;
@@ -176,10 +178,12 @@ export default function SubscribePage() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-primary" />
-            <CardTitle>Billing access</CardTitle>
+            <CardTitle>{nativeShellSession ? "Workspace billing" : "Billing access"}</CardTitle>
           </div>
           <CardDescription>
-            Keep the workspace available without interrupting setup. Billing actions live here when Stripe needs attention.
+            {nativeShellSession
+              ? "Review workspace billing status here without leaving the mobile account flow."
+              : "Keep the workspace available without interrupting setup. Billing actions live here when Stripe needs attention."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -187,12 +191,16 @@ export default function SubscribePage() {
             <p className="text-sm font-medium">{stateLabel}</p>
             {billingStatus?.accessState === "paused_missing_payment_method" ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                Your trial ended without a saved payment method. Add one to resume full access immediately.
+                {nativeShellSession
+                  ? "Workspace billing needs attention before full access can resume."
+                  : "Your trial ended without a saved payment method. Add one to resume full access immediately."}
               </p>
             ) : null}
             {billingStatus?.accessState === "canceled" ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                Billing is no longer active for this workspace. Reactivate it to continue using Strata fully.
+                {nativeShellSession
+                  ? "Workspace billing is currently inactive."
+                  : "Billing is no longer active for this workspace. Reactivate it to continue using Strata fully."}
               </p>
             ) : null}
             {billingStatus?.accessState === "pending_setup_failure" ? (
@@ -202,9 +210,11 @@ export default function SubscribePage() {
             ) : null}
             {billingStatus?.accessState === "active_trial" ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                {daysLeft == null
-                  ? "Your 30-day Strata trial is active."
-                  : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your 30-day trial.`}
+                {nativeShellSession
+                  ? "Workspace access is active in the mobile app."
+                  : daysLeft == null
+                    ? "Your 30-day Strata trial is active."
+                    : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in your 30-day trial.`}
               </p>
             ) : null}
           </div>
@@ -215,26 +225,30 @@ export default function SubscribePage() {
 
           {billingStatus?.accessState === "pending_setup_failure" ? (
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={handleRetrySetup} disabled={retryingSetup}>
-                {retryingSetup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                Retry billing setup
-              </Button>
+              {nativeShellSession ? null : (
+                <Button onClick={handleRetrySetup} disabled={retryingSetup}>
+                  {retryingSetup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Retry billing setup
+                </Button>
+              )}
               <Button asChild variant="outline">
                 <Link to="/settings?tab=billing">Open billing settings</Link>
               </Button>
             </div>
           ) : (
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button onClick={handleOpenBillingPortal} disabled={loadingPortal || !billingStatus?.portalConfigured || !canManageBilling}>
-                {loadingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {billingStatus?.accessState === "paused_missing_payment_method"
-                  ? "Resume subscription"
-                  : billingStatus?.accessState === "canceled"
-                    ? "Reactivate subscription"
-                  : billingStatus?.billingHasPaymentMethod
-                    ? "Manage billing"
-                    : "Add payment method"}
-              </Button>
+              {nativeShellSession ? null : (
+                <Button onClick={handleOpenBillingPortal} disabled={loadingPortal || !billingStatus?.portalConfigured || !canManageBilling}>
+                  {loadingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {billingStatus?.accessState === "paused_missing_payment_method"
+                    ? "Resume subscription"
+                    : billingStatus?.accessState === "canceled"
+                      ? "Reactivate subscription"
+                      : billingStatus?.billingHasPaymentMethod
+                        ? "Manage billing"
+                        : "Add payment method"}
+                </Button>
+              )}
               <Button asChild variant="outline">
                 <Link to="/settings?tab=billing">Billing settings</Link>
               </Button>
@@ -248,7 +262,9 @@ export default function SubscribePage() {
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            We keep your workspace and data intact. Once billing is healthy again, full access resumes automatically.
+            {nativeShellSession
+              ? "Workspace data stays intact. If billing still needs attention after review, contact support for help."
+              : "We keep your workspace and data intact. Once billing is healthy again, full access resumes automatically."}
           </p>
         </CardContent>
       </Card>

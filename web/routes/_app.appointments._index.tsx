@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { endOfWeek, format, isToday, startOfWeek } from "date-fns";
-import { Link, useOutletContext } from "react-router";
+import { Link, useOutletContext, useSearchParams } from "react-router";
 import { CalendarRange, ChevronLeft, ChevronRight, Inbox, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -99,6 +99,64 @@ const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
   { value: "pickups", label: "Pickups" },
 ];
 
+function isScheduleFilter(value: string | null): value is ScheduleFilter {
+  return FILTER_OPTIONS.some((option) => option.value === value);
+}
+
+function parseScheduleDateParam(value: string | null): Date | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const today = new Date();
+  if (normalized === "today") return today;
+  if (normalized === "tomorrow") return new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  if (normalized === "yesterday") return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+
+  const dateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateMatch) return null;
+
+  const [, year, month, day] = dateMatch;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getFullYear() !== Number(year) ||
+    parsed.getMonth() !== Number(month) - 1 ||
+    parsed.getDate() !== Number(day)
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
+function normalizeSmartSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function buildSmartSearchTokens(value: string): string[] {
+  const normalized = normalizeSmartSearchText(value);
+  if (!normalized) return [];
+  return Array.from(new Set(normalized.split(/\s+/).filter(Boolean)));
+}
+
+function getDateSearchParts(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return [];
+  return [
+    format(date, "EEE"),
+    format(date, "EEEE"),
+    format(date, "MMM d"),
+    format(date, "MMMM d"),
+    format(date, "yyyy-MM-dd"),
+    format(date, "M/d/yyyy"),
+    format(date, "h:mm a"),
+    format(date, "h a"),
+    format(date, "ha"),
+    format(date, "HH:mm"),
+    format(date, "HHmm"),
+  ];
+}
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -133,6 +191,32 @@ function getAppointmentMoneyLabel(appointment: AppointmentRecord): string | null
   const amount = getCalendarAppointmentAmount(appointment);
   if (amount <= 0) return null;
   return formatCurrency(amount);
+}
+
+function buildAppointmentSearchText(appointment: AppointmentRecord): string {
+  return normalizeSmartSearchText(
+    [
+      getAppointmentLabel(appointment),
+      getClientName(appointment),
+      getVehicleLabel(appointment),
+      getTechName(appointment),
+      appointment.location?.name ?? "",
+      appointment.status ?? "",
+      appointment.jobPhase ?? "",
+      getJobPhaseLabel(appointment.jobPhase),
+      appointment.notes ?? "",
+      appointment.internalNotes ?? "",
+      ...getDateSearchParts(appointment.startTime),
+      ...getDateSearchParts(appointment.endTime),
+      ...getDateSearchParts(appointment.jobStartTime),
+      ...getDateSearchParts(appointment.expectedCompletionTime),
+      ...getDateSearchParts(appointment.pickupReadyTime),
+    ].join(" ")
+  );
+}
+
+function matchesSmartSearch(haystack: string, tokens: string[]): boolean {
+  return tokens.length === 0 || tokens.every((token) => haystack.includes(token));
 }
 
 function joinMeta(parts: Array<string | null | undefined>): string {
@@ -267,16 +351,30 @@ function MobileFilterSelect({
 
 export default function AppointmentsPage() {
   const { businessId, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
-  const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [search, setSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  const searchParamKey = searchParams.toString();
+  const [currentDate, setCurrentDate] = useState(() => parseScheduleDateParam(searchParams.get("when")) ?? new Date());
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
-  const [activeFilter, setActiveFilter] = useState<ScheduleFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<ScheduleFilter>(() => {
+    const requestedFilter = searchParams.get("filter");
+    return isScheduleFilter(requestedFilter) ? requestedFilter : "all";
+  });
   const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
   const [inspectedDateKey, setInspectedDateKey] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveLocationId(currentLocationId ?? "all");
   }, [currentLocationId]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParamKey);
+    const requestedFilter = nextParams.get("filter");
+    const requestedDate = parseScheduleDateParam(nextParams.get("when"));
+    setSearch(nextParams.get("q") ?? "");
+    setActiveFilter(isScheduleFilter(requestedFilter) ? requestedFilter : "all");
+    if (requestedDate) setCurrentDate(requestedDate);
+  }, [searchParamKey]);
 
   const weekStart = useMemo(() => startOfWeek(currentDate, { weekStartsOn: 0 }), [currentDate]);
   const weekEnd = useMemo(() => endOfWeek(currentDate, { weekStartsOn: 0 }), [currentDate]);
@@ -341,26 +439,14 @@ export default function AppointmentsPage() {
   const records = useMemo(() => ((appointmentsData ?? []) as AppointmentRecord[]).filter(isOperationalAppointment), [appointmentsData]);
   const staffRecords = useMemo(() => ((staffRaw ?? []) as StaffRecord[]).filter(Boolean), [staffRaw]);
   const locationRecords = useMemo(() => ((locationsRaw ?? []) as LocationRecord[]).filter(Boolean), [locationsRaw]);
-  const searchTerm = search.trim().toLowerCase();
+  const searchTokens = useMemo(() => buildSmartSearchTokens(search), [search]);
 
   const filteredRecords = useMemo(() => {
     return records.filter((appointment) => {
       if (activeTechFilter !== "all" && appointment.assignedStaffId !== activeTechFilter) return false;
-      if (!searchTerm) return true;
-
-      const haystack = [
-        getAppointmentLabel(appointment),
-        getClientName(appointment),
-        getVehicleLabel(appointment),
-        getTechName(appointment),
-        appointment.location?.name ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(searchTerm);
+      return matchesSmartSearch(buildAppointmentSearchText(appointment), searchTokens);
     });
-  }, [activeTechFilter, records, searchTerm]);
+  }, [activeTechFilter, records, searchTokens]);
 
   const weekSnapshots = useMemo(() => {
     return weekDays.map((date) => {
@@ -444,7 +530,7 @@ export default function AppointmentsPage() {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Find a client, vehicle, job, or tech"
+                placeholder="Search name, vehicle, tech, date, or time"
                 className="h-9 rounded-lg pl-9 sm:h-10 sm:rounded-xl"
               />
             </div>

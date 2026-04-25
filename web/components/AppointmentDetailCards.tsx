@@ -71,7 +71,7 @@ interface ClientCardProps {
 
 export function ClientCard({ client }: ClientCardProps) {
   return (
-    <Card>
+    <Card className="native-panel-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <User className="h-4 w-4" />
@@ -107,7 +107,7 @@ export function ClientCard({ client }: ClientCardProps) {
               </div>
             )}
             <Separator />
-            <Button variant="outline" size="sm" className="w-full" asChild>
+            <Button variant="outline" size="sm" className="native-touch-surface w-full" asChild>
               <Link to={client.id ? `/appointments/new?clientId=${client.id}` : "/appointments/new"}>
                 New Appointment
               </Link>
@@ -141,7 +141,7 @@ export function VehicleCard({ vehicle, clientId }: VehicleCardProps) {
     : null;
 
   return (
-    <Card>
+    <Card className="native-panel-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Car className="h-4 w-4" />
@@ -163,7 +163,7 @@ export function VehicleCard({ vehicle, clientId }: VehicleCardProps) {
               </p>
             )}
             {clientId && (
-              <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+              <Button variant="outline" size="sm" className="native-touch-surface mt-2 w-full" asChild>
                 <Link to={`/clients/${clientId}`}>View Client Profile</Link>
               </Button>
             )}
@@ -191,7 +191,7 @@ interface InvoiceCardProps {
 
 export function InvoiceCard({ invoice, invoiceFetching, appointmentId: _appointmentId }: InvoiceCardProps) {
   return (
-    <Card>
+    <Card className="native-panel-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <FileText className="h-4 w-4" />
@@ -217,7 +217,7 @@ export function InvoiceCard({ invoice, invoiceFetching, appointmentId: _appointm
               <p className="text-2xl font-bold">{formatCurrency(invoice.total)}</p>
             )}
             {invoice.id && (
-              <Button size="sm" className="w-full" asChild>
+              <Button size="sm" className="native-touch-surface w-full" asChild>
                 <Link to={`/invoices/${invoice.id}`}>View Invoice</Link>
               </Button>
             )}
@@ -349,7 +349,7 @@ export function FinancialSummaryCard({
         : "bg-slate-100 text-slate-700 border-slate-200";
 
   return (
-    <Card>
+    <Card className="native-panel-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <DollarSign className="h-4 w-4" />
@@ -451,7 +451,7 @@ export function ReviewRequestCard({
   const isCompleted = appointmentStatus === "completed";
 
   return (
-    <Card>
+    <Card className="native-panel-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Star className="h-4 w-4" />
@@ -508,4 +508,3 @@ export function ReviewRequestCard({
     </Card>
   );
 }
-

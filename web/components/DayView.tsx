@@ -248,7 +248,8 @@ export function DayView({
                     key={`${appointment.id}-${kind}-mobile`}
                     type="button"
                     className={cn(
-                      "w-full rounded-2xl border bg-white px-3 py-2.5 text-left shadow-sm transition-all hover:shadow-md",
+                      "native-touch-surface w-full rounded-2xl border bg-white px-3 py-2.5 text-left shadow-sm transition-all hover:shadow-md",
+                      "[-webkit-touch-callout:none] touch-manipulation",
                       isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
                       isBlock ? "" : style.text,
                       isBlock ? "" : style.border,
@@ -414,7 +415,8 @@ export function DayView({
                   type="button"
                   onClick={() => onApptClick(apt)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left",
+                    "native-touch-surface flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-3 py-3 text-left",
+                    "[-webkit-touch-callout:none] touch-manipulation",
                     selectedAppointmentId === apt.id && "border-primary/35 bg-primary/[0.05] ring-2 ring-primary/30"
                   )}
                 >

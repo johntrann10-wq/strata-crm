@@ -42,6 +42,7 @@ type TopBarProps = {
   roleLabel: string;
   range: HomeDashboardRange;
   onRangeChange: (value: HomeDashboardRange) => void;
+  showRangeSelector?: boolean;
   teamOptions: Array<{ id: string; name: string }>;
   teamMemberId: string;
   onTeamChange: (value: string) => void;
@@ -155,6 +156,7 @@ export function HomeDashboardTopBar({
   roleLabel,
   range,
   onRangeChange,
+  showRangeSelector = true,
   teamOptions,
   teamMemberId,
   onTeamChange,
@@ -194,22 +196,24 @@ export function HomeDashboardTopBar({
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:max-w-[56rem]">
           {primaryAction}
           {secondaryAction}
-          <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onRangeChange(option.value)}
-                className={cn(
-                  "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
-                  range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
-                )}
-                aria-pressed={range === option.value}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {showRangeSelector ? (
+            <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
+              {rangeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onRangeChange(option.value)}
+                  className={cn(
+                    "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
+                    range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
+                  )}
+                  aria-pressed={range === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {canFilterTeam ? (
             <label className="inline-flex w-full items-center gap-2 rounded-[1.1rem] border border-border/70 bg-white px-3 py-2 text-sm text-slate-500 sm:min-w-[210px] sm:w-auto">

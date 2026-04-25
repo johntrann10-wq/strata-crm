@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthSupportLinks } from "@/components/auth/AuthSupportLinks";
 import { useAction } from "@/hooks/useApi";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -93,7 +94,7 @@ export default function ResetPasswordRoute() {
   };
 
   return (
-    <div className="w-full max-w-sm">
+    <div className="mx-auto w-full max-w-[24rem] sm:max-w-md">
       <div className="mx-auto mb-8 flex flex-col items-center gap-3">
         <StrataLogoLockup
           className="flex-col gap-3"
@@ -109,7 +110,7 @@ export default function ResetPasswordRoute() {
         </p>
       </div>
 
-      <Card className="rounded-2xl border border-border p-8 shadow-sm">
+      <Card className="rounded-[1.75rem] border-white/70 bg-white/94 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.10)] sm:p-8">
         {complete ? (
           <div className="space-y-4 text-center">
             <p className="text-sm text-foreground">Your password has been reset.</p>
@@ -117,6 +118,19 @@ export default function ResetPasswordRoute() {
             <Button asChild className="h-9 w-full rounded-lg bg-orange-500 text-[13px] font-medium text-white hover:bg-orange-500/90">
               <Link to="/sign-in">Go to sign in</Link>
             </Button>
+          </div>
+        ) : !resolvedToken ? (
+          <div className="space-y-4 text-center">
+            <p className="text-sm font-medium text-foreground">This reset link is missing or invalid.</p>
+            <p className="text-[12px] text-muted-foreground">Request a fresh password reset email, then reopen the new link from this device.</p>
+            <div className="flex flex-col gap-3 pt-1">
+              <Button asChild className="h-9 w-full rounded-lg bg-orange-500 text-[13px] font-medium text-white hover:bg-orange-500/90">
+                <Link to="/forgot-password">Request a new reset link</Link>
+              </Button>
+              <Button asChild variant="outline" className="h-9 w-full rounded-lg text-[13px] font-medium">
+                <Link to="/sign-in">Back to sign in</Link>
+              </Button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -157,7 +171,7 @@ export default function ResetPasswordRoute() {
       <p className="mt-6 text-center text-[13px] text-muted-foreground">
         Back to <Link to="/sign-in" className="font-medium text-foreground hover:underline">sign in</Link>
       </p>
+      <AuthSupportLinks className="mt-4" />
     </div>
   );
 }
-

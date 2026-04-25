@@ -111,6 +111,28 @@ const ACTIONS: Array<{
 
 const ACTIVE_STATUSES: LeadStatus[] = ["new", "contacted", "quoted", "booked"];
 
+function isLeadStatusFilter(value: string | null): value is LeadStatusFilter {
+  return value === "active" || value === "all" || LEAD_STATUS_OPTIONS.includes(value as LeadStatus);
+}
+
+function isLeadSourceFilter(value: string | null): value is LeadSourceFilter {
+  return value === "all" || LEAD_SOURCE_OPTIONS.includes(value as LeadSource);
+}
+
+function normalizeSmartSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function buildSmartSearchTokens(value: string): string[] {
+  const normalized = normalizeSmartSearchText(value);
+  if (!normalized) return [];
+  return Array.from(new Set(normalized.split(/\s+/).filter(Boolean)));
+}
+
+function matchesSmartSearch(haystack: string, tokens: string[]): boolean {
+  return tokens.length === 0 || tokens.every((token) => haystack.includes(token));
+}
+
 function buildQuoteRecipientQuery(values: {
   firstName?: string | null;
   lastName?: string | null;
@@ -164,26 +186,29 @@ function buildLeadAppointmentHref(input: {
 }
 
 function buildLeadSearchText(client: any, lead: ReturnType<typeof parseLeadRecord>) {
-  return [
-    client.firstName,
-    client.lastName,
-    client.phone,
-    client.email,
-    client.address,
-    client.city,
-    client.state,
-    client.zip,
-    client.internalNotes,
-    lead.serviceInterest,
-    lead.nextStep,
-    lead.summary,
-    lead.vehicle,
-    lead.source,
-    lead.status,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  return normalizeSmartSearchText(
+    [
+      client.firstName,
+      client.lastName,
+      client.phone,
+      client.email,
+      client.address,
+      client.city,
+      client.state,
+      client.zip,
+      client.internalNotes,
+      lead.serviceInterest,
+      lead.nextStep,
+      lead.summary,
+      lead.vehicle,
+      lead.source,
+      formatLeadSource(lead.source),
+      lead.status,
+      formatLeadStatus(lead.status),
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
 }
 
 function badgeVariantForStatus(status: LeadStatus): "default" | "secondary" | "outline" {
@@ -204,12 +229,12 @@ function filterLeadEntries(
     sourceFilter: LeadSourceFilter;
   },
 ) {
-  const query = searchQuery.trim().toLowerCase();
+  const searchTokens = buildSmartSearchTokens(searchQuery);
   return leadRecords.filter((entry) => {
     if (statusFilter === "active" && !ACTIVE_STATUSES.includes(entry.lead.status)) return false;
     if (statusFilter !== "active" && statusFilter !== "all" && entry.lead.status !== statusFilter) return false;
     if (sourceFilter !== "all" && entry.lead.source !== sourceFilter) return false;
-    if (query && !entry.searchableText.includes(query)) return false;
+    if (!matchesSmartSearch(entry.searchableText, searchTokens)) return false;
     return true;
   });
 }
@@ -368,14 +393,21 @@ export default function LeadsPage() {
   const navigate = useNavigate();
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
   const [searchParams] = useSearchParams();
+  const searchParamKey = searchParams.toString();
   const returnTo = searchParams.get("from")?.startsWith("/") ? searchParams.get("from")! : "/signed-in";
   const hasQueueReturn = searchParams.has("from");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
   const [submitMode, setSubmitMode] = useState<SubmitMode>("lead");
-  const [statusFilter, setStatusFilter] = useState<LeadStatusFilter>("active");
-  const [sourceFilter, setSourceFilter] = useState<LeadSourceFilter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<LeadStatusFilter>(() => {
+    const requestedStatus = searchParams.get("status");
+    return isLeadStatusFilter(requestedStatus) ? requestedStatus : "active";
+  });
+  const [sourceFilter, setSourceFilter] = useState<LeadSourceFilter>(() => {
+    const requestedSource = searchParams.get("source");
+    return isLeadSourceFilter(requestedSource) ? requestedSource : "all";
+  });
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") ?? "");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const submitModeRef = useRef<SubmitMode>("lead");
 
@@ -387,6 +419,15 @@ export default function LeadsPage() {
     media.addEventListener?.("change", sync);
     return () => media.removeEventListener?.("change", sync);
   }, []);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParamKey);
+    const requestedStatus = nextParams.get("status");
+    const requestedSource = nextParams.get("source");
+    setSearchQuery(nextParams.get("q") ?? "");
+    setStatusFilter(isLeadStatusFilter(requestedStatus) ? requestedStatus : "active");
+    setSourceFilter(isLeadSourceFilter(requestedSource) ? requestedSource : "all");
+  }, [searchParamKey]);
 
   const [{ data: business, fetching: businessFetching }] = useFindFirst(api.business, {
     select: { id: true, name: true, automationUncontactedLeadHours: true },
@@ -973,7 +1014,7 @@ export default function LeadsPage() {
                 <div className="grid gap-3">
                   <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search lead name, ask, contact, source, or vehicle" className="pl-9" />
+                  <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search name, service, vehicle, source, or status" className="pl-9" />
                 </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {isMobileLayout ? (

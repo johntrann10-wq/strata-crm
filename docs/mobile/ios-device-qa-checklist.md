@@ -52,7 +52,9 @@
 - Open privacy policy inside the app
 - Open terms inside the app
 - Open support contact from inside the app
-- Open Profile and submit account deletion request
+- Open `Settings > Account`, confirm `Delete account` is easy to find, then enter Profile and complete the in-app delete-account flow
+- Verify the delete warning explains permanent deletion plus any legally retained billing or tax history
+- Type `DELETE`, complete deletion, and confirm the app signs out automatically with no web handoff
 
 ## Reliability
 

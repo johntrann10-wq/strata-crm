@@ -2,6 +2,8 @@ import { clearAuthState, getAuthToken, getCurrentBusinessId } from "./lib/auth";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "./lib/homeDashboard";
 import { recordReliabilityDiagnostic } from "./lib/reliabilityDiagnostics";
 
+const DEFAULT_NATIVE_SHELL_API_ORIGIN = "https://stratacrm.app";
+
 /** Standard auth payload from sign-in, sign-up, and GET /auth/me. */
 export type AuthUserData = {
   id: string;
@@ -9,6 +11,8 @@ export type AuthUserData = {
   firstName: string | null;
   lastName: string | null;
   googleProfileId: string | null;
+  appleSubject: string | null;
+  appleEmailIsPrivateRelay: boolean;
   hasPassword: boolean;
   token: string;
 };
@@ -38,6 +42,11 @@ function shouldUseSameOriginApi(): boolean {
   );
 }
 
+function isNativeShellRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "capacitor:";
+}
+
 /**
  * Fetch-based API client for Node API endpoints.
  * Uses JWT in Authorization header and talks directly to the Express backend.
@@ -54,6 +63,10 @@ function resolveApiBase(): string {
     import.meta.env.NEXT_PUBLIC_API_URL?.trim() ||
     "";
   if (raw) return raw.replace(/\/+$/, "");
+
+  // Capacitor shells cannot rely on relative `/api/*` paths because the app
+  // runs from `capacitor://localhost`, not the public website origin.
+  if (isNativeShellRuntime()) return DEFAULT_NATIVE_SHELL_API_ORIGIN;
 
   // Use same-origin /api on Vercel/Netlify only when no explicit API origin was baked into the client.
   if (import.meta.env.PROD && shouldUseSameOriginApi()) return "";
@@ -168,12 +181,17 @@ function emitHomeDashboardInvalidated(path: string, method: string): void {
   );
 }
 
+type AppRequestInit = RequestInit & {
+  suppressAuthInvalidation?: boolean;
+};
+
 async function request<T = unknown>(
   path: string,
-  init: RequestInit = {}
+  init: AppRequestInit = {}
 ): Promise<T> {
   const url = buildApiUrl(path);
   const method = (init.method ?? "GET").toUpperCase();
+  const suppressAuthInvalidation = init.suppressAuthInvalidation === true;
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...init.headers,
@@ -187,8 +205,9 @@ async function request<T = unknown>(
     (headers as any)["x-business-id"] = currentBusinessId;
   }
   let res: Response;
+  const { suppressAuthInvalidation: _ignoredSuppressAuthInvalidation, ...fetchInit } = init;
   const requestInit: RequestInit = {
-    ...init,
+    ...fetchInit,
     headers,
     credentials: "include",
   };
@@ -256,7 +275,7 @@ async function request<T = unknown>(
       if (res.status === 402 && path.startsWith("/businesses")) {
         return { records: [] } as T;
       }
-      if (res.status === 401) {
+      if (res.status === 401 && !suppressAuthInvalidation) {
         // Invalid/expired token: clear local auth so boot + protected pages can redirect predictably.
         clearAuthState("auth:invalid", { status: res.status, path });
         recordReliabilityDiagnostic({
@@ -282,6 +301,15 @@ async function request<T = unknown>(
       }
       let message =
         errBody.message ?? res.statusText ?? `Request failed ${res.status}`;
+      const looksLikeHtmlFallback =
+        res.status === 404 &&
+        import.meta.env.PROD &&
+        (errText.slice(0, 120).toLowerCase().includes("<!doctype") ||
+          errText.slice(0, 120).toLowerCase().includes("<html"));
+      if (looksLikeHtmlFallback && path === "/auth/apple/native") {
+        message =
+          "Sign in with Apple is not available on the deployed server for this build yet. Update the backend deployment and try again.";
+      }
       if (res.status === 404 && import.meta.env.PROD) {
         const snippet = errText.slice(0, 120).toLowerCase();
         const looksLikeSpaOrStatic = snippet.includes("<!doctype") || snippet.includes("<html");
@@ -395,6 +423,8 @@ function resource(path: string) {
       entityType?: string;
       /** Activity feed: scope list to one entity id. */
       entityId?: string;
+      /** Optional shell data that should not force a logout on transient 401s. */
+      suppressAuthInvalidation?: boolean;
       /** Quotes: draft + sent only (dashboard). */
       pending?: boolean;
       /** Invoices: sent + partial only (dashboard unpaid). */
@@ -424,7 +454,9 @@ function resource(path: string) {
         Object.keys(query).length > 0
           ? "?" + new URLSearchParams(serializeQuery(query as Record<string, unknown>)).toString()
           : "";
-      return request<{ records?: unknown[] }>(`${base}${qs}`).then((r) => r?.records ?? []);
+      return request<{ records?: unknown[] }>(`${base}${qs}`, {
+        suppressAuthInvalidation: opts?.suppressAuthInvalidation,
+      }).then((r) => r?.records ?? []);
     };
   const findFirst = (opts?: { filter?: unknown; select?: unknown }) =>
     findMany({ ...opts, first: 1 }).then((arr) => arr[0] ?? null);
@@ -590,6 +622,7 @@ export const api = {
   },
   expense: resource("expenses"),
   activityLog: resource("activity-logs"),
+  mediaAsset: resource("media-assets"),
   notification: {
     list: (params?: { first?: number; signal?: AbortSignal }) => {
       const first = Math.min(Math.max(Number(params?.first ?? 12), 1), 50);
@@ -608,19 +641,23 @@ export const api = {
         }>;
       }>(`/notifications?first=${encodeURIComponent(String(first))}`, {
         signal: params?.signal,
+        suppressAuthInvalidation: true,
       }).then((body) => body.records ?? []);
     },
     unreadCount: (params?: { signal?: AbortSignal }) =>
       request<{ total: number; leads: number; calendar: number }>("/notifications/unread-count", {
         signal: params?.signal,
+        suppressAuthInvalidation: true,
       }),
     markRead: (params: { id: string }) =>
       request<{ ok: true; id: string }>(`/notifications/${encodeURIComponent(params.id)}/read`, {
         method: "POST",
+        suppressAuthInvalidation: true,
       }),
     markAllRead: () =>
       request<{ ok: true }>("/notifications/read-all", {
         method: "POST",
+        suppressAuthInvalidation: true,
       }),
   },
   notificationLog: resource("notification-logs"),
@@ -945,6 +982,10 @@ export const api = {
         assertAuthEnvelope(body, "/auth/sign-up");
         return body;
       }),
+    signInWithApple: (params: Record<string, unknown>) =>
+      request<AuthEnvelope>("/auth/apple/native", { method: "POST", body: JSON.stringify(params) }).then((body) => {
+        return assertAuthEnvelope(body, "/auth/apple/native");
+      }),
     forgotPassword: (params: Record<string, unknown>) =>
       request<{ ok: boolean; message?: string }>("/auth/forgot-password", {
         method: "POST",
@@ -978,6 +1019,19 @@ export const api = {
       }),
     setPassword: (params: Record<string, unknown>) =>
       request<unknown>("/users/set-password", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    deleteAccount: (params: Record<string, unknown>) =>
+      request<{
+        ok: boolean;
+        alreadyDeleted?: boolean;
+        deletedAt?: string | null;
+        deletionMode?: string;
+        deletedDataSummary?: string[];
+        retainedDataSummary?: string[];
+        redirectPath?: string;
+      }>("/users/delete-account", {
         method: "POST",
         body: JSON.stringify(params),
       }),

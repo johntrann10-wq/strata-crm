@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useOutletContext } from "react-router";
-import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Share2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
@@ -25,6 +25,9 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { shareNativeItems } from "@/lib/nativeFieldOps";
+import { isNativeShell, openNativeBrowserUrl } from "@/lib/mobileShell";
+import { buildLocalBookingPreviewUrl, buildPublicBookingUrl } from "@/lib/publicAppUrl";
 import {
   bookingBrandAccentColorOptions,
   bookingBrandBackgroundToneOptions,
@@ -545,8 +548,12 @@ export default function BookingBuilderPage() {
   }, [selectedService]);
 
   const bookingUrl = useMemo(() => {
-    if (!businessId || typeof window === "undefined") return "";
-    return `${window.location.origin}/book/${businessId}`;
+    if (!businessId) return "";
+    return buildPublicBookingUrl(businessId);
+  }, [businessId]);
+  const previewBaseUrl = useMemo(() => {
+    if (!businessId) return "";
+    return buildLocalBookingPreviewUrl(businessId);
   }, [businessId]);
   const previewQuery = useMemo(() => {
     const params = new URLSearchParams({
@@ -561,8 +568,8 @@ export default function BookingBuilderPage() {
     return params.toString();
   }, [previewMode, previewNonce]);
   const previewUrl = useMemo(
-    () => (bookingUrl ? `${bookingUrl}?${previewQuery}` : "about:blank"),
-    [bookingUrl, previewQuery]
+    () => (previewBaseUrl ? `${previewBaseUrl}?${previewQuery}` : "about:blank"),
+    [previewBaseUrl, previewQuery]
   );
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
   const bookingTheme = useMemo(() => resolveBookingBrandTheme(toBrandingTokens(form)), [form]);
@@ -805,6 +812,33 @@ export default function BookingBuilderPage() {
     }
   };
 
+  const openBookingUrl = async () => {
+    if (!bookingUrl) return;
+    try {
+      if (isNativeShell()) {
+        await openNativeBrowserUrl(bookingUrl);
+        return;
+      }
+      window.open(bookingUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Could not open the live booking page.");
+    }
+  };
+
+  const shareBookingUrl = async () => {
+    if (!bookingUrl) return;
+    const shared = await shareNativeItems({
+      items: [bookingUrl],
+      subject: "Strata booking link",
+      title: "Share live booking page",
+    });
+    if (!shared) {
+      toast.error("Could not open the share sheet.");
+      return;
+    }
+    toast.success("Booking link ready to share.");
+  };
+
   const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -853,9 +887,13 @@ export default function BookingBuilderPage() {
               </div>
               <Switch checked={form.bookingEnabled} onCheckedChange={(next) => updateField("bookingEnabled", next)} disabled={!canEdit} />
             </div>
-            <Button type="button" variant="outline" onClick={() => bookingUrl && window.open(bookingUrl, "_blank", "noopener,noreferrer")} disabled={!bookingUrl}>
+            <Button type="button" variant="outline" onClick={() => void openBookingUrl()} disabled={!bookingUrl}>
               <ExternalLink className="mr-2 h-4 w-4" />
               View live
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void shareBookingUrl()} disabled={!bookingUrl}>
+              <Share2 className="mr-2 h-4 w-4" />
+              Share live link
             </Button>
             <Button type="button" onClick={saveChanges} disabled={!canEdit || !dirty || saving} className={cn("min-w-[150px]", bookingTheme.primaryButtonClassName)}>
               {saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}

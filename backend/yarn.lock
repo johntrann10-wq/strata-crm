@@ -7,10 +7,10 @@
   resolved "https://registry.npmjs.org/@drizzle-team/brocli/-/brocli-0.10.2.tgz"
   integrity sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==
 
-"@embedded-postgres/windows-x64@^18.3.0-beta.16":
+"@embedded-postgres/darwin-arm64@^18.3.0-beta.16":
   version "18.3.0-beta.16"
-  resolved "https://registry.npmjs.org/@embedded-postgres/windows-x64/-/windows-x64-18.3.0-beta.16.tgz"
-  integrity sha512-REupF2FhJMEsXqdeUG+wVWSKpykbruh9Ro5bHG/7RCBuSa/ncJ/8qhtVSI71RTJn1Cb9Shqa/gbnorz+8hat9Q==
+  resolved "https://registry.npmjs.org/@embedded-postgres/darwin-arm64/-/darwin-arm64-18.3.0-beta.16.tgz"
+  integrity sha512-VBZ/xRS9Qdzq7MQnus9ScgO+89Ri2mHHqvbSVG3AOFY6xYne65Y9Br+6X1OcKOBWGR/mURBIFfe7CIqVp0Uf3Q==
 
 "@esbuild-kit/core-utils@^3.3.2":
   version "3.3.2"
@@ -28,25 +28,25 @@
     "@esbuild-kit/core-utils" "^3.3.2"
     get-tsconfig "^4.7.0"
 
-"@esbuild/win32-x64@0.18.20":
+"@esbuild/darwin-arm64@0.18.20":
   version "0.18.20"
-  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.18.20.tgz"
-  integrity sha512-kTdfRcSiDfQca/y9QIkng02avJ+NCaQvrMejlsB3RRv5sE9rRoeBPISaZpKxHELzRxZyLvNts1P27W3wV+8geQ==
+  resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.18.20.tgz"
+  integrity sha512-bxRHW5kHU38zS2lPTPOyuyTm+S+eobPUnTNkdJEfAddYgEcll4xkT8DB9d2008DtTbl7uJag2HuE5NZAZgnNEA==
 
-"@esbuild/win32-x64@0.21.5":
+"@esbuild/darwin-arm64@0.21.5":
   version "0.21.5"
-  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.21.5.tgz"
-  integrity sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw==
+  resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.21.5.tgz"
+  integrity sha512-DwqXqZyuk5AiWWf3UfLiRDJ5EDd49zg6O9wclZ7kUMv2WRFr4HKjXp/5t8JZ11QbQfUS6/cRCKGwYhtNAY88kQ==
 
-"@esbuild/win32-x64@0.25.12":
+"@esbuild/darwin-arm64@0.25.12":
   version "0.25.12"
-  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.25.12.tgz"
-  integrity sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA==
+  resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.25.12.tgz"
+  integrity sha512-N3zl+lxHCifgIlcMUP5016ESkeQjLj/959RxxNYIthIg+CQHInujFuXeWbWMgnTo4cp5XVHqFPmpyu9J65C1Yg==
 
-"@esbuild/win32-x64@0.27.4":
+"@esbuild/darwin-arm64@0.27.4":
   version "0.27.4"
-  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.27.4.tgz"
-  integrity sha512-+knoa0BDoeXgkNvvV1vvbZX4+hizelrkwmGJBdT17t8FNPwG2lKemmuMZlmaNQ3ws3DKKCxpb4zRZEIp3UxFCg==
+  resolved "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.27.4.tgz"
+  integrity sha512-b7xaGIwdJlht8ZFCvMkpDN6uiSmnxxK56N2GDTMYPr2/gzvfdQN8rTfBsvVKmIVY/X7EM+/hJKEIbbHs9oA4tQ==
 
 "@isaacs/cliui@^8.0.2":
   version "8.0.2"
@@ -82,15 +82,10 @@
   resolved "https://registry.npmjs.org/@pkgjs/parseargs/-/parseargs-0.11.0.tgz"
   integrity sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==
 
-"@rollup/rollup-win32-x64-gnu@4.59.0":
+"@rollup/rollup-darwin-arm64@4.59.0":
   version "4.59.0"
-  resolved "https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.59.0.tgz"
-  integrity sha512-laBkYlSS1n2L8fSo1thDNGrCTQMmxjYY5G0WFWjFFYZkKPjsMBsgJfGf4TLxXrF6RyhI60L8TMOjBMvXiTcxeA==
-
-"@rollup/rollup-win32-x64-msvc@4.59.0":
-  version "4.59.0"
-  resolved "https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.59.0.tgz"
-  integrity sha512-2HRCml6OztYXyJXAvdDXPKcawukWY2GpR5/nxKp4iBgiO3wcoEGkAaqctIbZcNB6KlUQBIqt8VYkNSj2397EfA==
+  resolved "https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.59.0.tgz"
+  integrity sha512-W2Psnbh1J8ZJw0xKAd8zdNgF9HRLkdWwwdWqubSVk0pUuQkoHnv7rx4GiF9rT4t5DIZGAsConRE3AxCdJ4m8rg==
 
 "@types/bcryptjs@^2.4.6":
   version "2.4.6"
@@ -170,7 +165,7 @@
   resolved "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz"
   integrity sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==
 
-"@types/node@*", "@types/node@^18.0.0 || >=20.0.0", "@types/node@^22.10.0", "@types/node@>=16":
+"@types/node@*", "@types/node@^22.10.0":
   version "22.19.15"
   resolved "https://registry.npmjs.org/@types/node/-/node-22.19.15.tgz"
   integrity sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==
@@ -184,7 +179,7 @@
   dependencies:
     "@types/node" "*"
 
-"@types/pg@*", "@types/pg@^8.11.6":
+"@types/pg@^8.11.6":
   version "8.18.0"
   resolved "https://registry.npmjs.org/@types/pg/-/pg-8.18.0.tgz"
   integrity sha512-gT+oueVQkqnj6ajGJXblFR4iavIXWsGAFCk3dP4Kki5+a9R4NMt0JARdk6s8cUKcfUoqP5dAtDSLU8xYUTFV+Q==
@@ -738,7 +733,7 @@ esbuild@^0.21.3:
     "@esbuild/win32-ia32" "0.21.5"
     "@esbuild/win32-x64" "0.21.5"
 
-esbuild@^0.25.4, "esbuild@>=0.12 <1":
+esbuild@^0.25.4:
   version "0.25.12"
   resolved "https://registry.npmjs.org/esbuild/-/esbuild-0.25.12.tgz"
   integrity sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==
@@ -964,6 +959,11 @@ fresh@~0.5.2:
   version "0.5.2"
   resolved "https://registry.npmjs.org/fresh/-/fresh-0.5.2.tgz"
   integrity sha512-zJ2mQYM18rEFOudeV4GShTGIQ7RbzA7ozbU9I/XBpm7kqgMywgmylMwXHxZJmkVoYkna9d2pVXVXPdYTP9ej8Q==
+
+fsevents@~2.3.2, fsevents@~2.3.3:
+  version "2.3.3"
+  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
+  integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
 
 function-bind@^1.1.2:
   version "1.1.2"
@@ -1415,7 +1415,7 @@ pg-types@^2.2.0, pg-types@2.2.0:
     postgres-date "~1.0.4"
     postgres-interval "^1.1.0"
 
-pg@^8.13.0, pg@^8.7.3, pg@>=8, pg@>=8.0:
+pg@^8.13.0, pg@^8.7.3:
   version "8.20.0"
   resolved "https://registry.npmjs.org/pg/-/pg-8.20.0.tgz"
   integrity sha512-ldhMxz2r8fl/6QkXnBD3CR9/xg694oT6DZQ2s6c/RI28OjtSOpxnPrUCGOBJ46RCUxcWdx3p6kw/xnDHjKvaRA==

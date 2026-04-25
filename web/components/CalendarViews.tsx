@@ -490,7 +490,7 @@ export function CalendarNav({ title, onPrev, onNext, onToday, onNew }: CalendarN
 interface AppointmentBlockProps {
   apt: ApptRecord;
   dayContext?: Date;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   isSelected?: boolean;
   draggable?: boolean;
   onDragStart?: (apt: ApptRecord, e: React.DragEvent) => void;
@@ -498,6 +498,7 @@ interface AppointmentBlockProps {
   leftCss?: string;
   widthCss?: string;
   zIndex?: number;
+  layout?: "default" | "week";
 }
 
 export function AppointmentBlock({
@@ -511,6 +512,7 @@ export function AppointmentBlock({
   leftCss,
   widthCss,
   zIndex,
+  layout = "default",
 }: AppointmentBlockProps) {
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -523,6 +525,7 @@ export function AppointmentBlock({
 
   const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
   const height = Math.max((endDecimal - startDecimal) * HOUR_HEIGHT, 42);
+  const isWeekLayout = layout === "week";
 
   const style = getStatusStyle(apt.status);
   const isBlock = isCalendarBlockAppointment(apt);
@@ -556,13 +559,14 @@ export function AppointmentBlock({
     <button
       type="button"
       className={cn(
-        "absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
+        "native-touch-surface absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
+        "[-webkit-touch-callout:none] touch-manipulation",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
         isBlock ? "" : style.text,
         isBlock ? "" : style.border,
         isSelected && "ring-2 ring-primary/45 shadow-md",
-        narrow && "px-2 py-1.5",
+        isWeekLayout ? "px-2 py-1.5" : narrow && "px-2 py-1.5",
         hovered && !isDragging && "shadow-md -translate-y-px",
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
         isConflict && "ring-1 ring-rose-300"
@@ -580,13 +584,40 @@ export function AppointmentBlock({
       draggable={draggableProp ?? true}
       onClick={(event) => {
         event.stopPropagation();
-        onClick();
+        onClick(event);
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
+      {isWeekLayout ? (
+        <div className="flex h-full min-w-0 flex-col justify-between gap-1">
+          <div className="flex min-w-0 items-center justify-between gap-1.5">
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                isBlock ? "bg-slate-200 text-slate-700" : style.pill
+              )}
+            >
+              {formatTime(start)}
+            </span>
+            <span className="inline-flex min-w-0 items-center justify-end gap-1 text-[9px] font-semibold leading-none text-muted-foreground">
+              {!isBlock ? (
+                <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", multiDayKind ? getMultiDayDayTone(multiDayKind) : style.accent)} />
+              ) : null}
+              <span className="truncate">{isBlock ? "Blocked" : multiDayKind ? multiDayLabel : formatStatusLabel(apt.status)}</span>
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="line-clamp-1 text-[11px] font-semibold leading-tight">{customerLabel}</p>
+            <p className="mt-0.5 line-clamp-1 text-[10px] font-medium leading-tight text-muted-foreground">{apptLabel(apt)}</p>
+            {!dense && vehicleLabel ? (
+              <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground/85">{vehicleLabel}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : (
       <div className="flex items-start gap-2">
         <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", isBlock ? "bg-slate-500" : style.accent)} />
         <div className="min-w-0 flex-1">
@@ -642,6 +673,7 @@ export function AppointmentBlock({
         </div>
         {isConflict ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" /> : null}
       </div>
+      )}
     </button>
   );
 }
