@@ -3,7 +3,7 @@
  *
  * Strata's web app is still the product source of truth. These helpers only
  * make auth returns and route restoration predictable when the app is opened
- * from a native shell or standalone container.
+ * from the native Capacitor shell.
  */
 const DEFAULT_SIGNED_IN_PATH = "/signed-in";
 const DEFAULT_APP_RETURN_PATH = "/app-return";
@@ -30,13 +30,7 @@ function normalizeAppPath(input: string | null | undefined, fallback: string): s
 
 export function isNativeShell(): boolean {
   if (typeof window === "undefined") return false;
-  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
-  try {
-    if (window.matchMedia?.("(display-mode: standalone)").matches) return true;
-  } catch {
-    // Ignore restricted-environment matchMedia failures.
-  }
-  return navigatorWithStandalone.standalone === true || typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined";
+  return typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined";
 }
 
 export function getAppReturnPath(): string {
