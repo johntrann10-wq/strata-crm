@@ -5,6 +5,8 @@ import {
   getMultiDayDayLabel,
   getMultiDayDayShortLabel,
   getMultiDayDayTone,
+  getJobSpanEnd,
+  getJobSpanStart,
   getOperationalDayLabel,
   hasLaborOnDay,
   hasPresenceOnDay,
@@ -430,23 +432,25 @@ export function WeekView({
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-border/70 bg-background/95 shadow-sm">
       <div className="flex min-h-0 flex-1 flex-col lg:hidden">
-        <div className="shrink-0 border-b border-border/70 bg-white/92 px-3 py-3 backdrop-blur-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week agenda</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
+        <div className="shrink-0 border-b border-border/70 bg-white/94 px-3 py-2.5 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week</p>
+              <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
                 {formatMobileDate(weekDays[0])} - {formatMobileDate(weekDays[6])}
               </p>
             </div>
-            <div className="rounded-2xl border border-border/65 bg-muted/20 px-3 py-2 text-right">
-              <p className="text-[11px] font-semibold text-foreground">{weekTotalItems} items</p>
-              <p className="text-[10px] text-muted-foreground">{formatCompactCurrency(weekTotalValue)}</p>
+            <div className="shrink-0 rounded-full border border-border/65 bg-muted/20 px-3 py-1.5 text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {weekTotalItems} items
+              </p>
+              <p className="text-[11px] font-semibold text-foreground">{formatCompactCurrency(weekTotalValue)}</p>
             </div>
           </div>
 
           <div
             data-week-date-carousel="true"
-            className="mt-3 overflow-hidden rounded-[1.35rem]"
+            className="mt-2 overflow-hidden rounded-[1.1rem]"
             role="group"
             aria-label="Swipe week dates for previous or next week"
             onPointerDown={handleMobileWeekPointerDown}
@@ -471,7 +475,7 @@ export function WeekView({
                   className="min-w-0 px-0.5"
                   style={{ flexBasis: `${100 / mobileWeekPages.length}%` }}
                 >
-                  <div className="grid select-none grid-cols-7 gap-1.5 rounded-[1.35rem]">
+                  <div className="grid select-none grid-cols-7 gap-1 rounded-[1.1rem]">
                     {page.summaries.map((summary, index) => {
                       const selected = page.offset === 0 && index === focusedDayIndex;
                       const isToday = isSameDay(summary.day, today);
@@ -482,7 +486,7 @@ export function WeekView({
                           data-week-day-card="true"
                           data-selected={selected ? "true" : "false"}
                           className={cn(
-                            "min-w-0 rounded-2xl border px-1.5 py-2 text-center transition-all active:scale-[0.98]",
+                            "min-w-0 rounded-[1rem] border px-1 py-1.5 text-center transition-all active:scale-[0.98]",
                             selected
                               ? "border-primary/45 bg-primary/[0.08] shadow-sm"
                               : "border-border/60 bg-white/78 active:bg-muted/30",
@@ -506,9 +510,14 @@ export function WeekView({
                           >
                             {summary.day.getDate()}
                           </span>
-                          <p className="mt-1 truncate text-[10px] font-medium text-muted-foreground">
-                            {summary.totalItems}
-                          </p>
+                          <span
+                            className={cn(
+                              "mx-auto mt-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold leading-none",
+                              summary.totalItems > 0 ? "bg-muted text-foreground" : "bg-transparent text-muted-foreground"
+                            )}
+                          >
+                            {summary.totalItems > 0 ? summary.totalItems : "·"}
+                          </span>
                           {summary.conflictCount > 0 ? (
                             <span className="mx-auto mt-1 block h-1.5 w-1.5 rounded-full bg-rose-500" aria-label={`${summary.conflictCount} conflicts`} />
                           ) : null}
@@ -520,27 +529,24 @@ export function WeekView({
               ))}
             </div>
           </div>
-          <p className="mt-2 text-center text-[10px] font-medium text-muted-foreground">
-            Swipe the day cards sideways to slide into the next or previous week.
-          </p>
         </div>
 
-        <div className="ios-momentum-y min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <div className="ios-momentum-y min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
           {focusedSummary ? (
-            <div className={cn("space-y-3", mobileWeekMotionClassName)} style={mobileWeekMotionStyle}>
-              <div className="rounded-[1.35rem] border border-border/70 bg-white/88 p-3.5 shadow-sm">
+            <div className={cn("space-y-2.5", mobileWeekMotionClassName)} style={mobileWeekMotionStyle}>
+              <div className="rounded-[1.25rem] border border-border/70 bg-white/88 p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                       {focusedSummary.day.toLocaleDateString("en-US", { weekday: "long" })}
                     </p>
-                    <p className="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                    <p className="mt-0.5 truncate text-base font-semibold tracking-tight text-foreground">
                       {focusedSummary.day.toLocaleDateString("en-US", { month: "long", day: "numeric" })}
                     </p>
                   </div>
                   <button
                     type="button"
-                    className="rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm active:scale-[0.98]"
+                    className="shrink-0 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm active:scale-[0.98]"
                     onClick={() => {
                       const slot = new Date(focusedSummary.day);
                       slot.setHours(9, 0, 0, 0);
@@ -550,10 +556,10 @@ export function WeekView({
                     Add 9 AM
                   </button>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <WeekMetric label="Booked" value={String(focusedSummary.labor.length)} />
-                  <WeekMetric label="On site" value={String(focusedSummary.onsiteOnly.length)} />
-                  <WeekMetric label="Value" value={formatCompactCurrency(focusedSummary.totalValue)} />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <MobileWeekSignal label="Booked" value={String(focusedSummary.labor.length)} />
+                  <MobileWeekSignal label="On site" value={String(focusedSummary.onsiteOnly.length)} />
+                  <MobileWeekSignal label="Value" value={formatCompactCurrency(focusedSummary.totalValue)} />
                 </div>
               </div>
 
@@ -856,12 +862,12 @@ export function WeekView({
   );
 }
 
-function WeekMetric({ label, value }: { label: string; value: string }) {
+function MobileWeekSignal({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-muted/20 px-2 py-2">
-      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-foreground">{value}</p>
-    </div>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="text-foreground">{value}</span>
+      {label}
+    </span>
   );
 }
 
@@ -888,10 +894,11 @@ function MobileWeekAppointmentCard({
   onOpen: () => void;
 }) {
   const amount = getCalendarAppointmentAmount(appointment);
-  const timeLabel =
-    mode === "onsite"
-      ? getMultiDayDayLabel(getMultiDayDayKind(appointment, currentDate)) || "On site"
-      : formatAppointmentTimeRange(appointment);
+  const multiDayKind = getMultiDayDayKind(appointment, currentDate);
+  const phaseLabel = multiDayKind ? getMultiDayDayLabel(multiDayKind) : getOperationalDayLabel(appointment, currentDate);
+  const phaseShortLabel = multiDayKind ? getMultiDayDayShortLabel(multiDayKind) : getOperationalDayLabel(appointment, currentDate);
+  const timeLabel = mode === "onsite" ? "On site" : formatAppointmentTimeRange(appointment);
+  const windowLabel = isMultiDayJob(appointment) ? formatJobWindow(appointment) : null;
   const title = getAppointmentTitle(appointment);
   const clientLabel = getClientLabel(appointment);
   const vehicleLabel = getVehicleLabel(appointment);
@@ -900,7 +907,7 @@ function MobileWeekAppointmentCard({
     <NativeContextActions
       label={title}
       actions={[
-        { label: "Open appointment", detail: timeLabel, onSelect: onOpen },
+        { label: "Open appointment", detail: windowLabel ? `${phaseLabel} · ${windowLabel}` : timeLabel, onSelect: onOpen },
         {
           label: "New appointment this day",
           detail: currentDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
@@ -911,35 +918,31 @@ function MobileWeekAppointmentCard({
       <button
         type="button"
         className={cn(
-          "w-full rounded-[1.25rem] border bg-white/92 px-3.5 py-3 text-left shadow-sm transition-colors active:scale-[0.99]",
+          "relative w-full overflow-hidden rounded-[1.2rem] border bg-white/94 px-3.5 py-3 text-left shadow-sm transition-colors active:scale-[0.99]",
           conflict ? "border-rose-200 bg-rose-50/65" : "border-border/65 hover:bg-white"
         )}
         onClick={onOpen}
       >
-        <div className="flex items-start gap-3">
-          <div
-            className={cn(
-              "flex w-[4.4rem] shrink-0 flex-col items-center justify-center rounded-2xl border px-2 py-2 text-center",
-              conflict ? "border-rose-200 bg-white text-rose-700" : "border-primary/15 bg-primary/[0.06] text-primary"
-            )}
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-[0.1em]">{mode === "onsite" ? "Job" : "Time"}</span>
-            <span className="mt-1 text-[11px] font-semibold leading-4">{timeLabel}</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 flex-1 text-sm font-semibold leading-5 text-foreground">{title}</p>
-              {amount > 0 ? (
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                  {formatCompactCurrency(amount)}
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{clientLabel}</p>
-            {vehicleLabel ? <p className="mt-0.5 truncate text-xs text-muted-foreground/90">{vehicleLabel}</p> : null}
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-full border border-border/65 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                {getOperationalDayLabel(appointment, currentDate)}
+        <span
+          className={cn(
+            "absolute inset-y-3 left-0 w-1 rounded-r-full",
+            multiDayKind ? getMultiDayDayTone(multiDayKind) : conflict ? "bg-rose-500" : "bg-primary"
+          )}
+          aria-hidden="true"
+        />
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="rounded-full border border-border/65 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground">
+                {timeLabel}
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
+                  multiDayKind ? `${getMultiDayDayTone(multiDayKind)} text-white` : "bg-muted text-muted-foreground"
+                )}
+              >
+                {phaseShortLabel}
               </span>
               {conflict ? (
                 <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-rose-700">
@@ -947,6 +950,21 @@ function MobileWeekAppointmentCard({
                 </span>
               ) : null}
             </div>
+            {amount > 0 ? (
+              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                {formatCompactCurrency(amount)}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm font-semibold leading-5 text-foreground">{title}</p>
+          <div className="mt-1 min-w-0">
+            <p className="truncate text-xs font-medium text-muted-foreground">{clientLabel}</p>
+            {vehicleLabel ? <p className="mt-0.5 truncate text-xs text-muted-foreground/90">{vehicleLabel}</p> : null}
+            {windowLabel ? (
+              <p className="mt-1 truncate text-[11px] font-medium text-muted-foreground/90">
+                {phaseLabel} · {windowLabel}
+              </p>
+            ) : null}
           </div>
         </div>
       </button>
@@ -1009,6 +1027,13 @@ function formatShortTime(date: Date) {
 function formatMobileDate(date: Date | undefined) {
   if (!date) return "";
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatJobWindow(appointment: ApptRecord) {
+  const start = getJobSpanStart(appointment);
+  const end = getJobSpanEnd(appointment);
+  if (isSameDay(start, end)) return formatMobileDate(start);
+  return `${formatMobileDate(start)} - ${formatMobileDate(end)}`;
 }
 
 function formatCompactCurrency(value: number) {

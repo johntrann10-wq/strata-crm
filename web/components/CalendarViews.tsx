@@ -768,14 +768,14 @@ export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
   if (staffMap.size === 0) return null;
 
   return (
-    <div className="border-b border-border/70 bg-muted/25 px-3 py-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div>
+    <div className="border-b border-border/70 bg-muted/20 px-3 py-2">
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">Team load</p>
-          <p className="text-xs text-muted-foreground">See booked time before reassigning or stacking work.</p>
+          <p className="hidden text-xs text-muted-foreground xl:block">See booked time before reassigning or stacking work.</p>
         </div>
       </div>
-      <div className="ios-momentum-x ios-scrollbar-none flex gap-2 overflow-x-auto pb-1">
+      <div className="ios-momentum-x ios-scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
         {Array.from(staffMap.entries()).map(([id, { name, bookedMinutes, appointmentCount }]) => {
           const utilization = Math.min(bookedMinutes / 480, 1.0);
           const barColor =
@@ -793,12 +793,12 @@ export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
           return (
             <div
               key={id}
-              className="min-w-[210px] rounded-xl border border-border/70 bg-background/95 px-3 py-3 shadow-sm"
+              className="min-w-[158px] rounded-xl border border-border/70 bg-background/95 px-2.5 py-2 shadow-sm xl:min-w-[190px]"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <span
                   className={cn(
-                    "inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white shadow-sm",
+                    "inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-sm xl:h-8 xl:w-8",
                     dotColor
                   )}
                 >
@@ -810,14 +810,14 @@ export function StaffWorkloadBar({ appointments }: StaffWorkloadBarProps) {
                     .toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{name}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="truncate text-xs font-semibold xl:text-sm">{name}</p>
+                  <p className="truncate text-[10px] text-muted-foreground xl:text-xs">
                     {appointmentCount} {appointmentCount === 1 ? "booking" : "bookings"} booked
                   </p>
                 </div>
-                <span className="text-xs font-medium text-muted-foreground">{formatted}</span>
+                <span className="text-[10px] font-semibold text-muted-foreground xl:text-xs">{formatted}</span>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
                   className={cn("h-full rounded-full transition-all", barColor)}
                   style={{ width: `${Math.max(utilization * 100, 8)}%` }}
