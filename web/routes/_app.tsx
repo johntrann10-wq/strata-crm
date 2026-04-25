@@ -167,6 +167,7 @@ type AppNavItem = {
   reloadDocument?: boolean;
   module?: string;
   permission?: string;
+  hideInNative?: boolean;
   notificationBucket?: "leads" | "calendar";
   description: string;
 };
@@ -189,7 +190,7 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
       { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", permission: "quotes.read", description: "Turn estimates into approved work faster." },
       { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", permission: "invoices.read", description: "Stay on top of collections, sends, and cash flow." },
       { icon: Receipt, label: "Finances", href: "/finances", end: false, permission: "payments.read", description: "Track revenue, expenses, and the health of the money flow." },
-      { icon: CreditCard, label: "Billing", href: "/billing", end: false, permission: "settings.read", description: "Manage the Strata subscription, payment method, and billing recovery." },
+      { icon: CreditCard, label: "Billing", href: "/billing", end: false, permission: "settings.read", hideInNative: true, description: "Manage the Strata subscription, payment method, and billing recovery." },
     ],
   },
   {
@@ -214,6 +215,23 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
 function isNavItemActive(pathname: string, item: Pick<AppNavItem, "href" | "end">): boolean {
   if (item.end) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+function shouldShowNavItem(
+  item: AppNavItem,
+  enabledModules: Set<string>,
+  permissions: Set<string>,
+  nativeShellSession: boolean
+): boolean {
+  if (nativeShellSession && item.hideInNative) return false;
+  if (item.module && !enabledModules.has(item.module)) return false;
+  if (item.permission && !permissions.has(item.permission)) return false;
+  return true;
+}
+
+function getNavSectionLabel(section: Pick<(typeof navSections)[number], "id" | "label">, nativeShellSession: boolean): string {
+  if (nativeShellSession && section.id === "sales") return "Sales";
+  return section.label;
 }
 
 interface AppErrorBoundaryState {
@@ -648,6 +666,7 @@ const SidebarNav = memo(function SidebarNav({
   notificationCounts?: Pick<AppNotificationCounts, "leads" | "calendar">;
 }) {
   const location = useLocation();
+  const nativeShellSession = isNativeShell();
   const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
   const handleItemClick = useCallback(() => {
     void triggerImpactFeedback("light");
@@ -666,9 +685,7 @@ const SidebarNav = memo(function SidebarNav({
     .map((section) => ({
       ...section,
       items: section.items.filter(
-        (item) =>
-          (!item.module || enabledModules.has(item.module)) &&
-          (!item.permission || permissions.has(item.permission))
+        (item) => shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)
       ),
     }))
     .filter((section) => section.items.length > 0);
@@ -727,7 +744,7 @@ const SidebarNav = memo(function SidebarNav({
               <div className="mb-1.5 flex items-center gap-2 px-3">
                 <span className="h-px flex-1 bg-white/8" />
                 <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
-                  {section.label}
+                  {getNavSectionLabel(section, nativeShellSession)}
                 </div>
                 <span className="h-px w-6 bg-white/8" />
               </div>
@@ -893,11 +910,11 @@ function AppLayoutInner({
     () => (((locations ?? []) as Array<{ id: string; name?: string | null }>).filter(Boolean)),
     [locations]
   );
+  const nativeShellSession = isNativeShell();
   const activeNavEntry = useMemo(() => {
     for (const section of navSections) {
       for (const item of section.items) {
-        if (item.module && !enabledModules.has(item.module)) continue;
-        if (item.permission && !permissions.has(item.permission)) continue;
+        if (!shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)) continue;
         if (isNavItemActive(location.pathname, item)) {
           return { item, section };
         }
@@ -907,9 +924,7 @@ function AppLayoutInner({
       .map((section) => ({
         ...section,
         items: section.items.filter(
-          (item) =>
-            (!item.module || enabledModules.has(item.module)) &&
-            (!item.permission || permissions.has(item.permission))
+          (item) => shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)
         ),
       }))
       .find((section) => section.items.length > 0);
@@ -922,15 +937,13 @@ function AppLayoutInner({
       item: { icon: Settings, label: "Profile", href: "/profile", end: false, description: "Manage your account." },
       section: { id: "setup" as const, label: "Account", items: [] },
     };
-  }, [enabledModules, permissions, location.pathname]);
+  }, [enabledModules, nativeShellSession, permissions, location.pathname]);
   const activeSectionItems = useMemo(
     () =>
       activeNavEntry.section.items.filter(
-        (item) =>
-          (!item.module || enabledModules.has(item.module)) &&
-          (!item.permission || permissions.has(item.permission))
+        (item) => shouldShowNavItem(item, enabledModules, permissions, nativeShellSession)
       ),
-    [activeNavEntry.section.items, enabledModules, permissions]
+    [activeNavEntry.section.items, enabledModules, nativeShellSession, permissions]
   );
   const activeLocationName = useMemo(
     () => locationRecords.find((entry) => entry.id === currentLocationId)?.name?.trim() || null,
@@ -1164,7 +1177,7 @@ function AppLayoutInner({
                 <div className="min-w-0">
                   <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2.5 sm:text-[11px]">
-                      {activeNavEntry.section.label}
+                      {getNavSectionLabel(activeNavEntry.section, nativeShellSession)}
                     </span>
                   </div>
                   <h1 className="mt-0.5 text-balance text-[19px] font-semibold tracking-tight text-foreground sm:mt-2 sm:text-[28px]">
