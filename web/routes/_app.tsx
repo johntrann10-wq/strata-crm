@@ -22,7 +22,6 @@ import {
   CalendarCheck2,
   Users,
   ClipboardList,
-  CreditCard,
   FileText,
   Receipt,
   Wrench,
@@ -100,50 +99,6 @@ type BillingStatus = {
   checkoutConfigured: boolean;
   portalConfigured: boolean;
 };
-
-function getBillingNavigationCopy(status: BillingStatus | null): {
-  label: string;
-  detail: string;
-  action: string;
-} {
-  if (status?.accessState === "paused_missing_payment_method") {
-    return {
-      label: "Subscription paused",
-      detail: "Add a payment method to resume full workspace access.",
-      action: "Resume billing",
-    };
-  }
-
-  if (status?.accessState === "canceled") {
-    return {
-      label: "Subscription canceled",
-      detail: "Reactivate Strata when you are ready to keep the workspace running.",
-      action: "Reactivate",
-    };
-  }
-
-  if (status?.accessState === "active_trial" && !status.billingHasPaymentMethod) {
-    return {
-      label: "Trial subscription",
-      detail: "Add billing now so the account keeps working after trial.",
-      action: "Start subscription",
-    };
-  }
-
-  if (status?.accessState === "pending_setup_failure") {
-    return {
-      label: "Billing setup needed",
-      detail: "Finish Stripe setup so subscription recovery can work.",
-      action: "Fix billing",
-    };
-  }
-
-  return {
-    label: "Billing & subscription",
-    detail: "Manage payment method, subscription status, and recovery.",
-    action: "Open billing",
-  };
-}
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
@@ -229,12 +184,11 @@ const navSections: Array<{ id: NavSectionId; label: string; items: AppNavItem[] 
   },
   {
     id: "sales",
-    label: "Sales & Billing",
+    label: "Sales",
     items: [
       { icon: FileText, label: "Quotes", href: "/quotes", end: false, module: "quotes", permission: "quotes.read", description: "Turn estimates into approved work faster." },
       { icon: FileText, label: "Invoices", href: "/invoices", end: false, module: "invoices", permission: "invoices.read", description: "Stay on top of collections, sends, and cash flow." },
       { icon: Receipt, label: "Finances", href: "/finances", end: false, permission: "payments.read", description: "Track revenue, expenses, and the health of the money flow." },
-      { icon: CreditCard, label: "Billing", href: "/billing", end: false, hideInNative: true, description: "Manage the Strata subscription, payment method, and billing recovery." },
     ],
   },
   {
@@ -710,12 +664,9 @@ const SidebarNav = memo(function SidebarNav({
   onLocationChange?: (locationId: string | null) => void;
   tenantBusinesses?: AuthOutletContext["tenantBusinesses"];
   notificationCounts?: Pick<AppNotificationCounts, "leads" | "calendar">;
-  billingStatus?: BillingStatus | null;
 }) {
   const location = useLocation();
-  const nativeShellSession = isNativeShell();
   const showWebBillingSurface = shouldShowWebBillingSurface();
-  const billingCopy = useMemo(() => getBillingNavigationCopy(billingStatus ?? null), [billingStatus]);
   const homeHref = useMemo(() => getPreferredAuthorizedAppPath(permissions, enabledModules), [permissions, enabledModules]);
   const handleItemClick = useCallback(() => {
     void triggerImpactFeedback("light");
@@ -839,26 +790,6 @@ const SidebarNav = memo(function SidebarNav({
           ))}
         </div>
       </nav>
-      {!nativeShellSession ? (
-        <div className="border-t border-white/8 px-4 py-4">
-          <Link
-            to="/billing"
-            onClick={handleItemClick}
-            className="group block rounded-2xl border border-orange-300/24 bg-[linear-gradient(135deg,rgba(249,115,22,0.22),rgba(255,255,255,0.06))] p-3 text-white shadow-[0_16px_40px_rgba(0,0,0,0.16)] transition hover:border-orange-300/40 hover:bg-orange-500/18"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-black/12">
-                <CreditCard className="h-4 w-4 text-orange-200" />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{billingCopy.label}</p>
-                <p className="mt-0.5 truncate text-[11px] text-white/52">{billingCopy.action}</p>
-              </div>
-            </div>
-            <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-white/52">{billingCopy.detail}</p>
-          </Link>
-        </div>
-      ) : null}
       {((tenantBusinesses?.length ?? 0) > 1 || (locationRecords?.length ?? 0) > 1 || membershipRole) && (
         <div className="border-t border-white/8 px-4 py-4">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
@@ -1154,7 +1085,6 @@ function AppLayoutInner({
           permissions={permissions}
           onOpenCommandPalette={() => setOpen(true)}
           notificationCounts={notificationCounts}
-          billingStatus={billingStatus}
         />
       </aside>
 
@@ -1178,7 +1108,6 @@ function AppLayoutInner({
             locationRecords={locationRecords}
             membershipRole={membershipRole}
             notificationCounts={notificationCounts}
-            billingStatus={billingStatus}
             onBusinessChange={(nextBusinessId) => {
               onBusinessChange(nextBusinessId);
               setMobileOpen(false);
@@ -1279,14 +1208,6 @@ function AppLayoutInner({
                     Search
                     {showKeyboardShortcutHints ? <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span> : null}
                   </Button>
-                  {!nativeShellSession ? (
-                    <Button asChild variant="outline" className="justify-start sm:w-auto">
-                      <Link to="/billing">
-                        <CreditCard className="h-4 w-4" />
-                        {getBillingNavigationCopy(billingStatus).action}
-                      </Link>
-                    </Button>
-                  ) : null}
                   <QuickCreateMenu />
                   <NotificationCenter
                     notifications={notifications}
