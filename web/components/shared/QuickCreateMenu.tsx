@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { getCurrentLocationId } from "@/lib/auth";
+import { useKeyboardShortcutHints } from "@/hooks/useKeyboardShortcutHints";
 import { useCommandPalette } from "./CommandPaletteContext";
 import { triggerImpactFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 
@@ -29,6 +30,7 @@ export function QuickCreateMenu() {
   const { setOpen: setCommandPaletteOpen } = useCommandPalette();
   const [open, setOpen] = useState(false);
   const [shortcut, setShortcut] = useState("Cmd K");
+  const showKeyboardShortcutHints = useKeyboardShortcutHints();
 
   useEffect(() => {
     if (!navigator.platform.includes("Mac")) {
@@ -92,7 +94,7 @@ export function QuickCreateMenu() {
         >
           <Search className="text-muted-foreground" />
           Open command palette
-          <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut>
+          {showKeyboardShortcutHints ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

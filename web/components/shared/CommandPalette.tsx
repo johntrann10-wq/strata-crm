@@ -12,7 +12,6 @@ import {
   CommandGroup,
   CommandItem,
   CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command";
 import {
   CalendarPlus,
@@ -472,22 +471,18 @@ export function CommandPalette(_props?: { enabledModules?: Set<string>; hasBusin
               <CommandItem onSelect={() => go(withLocation("/appointments/new"))}>
                 <CalendarPlus className="mr-2 h-4 w-4 text-orange-500" />
                 New Appointment
-                <CommandShortcut>⌘ A</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => go("/clients/new")}>
                 <UserPlus className="mr-2 h-4 w-4 text-blue-500" />
                 New Client
-                <CommandShortcut>⌘ C</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => go("/invoices/new")}>
                 <FileText className="mr-2 h-4 w-4 text-green-500" />
                 New Invoice
-                <CommandShortcut>⌘ I</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => go("/quotes/new")}>
                 <Receipt className="mr-2 h-4 w-4 text-purple-500" />
                 New Quote
-                <CommandShortcut>⌘ Q</CommandShortcut>
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />

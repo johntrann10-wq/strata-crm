@@ -76,6 +76,7 @@ import {
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
 import { isNativeShell } from "@/lib/mobileShell";
 import { triggerImpactFeedback, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
+import { useKeyboardShortcutHints } from "@/hooks/useKeyboardShortcutHints";
 
 type BillingStatus = {
   status: string | null;
@@ -842,6 +843,7 @@ function AppLayoutInner({
   const businessType = (resolvedBusiness?.type as string) ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [forceCompactMobileShell, setForceCompactMobileShell] = useState(false);
+  const showKeyboardShortcutHints = useKeyboardShortcutHints();
   const { setOpen } = useCommandPalette();
   const {
     notifications,
@@ -1172,7 +1174,7 @@ function AppLayoutInner({
                   >
                     <SearchIcon className="h-4 w-4" />
                     Search
-                    <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span>
+                    {showKeyboardShortcutHints ? <span className="ml-1 hidden text-xs text-muted-foreground sm:inline">Ctrl K</span> : null}
                   </Button>
                   <QuickCreateMenu />
                   <NotificationCenter
