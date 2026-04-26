@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "../api";
@@ -7,7 +7,7 @@ import { CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { getBillingAccessLabel, getTrialDaysLeft, hasFullBillingAccess, type BillingAccessState } from "../lib/billingAccess";
 import type { AuthOutletContext } from "./_app";
 import type { BillingActivationMilestone, BillingPromptState } from "../lib/billingPrompts";
-import { canOpenExternalPaymentProvider, shouldShowWebBillingSurface } from "@/lib/mobileShell";
+import { shouldShowWebBillingSurface } from "@/lib/mobileShell";
 
 type BillingStatus = {
   status: string | null;
@@ -61,7 +61,8 @@ function getPrimaryBillingAction(status: BillingStatus | null): {
 }
 
 export default function SubscribePage() {
-  const nativeShellSession = !shouldShowWebBillingSurface();
+  const showWebBillingSurface = shouldShowWebBillingSurface();
+  const nativeShellSession = !showWebBillingSurface;
   const { membershipRole } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -73,7 +74,7 @@ export default function SubscribePage() {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
 
   useEffect(() => {
-    if (nativeShellSession) return;
+    if (!showWebBillingSurface) return;
     let cancelled = false;
     (async () => {
       setError(null);
@@ -92,7 +93,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, nativeShellSession]);
+  }, [navigate, showWebBillingSurface]);
 
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
@@ -101,7 +102,6 @@ export default function SubscribePage() {
 
   const handleOpenBillingPortal = async () => {
     if (!canManageBilling || !primaryAction) return;
-    if (!canOpenExternalPaymentProvider()) return;
     setError(null);
     setNotice(null);
     if (!primaryAction.configured) {
@@ -141,7 +141,7 @@ export default function SubscribePage() {
   };
 
   useEffect(() => {
-    if (nativeShellSession) return;
+    if (!showWebBillingSurface) return;
     const billingPortalReturn = searchParams.get("billingPortal") === "return";
     const legacyCheckoutCanceled = searchParams.get("canceled") === "1";
     if (!billingPortalReturn && !legacyCheckoutCanceled) return;
@@ -191,7 +191,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [nativeShellSession, searchParams, setSearchParams]);
+  }, [showWebBillingSurface, searchParams, setSearchParams]);
 
   const handleRetrySetup = async () => {
     setError(null);
@@ -211,23 +211,7 @@ export default function SubscribePage() {
   };
 
   if (nativeShellSession) {
-    return (
-      <div className="mx-auto flex min-h-[60vh] max-w-xl items-center px-4 py-10">
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle>Workspace status</CardTitle>
-            <CardDescription>
-              Your workspace access is managed on the web. Contact support or use the web dashboard for account management.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link to="/signed-in">Back to dashboard</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <Navigate to="/settings?tab=account" replace />;
   }
 
   if (checking) {

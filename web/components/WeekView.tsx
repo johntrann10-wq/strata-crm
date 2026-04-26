@@ -24,7 +24,6 @@ import {
   getWeekDays,
   type ApptRecord,
   AppointmentBlock,
-  StaffWorkloadBar,
   activeDragDurationMs,
   getCalendarAppointmentAmount,
   getStatusStyle,
@@ -332,8 +331,6 @@ export function WeekView({
           </div>
         </div>
       ) : null}
-
-      <StaffWorkloadBar appointments={appointments} />
 
       <div id="week-scroll-container" className="app-native-scroll flex-1 overflow-y-auto">
         <div

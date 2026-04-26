@@ -49,10 +49,13 @@ function SelectContent({
   position = "popper",
   align = "center",
   onCloseAutoFocus,
+  avoidViewportScroll = false,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: React.ComponentProps<typeof SelectPrimitive.Content> & {
+  avoidViewportScroll?: boolean;
+}) {
   const isSmallViewport = useSmallViewport();
-  const resolvedPosition = isSmallViewport ? "item-aligned" : position;
+  const resolvedPosition = isSmallViewport && !avoidViewportScroll ? "item-aligned" : position;
 
   return (
     <SelectPrimitive.Portal>
@@ -68,7 +71,7 @@ function SelectContent({
         position={resolvedPosition}
         align={resolvedPosition === "popper" ? align : undefined}
         onCloseAutoFocus={(event) => {
-          if (isSmallViewport) event.preventDefault();
+          if (isSmallViewport || avoidViewportScroll) event.preventDefault();
           onCloseAutoFocus?.(event);
         }}
         {...props}

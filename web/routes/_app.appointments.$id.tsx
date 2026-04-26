@@ -1635,74 +1635,53 @@ export default function AppointmentDetail() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6 space-y-5">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
-      <section className="overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.14),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_320px]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
-                Appointment record
+      <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 shadow-[0_18px_44px_rgba(15,23,42,0.07)] sm:p-5">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
+              Appointment record
+            </Badge>
+            <StatusBadge status={appointment.status} type="appointment" />
+            {appointmentSource ? (
+              <Badge variant="outline" className="rounded-full border-slate-300 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-700">
+                Created from {appointmentSource.label}
               </Badge>
-              <StatusBadge status={appointment.status} type="appointment" />
-              {appointmentSource ? (
-                <Badge variant="outline" className="rounded-full border-slate-300 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-700">
-                  Created from {appointmentSource.label}
-                </Badge>
-              ) : null}
-              {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 ? (
-                <Badge className="rounded-full border-amber-200 bg-amber-100 text-amber-800 text-[11px] uppercase tracking-[0.16em]">
-                  {appointment.rescheduleCount}x rescheduled
-                </Badge>
-              ) : null}
-            </div>
-            <div>
-              <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
-              {isInternalAppointment ? (
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                  Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job.
-                </p>
-              ) : null}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {isInternalAppointment ? "Block" : "Booked for"}
-                </p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
-                <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{formatDate(appointment.startTime)}</p>
-                <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {isInternalAppointment ? "Coverage" : "Work in play"}
-                </p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
-                <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
-              </div>
-            </div>
+            ) : null}
+            {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 ? (
+              <Badge className="rounded-full border-amber-200 bg-amber-100 text-amber-800 text-[11px] uppercase tracking-[0.16em]">
+                {appointment.rescheduleCount}x rescheduled
+              </Badge>
+            ) : null}
           </div>
-
-          <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Immediate actions</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Keep the job moving</h2>
-            <div className="mt-4 space-y-3 text-sm text-slate-300">
-              <div className="flex items-start gap-3">
-                <Clock className="mt-0.5 h-4 w-4 text-orange-300" />
-                <span>{formatDateTime(appointment.startTime)}</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <MapPin className="mt-0.5 h-4 w-4 text-orange-300" />
-                <span>{appointmentLocationLabel}</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <DollarSign className="mt-0.5 h-4 w-4 text-orange-300" />
-                <span>{appointmentValueLabel}</span>
-              </div>
+          <div className="max-w-3xl">
+            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{pageTitle}</h1>
+            {isInternalAppointment ? (
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job.
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-[20px] border border-white/80 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {isInternalAppointment ? "Block" : "Booked for"}
+              </p>
+              <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
+              <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
+            </div>
+            <div className="rounded-[20px] border border-white/80 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
+              <p className="mt-2 text-base font-semibold text-slate-950">{formatDate(appointment.startTime)}</p>
+              <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
+            </div>
+            <div className="rounded-[20px] border border-white/80 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {isInternalAppointment ? "Coverage" : "Work in play"}
+              </p>
+              <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
+              <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
             </div>
           </div>
         </div>

@@ -13,12 +13,20 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, right, actions, loading, backTo, badge }: PageHeaderProps) {
+  const controls = right ?? actions;
+  const hasVisibleHeaderContent = Boolean(backTo || subtitle || badge || controls);
+
+  if (!hasVisibleHeaderContent) {
+    return <h1 className="sr-only">{title}</h1>;
+  }
+
   return (
     <div className="app-page-header surface-panel relative mb-4 overflow-hidden rounded-[1.7rem] sm:mb-7">
       <div className="app-page-header-shell border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5 sm:py-4">
       <div className={`absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-orange-400/65 to-transparent transition-opacity ${loading ? "opacity-100" : "opacity-0"}`} />
       <div className="app-page-header-layout flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="relative min-w-0 flex-1">
+        <h1 className="sr-only">{title}</h1>
         {backTo && (
           <Link
             to={backTo}
@@ -28,23 +36,24 @@ export function PageHeader({ title, subtitle, right, actions, loading, backTo, b
             Back
           </Link>
         )}
-        <div className="app-page-header-copy flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="app-page-header-title min-w-0 text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
-              {title}
-            </h1>
-            {badge ? <div className="shrink-0">{badge}</div> : null}
+        {(badge || subtitle) && (
+          <div className="app-page-header-copy flex flex-col gap-2">
+            {badge ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="shrink-0">{badge}</div>
+              </div>
+            ) : null}
+            {subtitle ? (
+              <p className="app-page-header-subtitle max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
+                {subtitle}
+              </p>
+            ) : null}
           </div>
-          {subtitle ? (
-            <p className="app-page-header-subtitle max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
-              {subtitle}
-            </p>
-          ) : null}
-        </div>
+        )}
       </div>
-      {(right ?? actions) && (
+      {controls && (
         <div className="relative flex w-full shrink-0 flex-col gap-2 sm:flex-row lg:w-auto lg:justify-end xl:shrink-0">
-          {right ?? actions}
+          {controls}
         </div>
       )}
       </div>

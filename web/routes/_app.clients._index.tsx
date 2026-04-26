@@ -293,7 +293,6 @@ export default function ClientsPage() {
     <div className="page-content page-section max-w-6xl">
       <PageHeader
         title="Clients"
-        subtitle="Use the client ledger to manage contact records, communication readiness, and every downstream vehicle, appointment, quote, and invoice."
         right={
           <Button asChild>
             <Link to="/clients/new" onClick={handleAddClientTap}>

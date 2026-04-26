@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Inbox,
   Loader2,
   Receipt,
   Search,
@@ -879,7 +880,6 @@ export default function LeadsPage() {
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to previous screen" /> : null}
       <PageHeader
         title="Leads"
-        subtitle="Track inbound work, keep the next step clear, and move qualified leads into real client jobs."
         backTo={returnTo}
         badge={
           <Badge variant="secondary" className="text-sm font-medium">
@@ -887,10 +887,23 @@ export default function LeadsPage() {
           </Badge>
         }
         right={
-          <Button type="button" onClick={openLeadComposer}>
-            <UserRoundPlus className="mr-1.5 h-4 w-4" />
-            Add Lead
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link
+                to="/appointments/requests"
+                onClick={() => {
+                  void triggerImpactFeedback("light");
+                }}
+              >
+                <Inbox className="mr-1.5 h-4 w-4" />
+                Booking Requests
+              </Link>
+            </Button>
+            <Button type="button" onClick={openLeadComposer} className="w-full sm:w-auto">
+              <UserRoundPlus className="mr-1.5 h-4 w-4" />
+              Add Lead
+            </Button>
+          </div>
         }
       />
       {leadComposerSection}
@@ -912,6 +925,17 @@ export default function LeadsPage() {
             {showOverviewDetails ? "Hide details" : "More details"}
           </Button>
         </div>
+        <Button asChild variant="outline" className="h-11 w-full rounded-xl">
+          <Link
+            to="/appointments/requests"
+            onClick={() => {
+              void triggerImpactFeedback("light");
+            }}
+          >
+            <Inbox className="mr-2 h-4 w-4" />
+            Booking Requests
+          </Link>
+        </Button>
       </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(390px,0.85fr)]">
         <div className="order-2 space-y-6 xl:order-1">

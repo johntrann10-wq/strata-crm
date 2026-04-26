@@ -739,6 +739,7 @@ export function AppointmentBlock({
 }
 
 const MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 5;
+const MOBILE_MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 5;
 
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   if (appointments.length === 0) return null;
@@ -773,7 +774,13 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   );
 }
 
-function MobileDayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
+function MobileDayStatusDots({
+  appointments,
+  nativeIOS = false,
+}: {
+  appointments: ApptRecord[];
+  nativeIOS?: boolean;
+}) {
   if (appointments.length === 0) return null;
 
   const orderedAppointments = [...appointments].sort(
@@ -781,20 +788,44 @@ function MobileDayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   );
 
   return (
-    <div className="pointer-events-none flex min-h-5 items-center justify-center gap-1 overflow-visible">
-      {orderedAppointments.slice(0, 4).map((apt) => {
+    <div className={cn("pointer-events-none mx-auto flex flex-wrap justify-center py-0.5", nativeIOS ? "w-7 gap-1" : "w-6 gap-0.5")}>
+      {orderedAppointments.slice(0, 9).map((apt) => {
         const status = getStatusStyle(apt.status);
         return (
           <span
             key={apt.id}
             className={cn(
-              "block h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_1px_rgba(255,255,255,0.9)]",
+              "block shrink-0 rounded-full",
+              nativeIOS ? "h-2 w-2" : "h-1.5 w-1.5",
               isCalendarBlockAppointment(apt) ? "bg-slate-500" : status.accent
             )}
           />
         );
       })}
     </div>
+  );
+}
+
+function MobileDayOverflowIndicator({
+  count,
+  label,
+  nativeIOS = false,
+}: {
+  count: number;
+  label: string;
+  nativeIOS?: boolean;
+}) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className={cn(
+        "pointer-events-none inline-flex items-center justify-center rounded-full bg-slate-700 font-semibold leading-none tabular-nums text-white",
+        nativeIOS ? "h-5 min-w-5 px-1.5 text-[10px]" : "h-4 min-w-4 px-1 text-[9px]"
+      )}
+    >
+      {count}
+    </span>
   );
 }
 
@@ -988,6 +1019,7 @@ interface MonthViewProps {
   onApptClick: (apt: ApptRecord) => void;
   conflictIds?: Set<string>;
   isMobileLayout?: boolean;
+  isNativeIOSCalendar?: boolean;
 }
 
 export function MonthView({
@@ -999,6 +1031,7 @@ export function MonthView({
   onApptClick,
   conflictIds,
   isMobileLayout = false,
+  isNativeIOSCalendar = false,
 }: MonthViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hoverPreviewRef = useRef<HTMLDivElement | null>(null);
@@ -1135,25 +1168,51 @@ export function MonthView({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]"
+      className={cn(
+        "relative flex min-w-0 flex-col rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]",
+        isMobileLayout ? "overflow-visible" : "h-full overflow-hidden",
+        isNativeIOSCalendar && "rounded-[1.35rem] border-white/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.1),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_10px_28px_rgba(15,23,42,0.07)]"
+      )}
       onMouseLeave={() => {
         if (!isMobileLayout) setHoverPreview(null);
       }}
     >
-      <div className="grid grid-cols-7 border-b border-border/70 bg-muted/20 px-2 py-2">
+      <div
+        className={cn(
+          "grid grid-cols-7 border-b border-border/70 bg-muted/20 px-2 py-2",
+          isNativeIOSCalendar && "bg-white/88 px-1.5 py-2.5"
+        )}
+      >
         {DAY_NAMES.map((name) => (
-          <div key={name} className="px-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div
+            key={name}
+            className={cn(
+              "px-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground",
+              isNativeIOSCalendar && "px-1 text-[10px] tracking-[0.18em]"
+            )}
+          >
             {name}
           </div>
         ))}
       </div>
 
       <div
-        className="grid min-h-0 min-w-0 flex-1 overflow-hidden"
-        style={{ gridTemplateRows: `repeat(${grid.length}, minmax(0, 1fr))` }}
+        className={cn("grid min-w-0", isMobileLayout ? "overflow-visible" : "min-h-0 flex-1 overflow-hidden")}
+        style={{
+          gridTemplateRows: isMobileLayout
+            ? `repeat(${grid.length}, auto)`
+            : `repeat(${grid.length}, minmax(0, 1fr))`,
+        }}
       >
         {grid.map((week, wi) => (
-          <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
+          <div
+            key={wi}
+            className={cn(
+              "grid grid-cols-7 border-b border-border/60 last:border-b-0",
+              isMobileLayout ? "min-h-[5rem]" : "min-h-0",
+              isNativeIOSCalendar && "min-h-[5.7rem]"
+            )}
+          >
             {week.map((day, di) => {
               const dayKey = toDayKey(day);
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
@@ -1161,7 +1220,9 @@ export function MonthView({
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
               const dayDensityItems = uniqueAppointmentsById(monthGridLookup.dayMap.get(dayKey) ?? []);
               const hasConflict = monthGridLookup.conflictDaySet.has(dayKey);
-              const shouldCollapseDayIndicators = dayDensityItems.length >= MONTH_DAY_OVERFLOW_BADGE_THRESHOLD;
+              const shouldCollapseDayIndicators = isMobileLayout
+                ? dayDensityItems.length >= MOBILE_MONTH_DAY_OVERFLOW_BADGE_THRESHOLD
+                : dayDensityItems.length >= MONTH_DAY_OVERFLOW_BADGE_THRESHOLD;
               const dayCountLabel = dayDensityItems.some((apt) => isCalendarBlockAppointment(apt))
                 ? `${dayDensityItems.length} item${dayDensityItems.length === 1 ? "" : "s"}`
                 : `${dayDensityItems.length} appointment${dayDensityItems.length === 1 ? "" : "s"}`;
@@ -1177,12 +1238,16 @@ export function MonthView({
                   type="button"
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group relative flex h-full min-h-0 touch-manipulation select-none appearance-none flex-col border-r border-border/60 bg-transparent px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
+                    "group relative flex touch-manipulation select-none appearance-none flex-col border-r border-border/60 bg-transparent px-1 py-1 text-left transition-[transform,background-color,border-color,box-shadow] duration-150 last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
+                    isMobileLayout ? "min-h-[5rem]" : "h-full min-h-0",
+                    isNativeIOSCalendar && "min-h-[5.7rem] px-1.5 py-1.5 active:scale-[0.985]",
                     "hover:bg-muted/25",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.04]",
-                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30"
+                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30",
+                    isNativeIOSCalendar && !isSelected && isToday && "bg-primary/[0.045] ring-1 ring-inset ring-primary/20",
+                    isNativeIOSCalendar && isSelected && "bg-primary/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]"
                   )}
                   onClick={() => onDayClick(day)}
                   onMouseEnter={(event) => {
@@ -1198,21 +1263,26 @@ export function MonthView({
                     });
                   }}
                 >
-                  <div className="flex h-full min-h-0 flex-col">
+                  <div className={cn("flex flex-col", isMobileLayout ? "min-h-[5rem]" : "h-full min-h-0", isNativeIOSCalendar && "min-h-[5.7rem]")}>
                     <div className="flex items-start justify-between gap-1 sm:items-center sm:gap-2">
                       <span
                         className={cn(
                           "inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
-                          isToday ? "bg-primary text-primary-foreground" : "text-foreground"
+                          isToday ? "bg-primary text-primary-foreground" : "text-foreground",
+                          isNativeIOSCalendar && "h-8 w-8 text-[13px]",
+                          isNativeIOSCalendar && !isSelected && isToday && "border border-primary/20 bg-primary/[0.07] text-primary",
+                          isNativeIOSCalendar && isSelected && "bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(249,115,22,0.28)]"
                         )}
                       >
                         {day.getDate()}
                       </span>
-                      {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
+                      <div className="flex min-h-[1rem] items-center justify-end">
+                        {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
+                      </div>
                     </div>
 
-                    <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                      {dayDensityItems.length > 0 && !isMobileLayout ? (
+                    <div className={cn("mt-1 flex flex-1 flex-col", isMobileLayout ? "overflow-visible" : "min-h-0 overflow-hidden")}>
+                      {!isMobileLayout && dayDensityItems.length > 0 ? (
                         <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-hidden pt-1">
                           {dayDensityItems
                             .slice(0, 2)
@@ -1233,14 +1303,30 @@ export function MonthView({
                         <div className="min-h-0 flex-1" />
                       )}
 
-                      <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
-                        {isMobileLayout && !shouldCollapseDayIndicators ? (
-                          <MobileDayStatusDots appointments={dayDensityItems} />
-                        ) : shouldCollapseDayIndicators ? (
-                          <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
-                        ) : (
-                          <DayStatusDots appointments={dayDensityItems} />
+                      <div
+                        className={cn(
+                          "mt-auto shrink-0 overflow-visible space-y-1",
+                          isMobileLayout
+                            ? "min-h-[1.5rem] pt-2 pb-1"
+                            : "min-h-[1rem] pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5"
                         )}
+                      >
+                        {isMobileLayout ? (
+                          <div className={cn("flex min-h-[1.5rem] items-end justify-center", isNativeIOSCalendar && "min-h-[1.65rem] pb-0.5")}>
+                            {dayDensityItems.length > 0 ? (
+                              shouldCollapseDayIndicators ? (
+                                <MobileDayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} nativeIOS={isNativeIOSCalendar} />
+                              ) : (
+                                <MobileDayStatusDots appointments={dayDensityItems} nativeIOS={isNativeIOSCalendar} />
+                              )
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {!isMobileLayout && shouldCollapseDayIndicators ? (
+                          <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
+                        ) : !isMobileLayout ? (
+                          <DayStatusDots appointments={dayDensityItems} />
+                        ) : null}
                       </div>
                     </div>
                   </div>

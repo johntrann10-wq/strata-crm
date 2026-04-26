@@ -1,8 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, Navigate, useOutletContext } from "react-router";
+import { Link, Navigate, useOutletContext, useSearchParams } from "react-router";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  BarChart3,
+  ChevronRight,
   DollarSign,
   Landmark,
   Loader2,
@@ -27,6 +29,7 @@ import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { PageHeader } from "../components/shared/PageHeader";
 import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
+import { isNativeIOSApp } from "@/lib/mobileShell";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 
@@ -112,6 +115,15 @@ const INVOICE_FILTERS = [
 ] as const;
 
 type InvoiceFilterId = (typeof INVOICE_FILTERS)[number]["id"];
+type FinanceView = "overview" | "expenses";
+
+function getFinanceViewFromSearch(value: string | null): FinanceView {
+  return value === "expenses" ? "expenses" : "overview";
+}
+
+function getInvoiceFilterFromSearch(value: string | null): InvoiceFilterId {
+  return INVOICE_FILTERS.some((filter) => filter.id === value) ? (value as InvoiceFilterId) : "awaiting";
+}
 
 function formatCurrency(amount: number | string | null | undefined): string {
   const value = Number(amount ?? 0);
@@ -191,8 +203,10 @@ export default function FinancesPage() {
 function FinancesContent() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canManage = permissions.has("payments.write");
-  const [view, setView] = useState<"overview" | "expenses">("overview");
-  const [invoiceFilter, setInvoiceFilter] = useState<InvoiceFilterId>("awaiting");
+  const nativeIOS = isNativeIOSApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [view, setView] = useState<FinanceView>(() => getFinanceViewFromSearch(searchParams.get("view")));
+  const [invoiceFilter, setInvoiceFilter] = useState<InvoiceFilterId>(() => getInvoiceFilterFromSearch(searchParams.get("filter")));
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
@@ -222,6 +236,11 @@ function FinancesContent() {
     void runDashboard({ paymentLimit: 8, invoiceLimit: 150, monthCount: 6 });
   }, [businessId, runDashboard]);
 
+  useEffect(() => {
+    setView(getFinanceViewFromSearch(searchParams.get("view")));
+    setInvoiceFilter(getInvoiceFilterFromSearch(searchParams.get("filter")));
+  }, [searchParams]);
+
   const dashboardData = dashboard as FinanceDashboard | undefined;
   const expenseRecords = useMemo(() => (expenses ?? []) as ExpenseRecord[], [expenses]);
   const filteredInvoices = useMemo(
@@ -232,6 +251,29 @@ function FinancesContent() {
     () => expenseRecords.reduce((sum, expense) => sum + Number(expense.amount ?? 0), 0),
     [expenseRecords]
   );
+
+  const updateSearchParams = (updates: Partial<{ view: FinanceView; filter: InvoiceFilterId }>) => {
+    const next = new URLSearchParams(searchParams);
+    if (updates.view) {
+      if (updates.view === "overview") next.delete("view");
+      else next.set("view", updates.view);
+    }
+    if (updates.filter) {
+      if (updates.filter === "awaiting") next.delete("filter");
+      else next.set("filter", updates.filter);
+    }
+    setSearchParams(next, { replace: true, preventScrollReset: true });
+  };
+
+  const handleViewChange = (nextView: FinanceView) => {
+    setView(nextView);
+    updateSearchParams({ view: nextView });
+  };
+
+  const handleInvoiceFilterChange = (nextFilter: InvoiceFilterId) => {
+    setInvoiceFilter(nextFilter);
+    updateSearchParams({ filter: nextFilter });
+  };
 
   const openCreateDialog = () => {
     setEditingExpense(null);
@@ -291,37 +333,53 @@ function FinancesContent() {
 
   return (
     <>
-      <div className="page-content page-section max-w-7xl">
-        <PageHeader
-          title={
-            <span className="flex items-center gap-2">
-              Finance
-              {dashboardFetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
-            </span>
-          }
-          right={
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant={view === "overview" ? "default" : "outline"} onClick={() => setView("overview")}>
-                Overview
-              </Button>
-              <Button variant={view === "expenses" ? "default" : "outline"} onClick={() => setView("expenses")}>
-                Expenses
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/invoices">
-                  <Receipt className="mr-2 h-4 w-4" />
-                  Invoices
-                </Link>
-              </Button>
-              {canManage ? (
-                <Button onClick={openCreateDialog}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Expense
+      <div
+        className={cn(
+          nativeIOS
+            ? "mx-auto w-full max-w-3xl space-y-4 px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2"
+            : "page-content page-section max-w-7xl"
+        )}
+      >
+        {nativeIOS ? (
+          <NativeFinanceHeader
+            view={view}
+            loading={dashboardFetching}
+            canManage={canManage}
+            onViewChange={handleViewChange}
+            onAddExpense={openCreateDialog}
+          />
+        ) : (
+          <PageHeader
+            title={
+              <span className="flex items-center gap-2">
+                Finance
+                {dashboardFetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
+              </span>
+            }
+            right={
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant={view === "overview" ? "default" : "outline"} onClick={() => handleViewChange("overview")}>
+                  Overview
                 </Button>
-              ) : null}
-            </div>
-          }
-        />
+                <Button variant={view === "expenses" ? "default" : "outline"} onClick={() => handleViewChange("expenses")}>
+                  Expenses
+                </Button>
+                <Button asChild variant="outline">
+                  <Link to="/invoices">
+                    <Receipt className="mr-2 h-4 w-4" />
+                    Invoices
+                  </Link>
+                </Button>
+                {canManage ? (
+                  <Button onClick={openCreateDialog}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add Expense
+                  </Button>
+                ) : null}
+              </div>
+            }
+          />
+        )}
 
         {dashboardError ? (
           <div className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -332,7 +390,7 @@ function FinancesContent() {
         ) : null}
 
         {view === "overview" ? (
-          <FinanceOverview dashboard={dashboardData} loading={dashboardFetching && !dashboardData} invoiceFilter={invoiceFilter} onInvoiceFilterChange={setInvoiceFilter} filteredInvoices={filteredInvoices} />
+          <FinanceOverview dashboard={dashboardData} loading={dashboardFetching && !dashboardData} invoiceFilter={invoiceFilter} onInvoiceFilterChange={handleInvoiceFilterChange} filteredInvoices={filteredInvoices} nativeIOS={nativeIOS} />
         ) : (
           <ExpenseLedger
             metrics={dashboardData}
@@ -347,13 +405,17 @@ function FinancesContent() {
             onEditExpense={openEditDialog}
             onDeleteExpense={setDeleteExpenseId}
             totalTrackedExpenses={expenseTotalLoaded}
+            nativeIOS={nativeIOS}
           />
         )}
       </div>
 
       <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
         <DialogContent
-          className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]"
+          className={cn(
+            "max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]",
+            nativeIOS && "max-h-[88dvh] rounded-t-[30px] rounded-b-[24px] pb-[env(safe-area-inset-bottom)]"
+          )}
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <div className="p-6">
@@ -408,7 +470,7 @@ function FinancesContent() {
       </Dialog>
 
       <Dialog open={!!deleteExpenseId} onOpenChange={(open) => !open && setDeleteExpenseId(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={cn("sm:max-w-md", nativeIOS && "rounded-[28px]")}>
           <DialogHeader>
             <DialogTitle>Delete expense?</DialogTitle>
             <DialogDescription>This updates profit and expense totals immediately.</DialogDescription>
@@ -426,41 +488,126 @@ function FinancesContent() {
   );
 }
 
+function NativeFinanceHeader({
+  view,
+  loading,
+  canManage,
+  onViewChange,
+  onAddExpense,
+}: {
+  view: FinanceView;
+  loading: boolean;
+  canManage: boolean;
+  onViewChange: (view: FinanceView) => void;
+  onAddExpense: () => void;
+}) {
+  return (
+    <header className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex min-h-11 items-center gap-2">
+            {loading ? <Loader2 className="h-5 w-5 animate-spin text-slate-400" /> : null}
+          </div>
+        </div>
+        <Button asChild variant="outline" size="icon" className="h-11 w-11 rounded-full border-white/80 bg-white shadow-[0_10px_25px_rgba(15,23,42,0.08)]">
+          <Link to="/invoices" aria-label="Open invoices">
+            <Receipt className="h-5 w-5" />
+          </Link>
+        </Button>
+      </div>
+
+      <div className="rounded-[28px] border border-white/80 bg-white/90 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => onViewChange("overview")}
+            className={cn(
+              "flex min-h-12 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold transition active:scale-[0.98]",
+              view === "overview" ? "bg-slate-950 text-white shadow-sm" : "text-slate-500"
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Overview
+          </button>
+          <button
+            type="button"
+            onClick={() => onViewChange("expenses")}
+            className={cn(
+              "flex min-h-12 items-center justify-center gap-2 rounded-[20px] px-3 text-sm font-semibold transition active:scale-[0.98]",
+              view === "expenses" ? "bg-slate-950 text-white shadow-sm" : "text-slate-500"
+            )}
+          >
+            <Receipt className="h-4 w-4" />
+            Expenses
+          </button>
+        </div>
+      </div>
+
+      {canManage ? (
+        <Button onClick={onAddExpense} className="h-12 w-full rounded-[22px] text-sm font-semibold shadow-[0_12px_26px_rgba(249,115,22,0.22)]">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add expense
+        </Button>
+      ) : null}
+    </header>
+  );
+}
+
 function FinanceOverview({
   dashboard,
   loading,
   invoiceFilter,
   onInvoiceFilterChange,
   filteredInvoices,
+  nativeIOS = false,
 }: {
   dashboard: FinanceDashboard | undefined;
   loading: boolean;
   invoiceFilter: InvoiceFilterId;
   onInvoiceFilterChange: (filter: InvoiceFilterId) => void;
   filteredInvoices: FinanceDashboard["invoiceRows"];
+  nativeIOS?: boolean;
 }) {
   const kpis = dashboard?.kpis;
 
   return (
-    <div className="space-y-5">
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Gross revenue" value={loading ? null : formatCurrency(kpis?.grossRevenue ?? 0)} icon={<DollarSign className="h-4 w-4" />} />
-        <KpiCard label="Money collected" value={loading ? null : formatCurrency(kpis?.moneyCollected ?? 0)} icon={<ArrowDownRight className="h-4 w-4" />} tone="success" />
-        <KpiCard label="Awaiting payment" value={loading ? null : formatCurrency(kpis?.awaitingPayment ?? 0)} icon={<Landmark className="h-4 w-4" />} tone="warn" />
-        <KpiCard label="Overdue invoices" value={loading ? null : formatCurrency(kpis?.overdueInvoices ?? 0)} icon={<TrendingDown className="h-4 w-4" />} tone="danger" detail={loading ? null : `${kpis?.overdueInvoiceCount ?? 0} open`} />
-        <KpiCard label="Expenses" value={loading ? null : formatCurrency(kpis?.expenses ?? 0)} icon={<Receipt className="h-4 w-4" />} tone="danger" />
-        <KpiCard label="Net profit" value={loading ? null : formatCurrency(kpis?.netProfit ?? 0)} icon={<Wallet className="h-4 w-4" />} tone={(kpis?.netProfit ?? 0) >= 0 ? "success" : "danger"} />
-        <KpiCard label="Projected net profit" value={loading ? null : formatCurrency(kpis?.projectedNetProfit ?? 0)} icon={<TrendingUp className="h-4 w-4" />} tone="default" />
-        <KpiCard label="Collection rate" value={loading ? null : `${Math.round(kpis?.collectionRate ?? 0)}%`} icon={<ArrowUpRight className="h-4 w-4" />} tone="default" />
+    <div className={cn("space-y-5", nativeIOS && "space-y-4")}>
+      <section className={cn("grid gap-3 md:grid-cols-2 xl:grid-cols-4", nativeIOS && "grid-cols-2 md:grid-cols-2 xl:grid-cols-2")}>
+        <KpiCard label="Gross revenue" value={loading ? null : formatCurrency(kpis?.grossRevenue ?? 0)} icon={<DollarSign className="h-4 w-4" />} nativeIOS={nativeIOS} />
+        <KpiCard label="Collected" value={loading ? null : formatCurrency(kpis?.moneyCollected ?? 0)} icon={<ArrowDownRight className="h-4 w-4" />} tone="success" nativeIOS={nativeIOS} />
+        <KpiCard label="Awaiting" value={loading ? null : formatCurrency(kpis?.awaitingPayment ?? 0)} icon={<Landmark className="h-4 w-4" />} tone="warn" nativeIOS={nativeIOS} />
+        <KpiCard label="Overdue" value={loading ? null : formatCurrency(kpis?.overdueInvoices ?? 0)} icon={<TrendingDown className="h-4 w-4" />} tone="danger" detail={loading ? null : `${kpis?.overdueInvoiceCount ?? 0} open`} nativeIOS={nativeIOS} />
+        <KpiCard label="Expenses" value={loading ? null : formatCurrency(kpis?.expenses ?? 0)} icon={<Receipt className="h-4 w-4" />} tone="danger" nativeIOS={nativeIOS} />
+        <KpiCard label="Net profit" value={loading ? null : formatCurrency(kpis?.netProfit ?? 0)} icon={<Wallet className="h-4 w-4" />} tone={(kpis?.netProfit ?? 0) >= 0 ? "success" : "danger"} nativeIOS={nativeIOS} />
+        {!nativeIOS ? (
+          <>
+            <KpiCard label="Projected net profit" value={loading ? null : formatCurrency(kpis?.projectedNetProfit ?? 0)} icon={<TrendingUp className="h-4 w-4" />} tone="default" />
+            <KpiCard label="Collection rate" value={loading ? null : `${Math.round(kpis?.collectionRate ?? 0)}%`} icon={<ArrowUpRight className="h-4 w-4" />} tone="default" />
+          </>
+        ) : null}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
+      {nativeIOS ? (
+        <section className="rounded-[28px] border border-white/80 bg-white/92 p-4 shadow-[0_16px_34px_rgba(15,23,42,0.06)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Collection rate</p>
+              {loading ? <Skeleton className="mt-2 h-7 w-20" /> : <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-slate-950">{Math.round(kpis?.collectionRate ?? 0)}%</p>}
+            </div>
+            <div className="rounded-2xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white">
+              Projected {loading ? "--" : formatCurrency(kpis?.projectedNetProfit ?? 0)}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className={cn("grid gap-4 xl:grid-cols-[1.15fr_1fr]", nativeIOS && "xl:grid-cols-1")}>
         <CollectionsOverviewCard dashboard={dashboard} loading={loading} />
         <StatusOverviewCard dashboard={dashboard} loading={loading} />
       </section>
 
       <section>
-        <Card className="border-border/70">
+        <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]")}>
           <CardHeader className="pb-0">
             <CardTitle>Recent payments</CardTitle>
           </CardHeader>
@@ -471,16 +618,17 @@ function FinanceOverview({
       </section>
 
       <section>
-        <Card className="border-border/70">
+        <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]")}>
           <CardHeader className="gap-4 border-b pb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle>Invoice ledger</CardTitle>
-              <div className="flex flex-wrap gap-2">
+              <div className={cn("flex flex-wrap gap-2", nativeIOS && "-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}>
                 {INVOICE_FILTERS.map((filter) => (
                   <Button
                     key={filter.id}
                     variant={invoiceFilter === filter.id ? "default" : "outline"}
                     size="sm"
+                    className={cn(nativeIOS && "h-10 shrink-0 rounded-full px-4")}
                     onClick={() => onInvoiceFilterChange(filter.id)}
                   >
                     {filter.label}
@@ -490,13 +638,13 @@ function FinanceOverview({
             </div>
           </CardHeader>
           <CardContent className="pt-4">
-            <InvoiceLedger rows={filteredInvoices} loading={loading} />
+            <InvoiceLedger rows={filteredInvoices} loading={loading} nativeIOS={nativeIOS} />
           </CardContent>
         </Card>
       </section>
 
       <section>
-        <Card className="border-border/70">
+        <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]")}>
           <CardHeader className="pb-0">
             <CardTitle>Monthly trend</CardTitle>
           </CardHeader>
@@ -522,6 +670,7 @@ function ExpenseLedger({
   onEditExpense,
   onDeleteExpense,
   totalTrackedExpenses,
+  nativeIOS = false,
 }: {
   metrics: FinanceDashboard | undefined;
   canManage: boolean;
@@ -535,16 +684,17 @@ function ExpenseLedger({
   onEditExpense: (expense: ExpenseRecord) => void;
   onDeleteExpense: (id: string) => void;
   totalTrackedExpenses: number;
+  nativeIOS?: boolean;
 }) {
   return (
     <div className="space-y-4">
-      <section className="grid gap-3 md:grid-cols-3">
-        <KpiCard label="Expenses this month" value={loading ? null : formatCurrency(metrics?.kpis.expenses ?? 0)} icon={<Receipt className="h-4 w-4" />} tone="danger" />
-        <KpiCard label="Net profit" value={loading ? null : formatCurrency(metrics?.kpis.netProfit ?? 0)} icon={<Wallet className="h-4 w-4" />} tone={(metrics?.kpis.netProfit ?? 0) >= 0 ? "success" : "danger"} />
-        <KpiCard label="Loaded expenses" value={loading ? null : formatCurrency(totalTrackedExpenses)} icon={<Landmark className="h-4 w-4" />} />
+      <section className={cn("grid gap-3 md:grid-cols-3", nativeIOS && "grid-cols-2 md:grid-cols-2")}>
+        <KpiCard label="This month" value={loading ? null : formatCurrency(metrics?.kpis.expenses ?? 0)} icon={<Receipt className="h-4 w-4" />} tone="danger" nativeIOS={nativeIOS} />
+        <KpiCard label="Net profit" value={loading ? null : formatCurrency(metrics?.kpis.netProfit ?? 0)} icon={<Wallet className="h-4 w-4" />} tone={(metrics?.kpis.netProfit ?? 0) >= 0 ? "success" : "danger"} nativeIOS={nativeIOS} />
+        <KpiCard label="Loaded" value={loading ? null : formatCurrency(totalTrackedExpenses)} icon={<Landmark className="h-4 w-4" />} nativeIOS={nativeIOS} />
       </section>
 
-      <Card className="border-border/70">
+      <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]")}>
         <CardContent className="p-4 sm:p-5">
           <ListViewToolbar
             search={search}
@@ -565,7 +715,7 @@ function ExpenseLedger({
             </div>
           ) : null}
 
-          <div className="mt-4 space-y-3 md:hidden">
+          <div className={cn("mt-4 space-y-3 md:hidden", nativeIOS && "space-y-2.5")}>
             {loading
               ? Array.from({ length: 4 }).map((_, index) => (
                   <Card key={index} className="rounded-2xl border-border/70">
@@ -579,13 +729,13 @@ function ExpenseLedger({
               : expenses.length === 0
                 ? <EmptyExpenseState canManage={canManage} onAddExpense={onAddExpense} />
                 : expenses.map((expense) => (
-                    <div key={expense.id} className="rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm">
+                    <div key={expense.id} className={cn("rounded-2xl border border-border/70 bg-card/95 p-4 shadow-sm", nativeIOS && "rounded-[24px] border-white/80 bg-white px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]")}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-foreground">{expense.vendor}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{expense.description}</p>
+                          <p className="truncate text-base font-semibold text-foreground">{expense.vendor}</p>
+                          <p className="mt-1 text-sm leading-5 text-muted-foreground">{expense.description}</p>
                         </div>
-                        <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatCurrency(expense.amount)}</span>
+                        <span className="shrink-0 text-base font-semibold tabular-nums text-foreground">{formatCurrency(expense.amount)}</span>
                       </div>
                       <div className="mt-3 space-y-1 text-xs text-muted-foreground">
                         <p>{expense.category}</p>
@@ -594,8 +744,8 @@ function ExpenseLedger({
                       </div>
                       {canManage ? (
                         <div className="mt-4 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => onEditExpense(expense)}>Edit</Button>
-                          <Button size="sm" variant="ghost" className="h-8 px-3 text-xs text-destructive" onClick={() => onDeleteExpense(expense.id)}>Delete</Button>
+                          <Button size="sm" variant="outline" className={cn("h-8 px-3 text-xs", nativeIOS && "h-10 rounded-full px-4")} onClick={() => onEditExpense(expense)}>Edit</Button>
+                          <Button size="sm" variant="ghost" className={cn("h-8 px-3 text-xs text-destructive", nativeIOS && "h-10 rounded-full px-4")} onClick={() => onDeleteExpense(expense.id)}>Delete</Button>
                         </div>
                       ) : null}
                     </div>
@@ -673,23 +823,30 @@ function KpiCard({
   icon,
   tone = "default",
   detail,
+  nativeIOS = false,
 }: {
   label: string;
   value: string | null;
   icon: ReactNode;
   tone?: "default" | "success" | "warn" | "danger";
   detail?: string | null;
+  nativeIOS?: boolean;
 }) {
   const toneClass =
     tone === "success" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : tone === "danger" ? "text-rose-700" : "text-slate-950";
 
   return (
-    <div className="rounded-[22px] border border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
+    <div
+      className={cn(
+        "rounded-[22px] border border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]",
+        nativeIOS && "min-h-[118px] rounded-[26px] px-3.5 py-4 active:scale-[0.99]"
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+        <p className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400", nativeIOS && "tracking-[0.12em]")}>{label}</p>
         <div className={cn("shrink-0", toneClass)}>{icon}</div>
       </div>
-      {value == null ? <Skeleton className="mt-3 h-8 w-24" /> : <p className={cn("mt-2 text-[1.65rem] font-semibold tracking-[-0.04em]", toneClass)}>{value}</p>}
+      {value == null ? <Skeleton className="mt-3 h-8 w-24" /> : <p className={cn("mt-2 break-words text-[1.65rem] font-semibold leading-none tracking-[-0.04em]", nativeIOS && "text-[1.35rem]", toneClass)}>{value}</p>}
       {detail ? <p className="mt-1 text-xs text-slate-500">{detail}</p> : null}
     </div>
   );
@@ -797,9 +954,11 @@ function RecentPaymentsFeed({
 function InvoiceLedger({
   rows,
   loading,
+  nativeIOS = false,
 }: {
   rows: FinanceDashboard["invoiceRows"];
   loading: boolean;
+  nativeIOS?: boolean;
 }) {
   if (loading) {
     return (
@@ -817,13 +976,23 @@ function InvoiceLedger({
     <>
       <div className="space-y-3 md:hidden">
         {rows.map((row) => (
-          <div key={row.id} className="rounded-2xl border border-border/70 bg-background/90 p-4">
+          <Link
+            key={row.id}
+            to={`/invoices/${row.id}`}
+            className={cn(
+              "block rounded-2xl border border-border/70 bg-background/90 p-4 transition active:scale-[0.99]",
+              nativeIOS && "rounded-[24px] border-white/80 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">{row.clientName}</p>
+                <p className="truncate text-base font-semibold text-foreground">{row.clientName}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{row.invoiceNumber}</p>
               </div>
-              <Badge variant="outline" className={cn(getStatusBadgeClass(row.status))}>{getStatusLabel(row.status)}</Badge>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge variant="outline" className={cn(getStatusBadgeClass(row.status))}>{getStatusLabel(row.status)}</Badge>
+                {nativeIOS ? <ChevronRight className="h-4 w-4 text-slate-300" /> : null}
+              </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <MetricPair label="Total" value={formatCurrency(row.totalAmount)} />
@@ -831,7 +1000,7 @@ function InvoiceLedger({
               <MetricPair label="Balance" value={formatCurrency(row.balanceDue)} />
               <MetricPair label="Due" value={formatDate(row.dueDate)} />
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -851,8 +1020,16 @@ function InvoiceLedger({
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="border-b transition-colors hover:bg-muted/15">
-                <td className="px-4 py-3 font-medium text-foreground">{row.clientName}</td>
-                <td className="px-4 py-3 text-muted-foreground">{row.invoiceNumber}</td>
+                <td className="px-4 py-3 font-medium text-foreground">
+                  <Link to={`/invoices/${row.id}`} className="transition hover:text-primary hover:underline">
+                    {row.clientName}
+                  </Link>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  <Link to={`/invoices/${row.id}`} className="transition hover:text-primary hover:underline">
+                    {row.invoiceNumber}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">{formatCurrency(row.totalAmount)}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatCurrency(row.amountPaid)}</td>
                 <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">{formatCurrency(row.balanceDue)}</td>

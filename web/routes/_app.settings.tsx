@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import {
   Activity,
   BellRing,
+  Building2,
   Cable,
   CheckCircle2,
   CreditCard,
@@ -42,6 +43,8 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  UserCircle,
+  Users,
   Webhook,
 } from "lucide-react";
 import {
@@ -75,7 +78,6 @@ import {
   listRuntimeErrors,
   type RuntimeErrorEntry,
 } from "../lib/runtimeErrors";
-import { PageHeader } from "../components/shared/PageHeader";
 import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import {
@@ -91,7 +93,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
-import { canOpenExternalPaymentProvider, isNativeIOSApp, shouldShowWebBillingSurface } from "../lib/mobileShell";
+import { isNativeIOSApp } from "../lib/mobileShell";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
@@ -139,6 +141,27 @@ const BILLING_FEATURES = [
   "Payments on invoices",
   "Service catalog",
 ];
+
+const SETTINGS_TAB_VALUES = [
+  "profile",
+  "billing",
+  "locations",
+  "team",
+  "integrations",
+  "automations",
+  "account",
+] as const;
+
+type SettingsTabId = (typeof SETTINGS_TAB_VALUES)[number];
+
+function isSettingsTabId(value: string | null | undefined): value is SettingsTabId {
+  return SETTINGS_TAB_VALUES.includes(value as SettingsTabId);
+}
+
+function getSettingsTabFromParams(searchParams: URLSearchParams): SettingsTabId {
+  const tab = searchParams.get("tab");
+  return isSettingsTabId(tab) ? tab : "profile";
+}
 
 interface BillingStatus {
   status: string | null;
@@ -882,10 +905,6 @@ function BillingTab({
   }, [searchParams, setSearchParams, setBillingStatus, setBillingPortalLoading]);
 
   const handleManageSubscription = async () => {
-    if (!canOpenExternalPaymentProvider()) {
-      toast.message("Subscription changes are available from the web dashboard.");
-      return;
-    }
     setBillingPortalLoading(true);
     try {
       const result =
@@ -922,10 +941,6 @@ function BillingTab({
   };
 
   const handleStripeConnect = async () => {
-    if (!canOpenExternalPaymentProvider()) {
-      toast.message("Stripe setup is available from the web dashboard.");
-      return;
-    }
     setStripeConnectLoading(true);
     try {
       const result = await api.billing.createConnectOnboardingLink();
@@ -942,10 +957,6 @@ function BillingTab({
   };
 
   const handleOpenStripeDashboard = async () => {
-    if (!canOpenExternalPaymentProvider()) {
-      toast.message("Stripe dashboard access is available from the web dashboard.");
-      return;
-    }
     setStripeDashboardLoading(true);
     try {
       const result = await api.billing.createConnectDashboardLink();
@@ -994,8 +1005,7 @@ function BillingTab({
   };
 
   const isActive = hasFullBillingAccess(billingStatus?.accessState);
-  const showWebBillingSurface = shouldShowWebBillingSurface();
-  const nativeShellSession = !showWebBillingSurface;
+  const nativeShellSession = isNativeIOSApp();
   const billingAccessLabel = nativeShellSession
     ? isActive
       ? "Workspace active"
@@ -1212,7 +1222,6 @@ function BillingTab({
           onContinue={() => {
             const promptStage = billingPrompt?.stage;
             if (!promptStage || promptStage === "none") return;
-            if (!canOpenExternalPaymentProvider()) return;
             void (async () => {
               setBillingPortalLoading(true);
               try {
@@ -1375,7 +1384,7 @@ function BillingTab({
 export default function SettingsPage() {
   const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(() => getSettingsTabFromParams(searchParams));
   const [formData, setFormData] = useState<BusinessSettingsFormData>(DEFAULT_BUSINESS_SETTINGS_FORM);
   const [defaultTaxRateInput, setDefaultTaxRateInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultTaxRate));
   const [defaultAdminFeeInput, setDefaultAdminFeeInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFee));
@@ -1618,19 +1627,11 @@ export default function SettingsPage() {
   );
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (nativeShellSession && tab === "billing") {
-      setActiveTab("account");
-      return;
-    }
-    if (tab) {
+    const tab = getSettingsTabFromParams(searchParams);
+    if (tab !== activeTab) {
       setActiveTab(tab);
-      return;
     }
-    if (nativeShellSession) {
-      setActiveTab((current) => (current === "billing" ? "account" : current));
-    }
-  }, [nativeShellSession, searchParams]);
+  }, [activeTab, searchParams]);
 
   useEffect(() => {
     const quickBooksState = searchParams.get("quickbooks");
@@ -2608,6 +2609,90 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSettingsTabChange = (value: string) => {
+    if (!isSettingsTabId(value)) return;
+    setActiveTab(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value === "profile") {
+      nextParams.delete("tab");
+    } else {
+      nextParams.set("tab", value);
+    }
+    setSearchParams(nextParams, { replace: true, preventScrollReset: true });
+  };
+
+  const activeLocationCount = (locations as LocationRecord[] | undefined)?.filter((location) => location.active !== false).length ?? 0;
+  const activeTeamCount = (teamMembers as StaffRecord[] | undefined)?.filter((member) => member.active !== false).length ?? 0;
+  const connectedIntegrationCount =
+    integrationStatus?.connections.filter((connection) => connection.status === "connected").length ?? 0;
+  const enabledAutomationCount = [
+    automationSettings.leadCaptureEnabled,
+    automationSettings.leadAutoResponseEnabled,
+    automationSettings.missedCallTextBackEnabled,
+    automationSettings.uncontactedLeadsEnabled,
+    automationSettings.appointmentRemindersEnabled,
+    automationSettings.abandonedQuotesEnabled,
+    automationSettings.reviewRequestsEnabled,
+    automationSettings.lapsedClientsEnabled,
+  ].filter(Boolean).length;
+  const settingsNavItems = [
+    {
+      value: "profile",
+      label: "Business",
+      helper: business?.name || "Shop details",
+      meta: formData.timezone || "Timezone",
+      icon: Building2,
+    },
+    {
+      value: "billing",
+      label: nativeShellSession ? "Workspace" : "Billing",
+      helper: nativeShellSession ? "Access status" : "Plan and payments",
+      meta: billingStatus ? getBillingAccessLabel(billingStatus.accessState) : "Loading",
+      icon: CreditCard,
+    },
+    {
+      value: "locations",
+      label: "Locations",
+      helper: "Shop footprint",
+      meta: `${activeLocationCount} active`,
+      icon: MapPin,
+    },
+    {
+      value: "team",
+      label: "Team",
+      helper: "Roles and access",
+      meta: `${activeTeamCount} people`,
+      icon: Users,
+    },
+    {
+      value: "integrations",
+      label: "Integrations",
+      helper: integrationsBlockedByBilling ? "Access required" : "Connected tools",
+      meta: integrationsBlockedByBilling ? "Blocked" : `${connectedIntegrationCount} connected`,
+      icon: Cable,
+    },
+    {
+      value: "automations",
+      label: "Automations",
+      helper: "Follow-up engine",
+      meta: `${enabledAutomationCount} enabled`,
+      icon: BellRing,
+    },
+    {
+      value: "account",
+      label: "Account",
+      helper: "Login and deletion",
+      meta: membershipRole ?? "Member",
+      icon: UserCircle,
+    },
+  ] satisfies Array<{
+    value: SettingsTabId;
+    label: string;
+    helper: string;
+    meta: string;
+    icon: typeof Building2;
+  }>;
+
   if (businessFetching) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -2618,75 +2703,58 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="page-content page-section max-w-5xl pb-28 sm:pb-8">
-        <PageHeader
-          title="Settings"
-          subtitle={
-            nativeShellSession
-              ? "Set up your shop, team, workspace access, and diagnostics without digging through separate tools."
-              : "Set up your shop, team, billing, and diagnostics without digging through separate tools."
-          }
-          badge={
-            business?.name ? (
-              <Badge variant="outline" className="hidden sm:inline-flex">
-                {business.name}
-              </Badge>
-            ) : undefined
-          }
-        />
+      <div className="page-content page-section max-w-7xl pb-28 sm:pb-8">
+        <div className="mb-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Workspace</p>
+            <p className="mt-1 truncate text-sm font-semibold">{business?.name || "Business settings"}</p>
+          </div>
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access</p>
+            <p className="mt-1 truncate text-sm font-semibold capitalize">{membershipRole ?? "member"}</p>
+          </div>
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {nativeShellSession ? "Status" : "Billing"}
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold">
+              {billingStatus ? getBillingAccessLabel(billingStatus.accessState) : "Checking workspace"}
+            </p>
+          </div>
+        </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList
-            className={cn(
-              "flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:overflow-visible",
-              nativeShellSession ? "sm:grid-cols-6" : "sm:grid-cols-7"
-            )}
-          >
-            <TabsTrigger
-              value="profile"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Business Profile
-            </TabsTrigger>
-            {!nativeShellSession ? (
-              <TabsTrigger
-                value="billing"
-                className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-              >
-                Billing
-              </TabsTrigger>
-            ) : null}
-            <TabsTrigger
-              value="locations"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Locations
-            </TabsTrigger>
-            <TabsTrigger
-              value="team"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Team
-            </TabsTrigger>
-            <TabsTrigger
-              value="integrations"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Integrations
-            </TabsTrigger>
-            <TabsTrigger
-              value="automations"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Automations
-            </TabsTrigger>
-            <TabsTrigger
-              value="account"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Account
-            </TabsTrigger>
+        <Tabs
+          value={activeTab}
+          onValueChange={handleSettingsTabChange}
+          className="space-y-5 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0"
+        >
+          <TabsList className="sticky top-4 z-20 flex h-auto w-full gap-2 overflow-x-auto rounded-2xl border bg-background/95 p-2 shadow-sm backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-col lg:overflow-visible">
+            {settingsNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="group min-w-[158px] justify-start rounded-xl border border-transparent bg-transparent p-0 text-left data-[state=active]:border-primary/25 data-[state=active]:bg-primary/10 data-[state=active]:shadow-sm lg:w-full lg:min-w-0"
+                >
+                  <span className="flex w-full items-center gap-3 px-3 py-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-foreground">{item.label}</span>
+                      <span className="block truncate text-xs font-normal text-muted-foreground">{item.helper}</span>
+                    </span>
+                    <span className="hidden shrink-0 rounded-full border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground xl:inline-flex">
+                      {item.meta}
+                    </span>
+                  </span>
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
+
+          <div className="min-w-0 space-y-6">
 
           <TabsContent value="account" className="space-y-6">
             <Card className="border-destructive/20 bg-destructive/[0.03]">
@@ -3480,9 +3548,7 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 sm:flex-row">
                   <Button asChild>
-                    <Link to={nativeShellSession ? "/settings?tab=account" : "/settings?tab=billing"}>
-                      {nativeShellSession ? "Open account status" : "Open billing"}
-                    </Link>
+                    <Link to="/settings?tab=billing">{nativeShellSession ? "Open workspace status" : "Open billing"}</Link>
                   </Button>
                   {nativeShellSession ? null : (
                     <Button asChild variant="outline">
@@ -4004,34 +4070,32 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {!nativeShellSession ? (
-                    <div className="rounded-xl border bg-muted/20 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-primary" />
-                            <p className="text-sm font-medium">Stripe payments</p>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            Connected-account payments, deposits, and billing status are managed from the billing tab.
-                          </p>
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-primary" />
+                          <p className="text-sm font-medium">Stripe payments</p>
                         </div>
-                        <Badge variant={billingStatus?.stripeConnectReady ? "default" : "secondary"}>
-                          {billingStatus?.stripeConnectReady ? "Connected" : billingStatus?.stripeConnectAccountId ? "Needs setup" : "Not connected"}
-                        </Badge>
+                        <p className="text-sm text-muted-foreground">
+                          Connected-account payments, deposits, and billing status are managed from the billing tab.
+                        </p>
                       </div>
-                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <Button variant="outline" className="w-full sm:w-auto" onClick={() => setActiveTab("billing")}>
-                          Open billing controls
-                        </Button>
-                        {billingStatus?.stripeConnectAccountId ? (
-                          <p className="self-center text-xs text-muted-foreground">
-                            Account <span className="font-mono">{billingStatus.stripeConnectAccountId}</span>
-                          </p>
-                        ) : null}
-                      </div>
+                      <Badge variant={billingStatus?.stripeConnectReady ? "default" : "secondary"}>
+                        {billingStatus?.stripeConnectReady ? "Connected" : billingStatus?.stripeConnectAccountId ? "Needs setup" : "Not connected"}
+                      </Badge>
                     </div>
-                  ) : null}
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleSettingsTabChange("billing")}>
+                        Open billing controls
+                      </Button>
+                      {billingStatus?.stripeConnectAccountId ? (
+                        <p className="self-center text-xs text-muted-foreground">
+                          Account <span className="font-mono">{billingStatus.stripeConnectAccountId}</span>
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
 
                   <div className="rounded-xl border bg-muted/20 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -5114,17 +5178,16 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </TabsContent>
-          {!nativeShellSession ? (
-            <TabsContent value="billing" className="space-y-6">
-              <BillingTab
-                billingStatus={billingStatus}
-                setBillingStatus={setBillingStatus}
-                billingPortalLoading={billingPortalLoading}
-                setBillingPortalLoading={setBillingPortalLoading}
-                membershipRole={membershipRole}
-              />
-            </TabsContent>
-          ) : null}
+          <TabsContent value="billing" className="space-y-6">
+            <BillingTab
+              billingStatus={billingStatus}
+              setBillingStatus={setBillingStatus}
+              billingPortalLoading={billingPortalLoading}
+              setBillingPortalLoading={setBillingPortalLoading}
+              membershipRole={membershipRole}
+            />
+          </TabsContent>
+          </div>
         </Tabs>
       </div>
 

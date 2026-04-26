@@ -23,6 +23,13 @@ type WindowWithCapacitor = Window & {
     isNativePlatform?: () => boolean;
     platform?: string;
   };
+  WEBVIEW_SERVER_URL?: string;
+  androidBridge?: unknown;
+  webkit?: {
+    messageHandlers?: {
+      bridge?: unknown;
+    };
+  };
 };
 
 function stripTrailingSlash(path: string): string {
@@ -41,7 +48,16 @@ function getCapacitorBridge(): WindowWithCapacitor["Capacitor"] | null {
   return (window as WindowWithCapacitor).Capacitor ?? null;
 }
 
+function detectNativePlatformFromRuntime(windowObject: WindowWithCapacitor): "ios" | "android" | null {
+  if (windowObject.androidBridge) return "android";
+  if (windowObject.webkit?.messageHandlers?.bridge) return "ios";
+  return null;
+}
+
 export function getCapacitorPlatform(): string | null {
+  if (typeof window === "undefined") return null;
+  const runtimePlatform = detectNativePlatformFromRuntime(window as WindowWithCapacitor);
+  if (runtimePlatform) return runtimePlatform;
   const capacitor = getCapacitorBridge();
   if (!capacitor) return null;
   const platform = capacitor.getPlatform?.() ?? capacitor.platform ?? null;
@@ -50,6 +66,8 @@ export function getCapacitorPlatform(): string | null {
 
 export function isCapacitorNativeApp(): boolean {
   if (typeof window === "undefined") return false;
+  const runtimePlatform = detectNativePlatformFromRuntime(window as WindowWithCapacitor);
+  if (runtimePlatform) return true;
   const capacitor = getCapacitorBridge();
   if (!capacitor) return window.location.protocol === "capacitor:";
   if (capacitor.isNativePlatform?.() === true) return true;
@@ -103,14 +121,15 @@ export function resolveSafeClientRedirectPath(input: string | null | undefined, 
 }
 
 /**
- * Google auth should continue using the normal web return path in browsers.
- * In a native shell we route through `/app-return` so the app can safely
- * consume the token and restore the intended destination.
+ * Google auth should continue using the normal web return path in browsers,
+ * including standalone/PWA sessions. In a true Capacitor app we route through
+ * `/app-return` so the app can safely consume the token and restore the
+ * intended destination.
  */
 export function buildGoogleAuthRedirectPath(search: string, fallback = DEFAULT_SIGNED_IN_PATH): string {
   const params = new URLSearchParams(search);
   const nextPath = resolveSafeClientRedirectPath(params.get("redirectPath"), fallback);
-  if (!isNativeShell()) return nextPath;
+  if (!isCapacitorNativeApp()) return nextPath;
   const appReturnParams = new URLSearchParams({
     [APP_RETURN_NEXT_PARAM]: nextPath,
     [APP_RETURN_SOURCE_PARAM]: GOOGLE_AUTH_SOURCE,

@@ -10,14 +10,14 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { api, API_BASE } from "../../api";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { trackEvent } from "@/lib/analytics";
-import { buildGoogleAuthRedirectPath, isNativeShell, openNativeBrowserUrl } from "@/lib/mobileShell";
+import { buildGoogleAuthRedirectPath, isNativeIOSApp, openNativeBrowserUrl } from "@/lib/mobileShell";
 import { useMemo, useState, type FormEvent, type MouseEvent } from "react";
 
 function buildGoogleAuthHref(search: string): string {
   const params = new URLSearchParams(search);
   params.set("redirectPath", buildGoogleAuthRedirectPath(search));
   const query = params.toString();
-  const authOrigin = isNativeShell() ? "https://stratacrm.app" : API_BASE;
+  const authOrigin = isNativeIOSApp() ? "https://stratacrm.app" : API_BASE;
   return `${authOrigin}/api/auth/google/start${query ? `?${query}` : ""}`;
 }
 
@@ -30,8 +30,8 @@ export const SignUpComponent = (props: {
   const navigate = useNavigate();
   const search = props.searchParamsOverride ?? location.search;
   const googleAuthHref = buildGoogleAuthHref(search);
-  const isNativeShellSession = isNativeShell();
-  const showGoogleSignup = !isNativeShellSession;
+  const isNativeIOSSession = isNativeIOSApp();
+  const showGoogleSignup = !isNativeIOSSession;
   const inviteState = useMemo(() => {
     const params = new URLSearchParams(search);
     return {
@@ -61,7 +61,7 @@ export const SignUpComponent = (props: {
   const handleGoogleSignUp = async (event: MouseEvent<HTMLAnchorElement>) => {
     trackEvent("signup_started", { method: "google", invite_flow: isInviteFlow });
     setGoogleError(null);
-    if (!isNativeShellSession) return;
+    if (!isNativeIOSSession) return;
     event.preventDefault();
     try {
       await openNativeBrowserUrl(googleAuthHref);
@@ -99,12 +99,12 @@ export const SignUpComponent = (props: {
 
       <div className="mb-6 text-center sm:mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[22px]">
-          {isNativeShellSession ? "Set up Strata access" : "Create your account"}
+          {isNativeIOSSession ? "Set up Strata access" : "Create your account"}
         </h1>
         <p className="mt-1.5 text-[15px] leading-6 text-muted-foreground sm:text-[13px] sm:leading-5">
           {isInviteFlow && inviteState.businessName
             ? `Finish joining ${inviteState.businessName} and claim your team access.`
-            : isNativeShellSession
+            : isNativeIOSSession
               ? "Set up secure access for the mobile app."
               : "Start your free Strata account and get a full 30-day trial."}
         </p>
@@ -124,7 +124,7 @@ export const SignUpComponent = (props: {
             {authError ? (
               <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-left">
                 <p className="text-[13px] font-semibold text-destructive">
-                  {isNativeShellSession ? "We couldn't set up access yet." : "We couldn't create your account yet."}
+                  {isNativeIOSSession ? "We couldn't set up access yet." : "We couldn't create your account yet."}
                 </p>
                 <p className="mt-1 text-[13px] text-destructive/90">{authError}</p>
                 <p className="mt-2 text-[12px] text-muted-foreground">Try again in the app. If the problem keeps happening, support is linked below.</p>
@@ -261,10 +261,10 @@ export const SignUpComponent = (props: {
               disabled={isSubmitting}
               type="submit"
             >
-              {isSubmitting ? (isNativeShellSession ? "Setting up access..." : "Creating account...") : isNativeShellSession ? "Continue with email" : "Start free trial"}
+              {isSubmitting ? (isNativeIOSSession ? "Setting up access..." : "Creating account...") : isNativeIOSSession ? "Continue with email" : "Start free trial"}
             </Button>
 
-            {!isNativeShellSession ? (
+            {!isNativeIOSSession ? (
               <p className="text-center text-[12px] text-muted-foreground">
                 30-day free trial - No card required - Founder pricing $29/mo
               </p>
@@ -274,7 +274,7 @@ export const SignUpComponent = (props: {
       </Card>
 
       <p className="mt-6 text-center text-[15px] leading-6 text-muted-foreground sm:text-[13px] sm:leading-5">
-        {isNativeShellSession ? "Already set up?" : "Already have an account?"}{" "}
+        {isNativeIOSSession ? "Already set up?" : "Already have an account?"}{" "}
         <Link
           className="font-medium text-foreground hover:underline"
           to={`/sign-in${search}`}

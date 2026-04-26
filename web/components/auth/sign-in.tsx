@@ -4,7 +4,7 @@ import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trackEvent } from "@/lib/analytics";
-import { buildGoogleAuthRedirectPath, isNativeShell, openNativeBrowserUrl } from "@/lib/mobileShell";
+import { buildGoogleAuthRedirectPath, isNativeIOSApp, openNativeBrowserUrl } from "@/lib/mobileShell";
 import { api, API_BASE } from "../../api";
 import { useActionForm } from "../../hooks/useApi";
 import { AppleAuthButton } from "./AppleAuthButton";
@@ -15,7 +15,7 @@ function buildGoogleAuthHref(search: string) {
   const params = new URLSearchParams(search);
   params.set("redirectPath", buildGoogleAuthRedirectPath(search));
   const query = params.toString();
-  const authOrigin = isNativeShell() ? "https://stratacrm.app" : API_BASE;
+  const authOrigin = isNativeIOSApp() ? "https://stratacrm.app" : API_BASE;
   return `${authOrigin}/api/auth/google/start${query ? `?${query}` : ""}`;
 }
 
@@ -29,8 +29,8 @@ export const SignInComponent = (props: {
   const navigate = useNavigate();
   const fallbackAfterAuth = "/signed-in";
   const googleAuthHref = buildGoogleAuthHref(search);
-  const isNativeShellSession = isNativeShell();
-  const showGoogleSignIn = !isNativeShellSession;
+  const isNativeIOSSession = isNativeIOSApp();
+  const showGoogleSignIn = !isNativeIOSSession;
   const [googleError, setGoogleError] = useState<string | null>(null);
   const inviteState = useMemo(() => {
     const params = new URLSearchParams(search);
@@ -61,7 +61,7 @@ export const SignInComponent = (props: {
   const handleGoogleSignIn = async (event: MouseEvent<HTMLAnchorElement>) => {
     trackEvent("signin_started", { method: "google" });
     setGoogleError(null);
-    if (!isNativeShellSession) return;
+    if (!isNativeIOSSession) return;
     event.preventDefault();
     try {
       await openNativeBrowserUrl(googleAuthHref);
@@ -210,7 +210,7 @@ export const SignInComponent = (props: {
       </Card>
 
       <p className="mt-6 text-center text-[15px] leading-6 text-muted-foreground sm:text-[13px] sm:leading-5">
-        {isNativeShellSession ? "Need access?" : "Don't have an account?"}{" "}
+        {isNativeIOSSession ? "Need access?" : "Don't have an account?"}{" "}
         <Link
           to={`/sign-up${search}`}
           className="font-medium text-foreground hover:underline"
@@ -221,7 +221,7 @@ export const SignInComponent = (props: {
             props.overrideOnSignUp?.();
           }}
         >
-          {isNativeShellSession ? "Set up access" : "Sign up"}
+          {isNativeIOSSession ? "Set up access" : "Sign up"}
         </Link>
       </p>
       <AuthSupportLinks className="mt-4" />
