@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { calculateFinanceCollectionRate, calculateGrowthMetrics, getCronExecutionGate, normalizeFinanceInvoiceStatus } from "./actions.js";
+import {
+  calculateFinanceCollectionRate,
+  calculateGrowthMetrics,
+  getCronExecutionGate,
+  normalizeFinanceInvoiceStatus,
+  toNullableIsoString,
+} from "./actions.js";
 
 describe("actions route logic", () => {
   const idParamSchema = z.object({ id: z.string().uuid() });
@@ -77,6 +83,13 @@ describe("actions route logic", () => {
     } else {
       process.env.CRON_SECRET = previous;
     }
+  });
+
+  it("serializes Date-like database values without crashing on string timestamps", () => {
+    expect(toNullableIsoString(new Date("2026-04-25T12:34:56.000Z"))).toBe("2026-04-25T12:34:56.000Z");
+    expect(toNullableIsoString("2026-04-25T12:34:56.000Z")).toBe("2026-04-25T12:34:56.000Z");
+    expect(toNullableIsoString(null)).toBeNull();
+    expect(toNullableIsoString("not-a-date")).toBeNull();
   });
 
   it("calculates growth metrics from lead and paid invoice records", () => {
