@@ -171,7 +171,7 @@ export function renderInvoiceHtml(data: InvoiceTemplateData): string {
             <p class="section-title">Total Invoice</p>
             <div class="big">${money(data.total)}</div>
             <div class="detail">${balance > 0 ? `${money(balance)} remaining` : "Paid in full"}</div>
-            ${balance > 0 && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${money(balance)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : ""}
+            ${balance > 0 && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay invoice</a><div class="cta-note">Secure online checkout is available for the remaining balance.</div>` : ""}
           </div>
         </section>
         <section class="lines">

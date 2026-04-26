@@ -19,7 +19,7 @@ vi.mock("./logger.js", () => ({
   },
 }));
 
-import { resolveAppointmentConfirmationActionLabel, resolveFromAddressForTemplate } from "./email.js";
+import { resolveAppointmentConfirmationActionLabel, resolveFromAddressForTemplate, resolveInvoiceEmailPrimaryAction } from "./email.js";
 
 describe("resolveFromAddressForTemplate", () => {
   it("brands customer-facing emails with the business display name", () => {
@@ -71,5 +71,27 @@ describe("resolveAppointmentConfirmationActionLabel", () => {
         confirmationUrl: null,
       })
     ).toBe("");
+  });
+});
+
+describe("resolveInvoiceEmailPrimaryAction", () => {
+  it("keeps invoice emails focused on viewing the invoice even when online payment exists elsewhere", () => {
+    expect(
+      resolveInvoiceEmailPrimaryAction({
+        invoiceUrl: "https://stratacrm.app/api/invoices/inv-123/public-html?token=test",
+      })
+    ).toEqual({
+      label: "View invoice",
+      url: "https://stratacrm.app/api/invoices/inv-123/public-html?token=test",
+      detailsCopy: "Open the invoice to review the completed work, payment status, and your service record.",
+    });
+  });
+
+  it("does not manufacture a payment CTA when no invoice URL is available", () => {
+    expect(resolveInvoiceEmailPrimaryAction({ invoiceUrl: null })).toEqual({
+      label: "",
+      url: "",
+      detailsCopy: "Open the invoice to review the completed work, payment status, and your service record.",
+    });
   });
 });

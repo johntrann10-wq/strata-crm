@@ -82,6 +82,20 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+async function isConnectedStripeAccountReady(accountId: string | null | undefined): Promise<boolean> {
+  if (!accountId?.trim()) return false;
+  try {
+    const account = await retrieveConnectAccount({ accountId: accountId.trim() });
+    return account?.ready === true;
+  } catch (error) {
+    logger.warn("Could not verify Stripe connected account readiness for appointment deposit link", {
+      stripeConnectAccountId: accountId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 function parseStoredObject(value: string | null | undefined): Record<string, unknown> {
   if (!value?.trim()) return {};
   try {
@@ -943,6 +957,7 @@ async function buildAppointmentConfirmationPayload(
         totalPrice: string | null;
         depositAmount: string | null;
         publicTokenVersion: number | null;
+        stripeConnectAccountId: string | null;
       }
     | undefined;
   try {
@@ -965,11 +980,12 @@ async function buildAppointmentConfirmationPayload(
         vehicleModel: vehicles.model,
         locationName: locations.name,
         locationAddress: locations.address,
-          locationTimezone: locations.timezone,
-          totalPrice: appointments.totalPrice,
-          depositAmount: appointments.depositAmount,
-          publicTokenVersion: appointments.publicTokenVersion,
-        })
+        locationTimezone: locations.timezone,
+        totalPrice: appointments.totalPrice,
+        depositAmount: appointments.depositAmount,
+        publicTokenVersion: appointments.publicTokenVersion,
+        stripeConnectAccountId: businesses.stripeConnectAccountId,
+      })
       .from(appointments)
       .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
       .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
@@ -1007,6 +1023,7 @@ async function buildAppointmentConfirmationPayload(
           totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
           publicTokenVersion: appointments.publicTokenVersion,
+          stripeConnectAccountId: businesses.stripeConnectAccountId,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -1044,6 +1061,7 @@ async function buildAppointmentConfirmationPayload(
           totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
           publicTokenVersion: appointments.publicTokenVersion,
+          stripeConnectAccountId: businesses.stripeConnectAccountId,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -1095,6 +1113,8 @@ async function buildAppointmentConfirmationPayload(
   const depositAmount = Number(appointmentRow.depositAmount ?? 0);
   const depositSatisfied = finance?.depositSatisfied === true;
   const hasDepositDue = Number.isFinite(depositAmount) && depositAmount > 0 && !depositSatisfied;
+  const stripeAccountReady = await isConnectedStripeAccountReady(appointmentRow.stripeConnectAccountId);
+  const canCollectDepositOnline = hasDepositDue && stripeAccountReady;
 
   return {
     appointmentId: appointmentRow.id,
@@ -1127,9 +1147,11 @@ async function buildAppointmentConfirmationPayload(
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
     confirmationUrl: publicAppointmentUrl,
     portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
-    confirmationActionLabel: hasDepositDue ? "View appointment and pay deposit" : "View appointment",
+    confirmationActionLabel: canCollectDepositOnline ? "View appointment and pay deposit" : "View appointment",
     paymentStatus: hasDepositDue
-      ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
+      ? canCollectDepositOnline
+        ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
+        : `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment. Contact the shop for payment options.`
       : depositSatisfied
         ? "Deposit already collected."
         : "No deposit is required for this appointment.",
@@ -3222,10 +3244,14 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
 
   let publicPaymentUrl: string | null = null;
   const depositAmount = Number(appointment.depositAmount ?? 0);
-  if (
+  const hasDepositDue =
     Number.isFinite(depositAmount) &&
     depositAmount > 0 &&
-    !depositSatisfied
+    !depositSatisfied;
+  const stripeAccountReady = await isConnectedStripeAccountReady(appointment.stripeConnectAccountId);
+  if (
+    hasDepositDue &&
+    stripeAccountReady
   ) {
     publicPaymentUrl = buildPublicDocumentUrl(
       `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`

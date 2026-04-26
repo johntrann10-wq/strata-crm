@@ -431,7 +431,7 @@ portalRouter.get(
             tokenVersion: invoice.publicTokenVersion ?? 1,
           }),
           payUrl:
-            invoice.balance > 0
+            stripeReady && invoice.balance > 0
               ? buildPublicDocumentUrl(
                   `/api/invoices/${invoice.id}/public-pay?token=${encodeURIComponent(
                     createPublicDocumentToken({

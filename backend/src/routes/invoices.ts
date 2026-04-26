@@ -124,6 +124,20 @@ function isInvoiceNumberConflictError(error: unknown): boolean {
   );
 }
 
+async function isConnectedStripeAccountReady(accountId: string | null | undefined): Promise<boolean> {
+  if (!accountId?.trim()) return false;
+  try {
+    const account = await retrieveConnectAccount({ accountId: accountId.trim() });
+    return account?.ready === true;
+  } catch (error) {
+    logger.warn("Could not verify Stripe connected account readiness for invoice payment link", {
+      stripeConnectAccountId: accountId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 export function nextInvoiceNumberCandidate(current: string, fallbackSeed: number) {
   const match = /^INV-(\d+)$/.exec(current);
   if (match) {
@@ -1044,7 +1058,17 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
     throw new ForbiddenError("Invoice access link is invalid or expired.");
   }
   const [businessRow] = await db
-    .select({ name: businesses.name, email: businesses.email, phone: businesses.phone, address: businesses.address, city: businesses.city, state: businesses.state, zip: businesses.zip, timezone: businesses.timezone })
+    .select({
+      name: businesses.name,
+      email: businesses.email,
+      phone: businesses.phone,
+      address: businesses.address,
+      city: businesses.city,
+      state: businesses.state,
+      zip: businesses.zip,
+      timezone: businesses.timezone,
+      stripeConnectAccountId: businesses.stripeConnectAccountId,
+    })
     .from(businesses)
     .where(eq(businesses.id, access.businessId))
     .limit(1);
@@ -1057,10 +1081,12 @@ invoicesRouter.get("/:id/public-html", async (req: Request, res: Response) => {
   const paymentsList = await listActiveInvoicePayments(row.id);
   const totalPaid = paymentsList.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
   const remainingBalance = Math.max(Number(row.total ?? 0) - totalPaid, 0);
+  const stripeAccountReady = await isConnectedStripeAccountReady(businessRow?.stripeConnectAccountId);
   const publicPaymentUrl =
     row.status !== "void" &&
     row.status !== "paid" &&
-    remainingBalance > 0
+    remainingBalance > 0 &&
+    stripeAccountReady
       ? buildPublicDocumentUrl(`/api/invoices/${row.id}/public-pay?token=${encodeURIComponent(token)}`)
       : null;
   const templateData: InvoiceTemplateData = {
@@ -1816,10 +1842,11 @@ invoicesRouter.post(
       businessId: bid,
       tokenVersion: existing.publicTokenVersion ?? 1,
     });
+    const stripeAccountReady = await isConnectedStripeAccountReady(existing.stripeConnectAccountId);
     const invoicePayUrl =
-      existing.status !== "paid" && existing.status !== "void" && Number(existing.total ?? 0) > 0
-      ? buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`)
-      : null;
+      existing.status !== "paid" && existing.status !== "void" && Number(existing.total ?? 0) > 0 && stripeAccountReady
+        ? buildPublicDocumentUrl(`/api/invoices/${existing.id}/public-pay?token=${encodeURIComponent(publicToken)}`)
+        : null;
     await sendInvoiceEmail({
       to: recipientEmail,
       businessId: bid,
