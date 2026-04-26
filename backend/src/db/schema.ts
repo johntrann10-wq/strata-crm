@@ -734,6 +734,34 @@ export const notifications = pgTable(
   ]
 );
 
+export const notificationPushDevices = pgTable(
+  "notification_push_devices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id").notNull().references(() => businesses.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").default("ios").notNull(),
+    deviceToken: text("device_token").notNull(),
+    appBundleId: text("app_bundle_id").default("app.stratacrm.mobile").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    enabledBuckets: text("enabled_buckets").default("[\"leads\",\"calendar\",\"finance\"]").notNull(),
+    authorizationStatus: text("authorization_status"),
+    lastRegisteredAt: timestamp("last_registered_at", { withTimezone: true }),
+    lastDeliveredAt: timestamp("last_delivered_at", { withTimezone: true }),
+    lastFailedAt: timestamp("last_failed_at", { withTimezone: true }),
+    failureCount: integer("failure_count").default(0).notNull(),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("notification_push_devices_business_user_token_unique").on(t.businessId, t.userId, t.deviceToken),
+    index("notification_push_devices_business_id_idx").on(t.businessId),
+    index("notification_push_devices_user_id_idx").on(t.userId),
+    index("notification_push_devices_enabled_idx").on(t.enabled),
+  ]
+);
+
 export const stripeWebhookEvents = pgTable(
   "stripe_webhook_events",
   {

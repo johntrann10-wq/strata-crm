@@ -77,6 +77,17 @@ function dashboardMutationInvalidation(req: express.Request, res: express.Respon
   next();
 }
 
+function notificationSubscriptionGuard(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const path = req.path.replace(/\/+$/, "") || "/";
+  const isPushDeviceSync =
+    req.method.toUpperCase() === "POST" && (path === "/push-device" || path === "/push-device/disable");
+  if (isPushDeviceSync) {
+    next();
+    return;
+  }
+  void requireSubscription(req, res, next).catch(next);
+}
+
 // CORS: Vercel → Railway (or local Vite → local API). Exact origins only — see `buildCorsAllowedOrigins`.
 // JWT uses `Authorization`; preflight OPTIONS is answered before routes.
 const corsAllowedOrigins = buildCorsAllowedOrigins();
@@ -131,7 +142,7 @@ app.use("/api/service-addon-links", optionalAuth, serviceAddonLinksRouter);
 app.use("/api/jobs", optionalAuth, requireSubscription, jobsRouter);
 app.use("/api/actions", optionalAuth, dashboardMutationInvalidation, actionsRouter);
 app.use("/api/activity-logs", optionalAuth, requireSubscription, activityLogsRouter);
-app.use("/api/notifications", optionalAuth, requireSubscription, notificationsRouter);
+app.use("/api/notifications", optionalAuth, notificationSubscriptionGuard, notificationsRouter);
 app.use("/api/notification-logs", optionalAuth, requireSubscription, notificationLogsRouter);
 app.use("/api/client-diagnostics", optionalAuth, clientDiagnosticsRouter);
 app.use("/api/integrations", optionalAuth, requireSubscription, integrationsRouter);
