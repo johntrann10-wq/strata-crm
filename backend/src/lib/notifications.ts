@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { appointmentSources, notifications } from "../db/schema.js";
+import { appointmentSources, notificationPushDevices, notifications } from "../db/schema.js";
+import { isApnsConfigured, sendApnsAlert } from "./apns.js";
 import { logger } from "./logger.js";
 
 export type NotificationBucket = "leads" | "calendar" | "finance" | "other";
@@ -33,6 +34,20 @@ let ensureInfrastructurePromise: Promise<void> | null = null;
 function normalizeNotificationBucket(value: string | null | undefined): NotificationBucket | null {
   if (value === "leads" || value === "calendar" || value === "finance" || value === "other") return value;
   return null;
+}
+
+function parseEnabledPushBuckets(value: string | null | undefined): Set<NotificationBucket> {
+  if (!value?.trim()) return new Set(["leads", "calendar", "finance"]);
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return new Set(["leads", "calendar", "finance"]);
+    const buckets = parsed
+      .map((item) => normalizeNotificationBucket(typeof item === "string" ? item : null))
+      .filter((item): item is NotificationBucket => Boolean(item) && item !== "other");
+    return buckets.length > 0 ? new Set(buckets) : new Set(["leads", "calendar", "finance"]);
+  } catch {
+    return new Set(["leads", "calendar", "finance"]);
+  }
 }
 
 export function parseNotificationMetadata(metadata: string | null | undefined): Record<string, unknown> {
@@ -161,6 +176,43 @@ export async function ensureNotificationInfrastructure(): Promise<void> {
     `);
 
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS notification_push_devices (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        platform text NOT NULL DEFAULT 'ios',
+        device_token text NOT NULL,
+        app_bundle_id text NOT NULL DEFAULT 'app.stratacrm.mobile',
+        enabled boolean NOT NULL DEFAULT true,
+        enabled_buckets text NOT NULL DEFAULT '["leads","calendar","finance"]',
+        authorization_status text,
+        last_registered_at timestamptz,
+        last_delivered_at timestamptz,
+        last_failed_at timestamptz,
+        failure_count integer NOT NULL DEFAULT 0,
+        last_error text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS notification_push_devices_business_user_token_unique
+      ON notification_push_devices (business_id, user_id, device_token)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS notification_push_devices_business_id_idx
+      ON notification_push_devices (business_id)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS notification_push_devices_user_id_idx
+      ON notification_push_devices (user_id)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS notification_push_devices_enabled_idx
+      ON notification_push_devices (enabled)
+    `);
+
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS appointment_sources (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         appointment_id uuid NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
@@ -232,10 +284,13 @@ export async function createNotification(input: NotificationInput) {
         id: notifications.id,
         createdAt: notifications.createdAt,
       });
+    if (created) {
+      queueNativePushDelivery(input, created.id);
+    }
     return created ?? null;
   }
 
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const lockKey = buildNotificationDedupeLockKey(input, dedupeKey);
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtext(${input.businessId}), hashtext(${lockKey}))`
@@ -257,7 +312,7 @@ export async function createNotification(input: NotificationInput) {
       .orderBy(desc(notifications.createdAt))
       .limit(1);
 
-    if (existing) return existing;
+    if (existing) return { notification: existing, created: false };
 
     const now = new Date();
     const [created] = await tx
@@ -272,8 +327,110 @@ export async function createNotification(input: NotificationInput) {
         createdAt: notifications.createdAt,
       });
 
-    return created ?? null;
+    return { notification: created ?? null, created: Boolean(created) };
   });
+
+  if (result.notification && result.created) {
+    queueNativePushDelivery(input, result.notification.id);
+  }
+
+  return result.notification;
+}
+
+function queueNativePushDelivery(input: NotificationInput, notificationId: string): void {
+  if (!isApnsConfigured()) return;
+  void deliverNativePushNotification(input, notificationId).catch((error) => {
+    logger.warn("Native push delivery skipped after APNs failure", {
+      businessId: input.businessId,
+      type: input.type,
+      entityType: input.entityType ?? null,
+      entityId: input.entityId ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
+async function deliverNativePushNotification(input: NotificationInput, notificationId: string): Promise<void> {
+  const bucket = resolveNotificationBucket(input);
+  if (bucket === "other") return;
+
+  const deviceFilters = [
+    eq(notificationPushDevices.businessId, input.businessId),
+    eq(notificationPushDevices.enabled, true),
+  ];
+  if (input.userId) {
+    deviceFilters.push(eq(notificationPushDevices.userId, input.userId));
+  }
+
+  const deviceRows = await db
+    .select({
+      id: notificationPushDevices.id,
+      deviceToken: notificationPushDevices.deviceToken,
+      enabledBuckets: notificationPushDevices.enabledBuckets,
+      appBundleId: notificationPushDevices.appBundleId,
+    })
+    .from(notificationPushDevices)
+    .where(and(...deviceFilters));
+
+  const metadata = normalizeNotificationMetadata(input);
+  const data = {
+    notificationId,
+    notificationType: input.type,
+    notificationBucket: bucket,
+    entityType: input.entityType ?? null,
+    entityId: input.entityId ?? null,
+    path: typeof metadata.path === "string" ? metadata.path : null,
+  };
+
+  for (const device of deviceRows) {
+    if (!parseEnabledPushBuckets(device.enabledBuckets).has(bucket)) continue;
+
+    try {
+      const response = await sendApnsAlert(device.deviceToken, {
+        title: input.title,
+        body: input.message,
+        topic: device.appBundleId,
+        data,
+      });
+      const now = new Date();
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await db
+          .update(notificationPushDevices)
+          .set({
+            lastDeliveredAt: now,
+            lastError: null,
+            updatedAt: now,
+          })
+          .where(eq(notificationPushDevices.id, device.id));
+        continue;
+      }
+
+      const shouldDisable =
+        (response.statusCode === 400 && response.body.includes("BadDeviceToken")) ||
+        response.statusCode === 410;
+      await db
+        .update(notificationPushDevices)
+        .set({
+          enabled: shouldDisable ? false : true,
+          failureCount: sql`${notificationPushDevices.failureCount} + 1`,
+          lastFailedAt: now,
+          lastError: response.body || `APNs status ${response.statusCode}`,
+          updatedAt: now,
+        })
+        .where(eq(notificationPushDevices.id, device.id));
+    } catch (error) {
+      const now = new Date();
+      await db
+        .update(notificationPushDevices)
+        .set({
+          failureCount: sql`${notificationPushDevices.failureCount} + 1`,
+          lastFailedAt: now,
+          lastError: error instanceof Error ? error.message : String(error),
+          updatedAt: now,
+        })
+        .where(eq(notificationPushDevices.id, device.id));
+    }
+  }
 }
 
 export async function safeCreateNotification(

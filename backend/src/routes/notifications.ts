@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { notifications } from "../db/schema.js";
+import { notificationPushDevices, notifications } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import {
   ensureNotificationInfrastructure,
@@ -64,6 +64,29 @@ function canAccessNotification(permissions: Set<string>, row: NotificationAccess
     default:
       return permissions.has("dashboard.view");
   }
+}
+
+function normalizePushBuckets(input: unknown, permissions: Set<string>): Array<"leads" | "calendar" | "finance"> {
+  const requested = Array.isArray(input) ? input : ["leads", "calendar", "finance"];
+  const allowed = new Set<"leads" | "calendar" | "finance">();
+  if (permissions.has("customers.read")) allowed.add("leads");
+  if (permissions.has("appointments.read")) allowed.add("calendar");
+  if (permissions.has("payments.read") || permissions.has("invoices.read")) allowed.add("finance");
+
+  const normalized = requested.filter((item): item is "leads" | "calendar" | "finance" =>
+    (item === "leads" || item === "calendar" || item === "finance") && allowed.has(item)
+  );
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : Array.from(allowed);
+}
+
+function normalizeAuthorizationStatus(input: unknown): string | null {
+  return typeof input === "string" && input.trim() ? input.trim().slice(0, 40) : null;
+}
+
+function normalizeDeviceToken(input: unknown): string {
+  if (typeof input !== "string") return "";
+  const normalized = input.trim().toLowerCase();
+  return /^[a-f0-9]{32,}$/.test(normalized) ? normalized : "";
 }
 
 function serializeNotificationRecord(row: NotificationListRow) {
@@ -273,6 +296,87 @@ notificationsRouter.post(
         and(
           eq(notifications.businessId, businessId(req)),
           inArray(notifications.id, authorizedIds)
+        )
+      );
+
+    res.json({ ok: true });
+  })
+);
+
+notificationsRouter.post(
+  "/push-device",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    if (!req.userId) throw new ForbiddenError("Sign in is required.");
+    await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+    const deviceToken = normalizeDeviceToken(req.body?.deviceToken);
+    if (!deviceToken) throw new BadRequestError("A valid iOS device token is required.");
+
+    const platform = req.body?.platform === "ios" ? "ios" : "ios";
+    const enabledBuckets = normalizePushBuckets(req.body?.enabledBuckets, permissions);
+    const now = new Date();
+
+    const [device] = await db
+      .insert(notificationPushDevices)
+      .values({
+        businessId: businessId(req),
+        userId: req.userId,
+        platform,
+        deviceToken,
+        appBundleId: "app.stratacrm.mobile",
+        enabled: true,
+        enabledBuckets: JSON.stringify(enabledBuckets),
+        authorizationStatus: normalizeAuthorizationStatus(req.body?.authorizationStatus),
+        lastRegisteredAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          notificationPushDevices.businessId,
+          notificationPushDevices.userId,
+          notificationPushDevices.deviceToken,
+        ],
+        set: {
+          enabled: true,
+          enabledBuckets: JSON.stringify(enabledBuckets),
+          authorizationStatus: normalizeAuthorizationStatus(req.body?.authorizationStatus),
+          lastRegisteredAt: now,
+          lastError: null,
+          updatedAt: now,
+        },
+      })
+      .returning({ id: notificationPushDevices.id });
+
+    res.json({ ok: true, id: device?.id ?? null });
+  })
+);
+
+notificationsRouter.post(
+  "/push-device/disable",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    if (!req.userId) throw new ForbiddenError("Sign in is required.");
+    await ensureNotificationInfrastructure();
+    const deviceToken = normalizeDeviceToken(req.body?.deviceToken);
+    if (!deviceToken) throw new BadRequestError("A valid iOS device token is required.");
+    const now = new Date();
+
+    await db
+      .update(notificationPushDevices)
+      .set({
+        enabled: false,
+        authorizationStatus: normalizeAuthorizationStatus(req.body?.authorizationStatus) ?? "disabled",
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(notificationPushDevices.businessId, businessId(req)),
+          eq(notificationPushDevices.userId, req.userId),
+          eq(notificationPushDevices.deviceToken, deviceToken)
         )
       );
 
