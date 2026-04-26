@@ -362,19 +362,61 @@ function ToggleRow({
 }
 
 function StableBuilderSelect(props: React.ComponentProps<typeof Select>) {
-  const scrollPositionRef = useRef({ left: 0, top: 0 });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<{
+    window: { left: number; top: number };
+    elements: Array<{ element: HTMLElement; left: number; top: number }>;
+  }>({
+    window: { left: 0, top: 0 },
+    elements: [],
+  });
+
+  const getScrollTargets = () => {
+    if (typeof window === "undefined") return [];
+    const targets = new Set<HTMLElement>();
+    const addTarget = (element: Element | null | undefined) => {
+      if (element instanceof HTMLElement) targets.add(element);
+    };
+
+    addTarget(document.scrollingElement);
+    addTarget(document.documentElement);
+    addTarget(document.body);
+    addTarget(rootRef.current?.closest(".app-native-scroll"));
+    document.querySelectorAll(".app-native-scroll").forEach(addTarget);
+
+    let current = rootRef.current?.parentElement ?? null;
+    while (current) {
+      if (current.scrollHeight > current.clientHeight || current.scrollWidth > current.clientWidth) {
+        addTarget(current);
+      }
+      current = current.parentElement;
+    }
+
+    return Array.from(targets);
+  };
 
   const rememberScrollPosition = () => {
     if (typeof window === "undefined") return;
-    scrollPositionRef.current = { left: window.scrollX, top: window.scrollY };
+    scrollPositionRef.current = {
+      window: { left: window.scrollX, top: window.scrollY },
+      elements: getScrollTargets().map((element) => ({
+        element,
+        left: element.scrollLeft,
+        top: element.scrollTop,
+      })),
+    };
   };
 
   const restoreScrollPosition = () => {
     if (typeof window === "undefined") return;
-    const { left, top } = scrollPositionRef.current;
+    const snapshot = scrollPositionRef.current;
     const restore = () => {
+      const { left, top } = snapshot.window;
       window.scrollTo({ left, top, behavior: "auto" });
       document.scrollingElement?.scrollTo({ left, top, behavior: "auto" });
+      snapshot.elements.forEach(({ element, left: elementLeft, top: elementTop }) => {
+        element.scrollTo({ left: elementLeft, top: elementTop, behavior: "auto" });
+      });
     };
     requestAnimationFrame(() => {
       restore();
@@ -410,6 +452,7 @@ function StableBuilderSelect(props: React.ComponentProps<typeof Select>) {
 
   return (
     <div
+      ref={rootRef}
       onPointerDownCapture={stabilizeInteraction}
       onMouseDownCapture={stabilizeInteraction}
       onFocusCapture={stabilizeInteraction}
