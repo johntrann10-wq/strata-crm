@@ -16,6 +16,7 @@ import { api, ApiError } from "../api";
 import { useFindMany } from "../hooks/useApi";
 import type { AuthOutletContext } from "./_app";
 import { getCalendarAppointmentAmount, getCalendarDayRevenue } from "@/components/CalendarViews";
+import { isNativeIOSApp } from "@/lib/mobileShell";
 import {
   getJobPhaseLabel,
   getJobPhaseTone,
@@ -43,15 +44,6 @@ type LocationRecord = {
   name?: string | null;
 };
 
-type ScheduleFilter =
-  | "all"
-  | "drop_offs"
-  | "in_shop"
-  | "active_work"
-  | "waiting"
-  | "ready"
-  | "pickups";
-
 type AppointmentRecord = {
   id: string;
   businessId?: string | null;
@@ -74,6 +66,10 @@ type AppointmentRecord = {
   totalPrice?: number | null;
   depositAmount?: number | null;
   paidAt?: string | null;
+  collectedAmount?: number | null;
+  balanceDue?: number | null;
+  paidInFull?: boolean | null;
+  depositSatisfied?: boolean | null;
   assignedStaffId?: string | null;
   notes?: string | null;
   internalNotes?: string | null;
@@ -92,16 +88,6 @@ type DaySnapshot = {
   pickups: AppointmentRecord[];
 };
 
-const FILTER_OPTIONS: Array<{ value: ScheduleFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "drop_offs", label: "Drop-offs" },
-  { value: "in_shop", label: "In shop" },
-  { value: "active_work", label: "Active work" },
-  { value: "waiting", label: "Waiting / curing / hold" },
-  { value: "ready", label: "Ready for pickup" },
-  { value: "pickups", label: "Pickups" },
-];
-
 const SCHEDULE_SCROLL_STORAGE_KEY = "strata:schedule:scroll-position";
 
 function getAppScrollContainer(): HTMLElement | null {
@@ -117,6 +103,16 @@ function captureScheduleScrollPosition(routeKey: string) {
     SCHEDULE_SCROLL_STORAGE_KEY,
     JSON.stringify({ routeKey, top })
   );
+}
+
+function scrollScheduleToTop() {
+  if (typeof window === "undefined") return;
+  const container = getAppScrollContainer();
+  if (container) {
+    container.scrollTo({ top: 0, behavior: "smooth" });
+  } else {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 function formatCurrency(value: number): string {
@@ -331,25 +327,6 @@ function dedupeAppointments(records: AppointmentRecord[]): AppointmentRecord[] {
   });
 }
 
-function matchesScheduleFilter(appointment: AppointmentRecord, filter: ScheduleFilter, date: Date): boolean {
-  switch (filter) {
-    case "drop_offs":
-      return isDropOffDay(appointment, date);
-    case "in_shop":
-      return isInShopOnDate(appointment, date);
-    case "active_work":
-      return isActiveWorkJob(appointment) && hasPresenceOnDay(appointment, date);
-    case "waiting":
-      return isWaitingJob(appointment) && hasPresenceOnDay(appointment, date);
-    case "ready":
-      return isReadyForPickupJob(appointment) && hasPresenceOnDay(appointment, date);
-    case "pickups":
-      return isPickupDay(appointment, date);
-    default:
-      return true;
-  }
-}
-
 function buildDaySnapshot(appointments: AppointmentRecord[], date: Date): DaySnapshot {
   const jobs = sortByOperationalTime(
     appointments.filter((appointment) => hasPresenceOnDay(appointment, date) || hasLaborOnDay(appointment, date))
@@ -413,14 +390,77 @@ function MobileFilterSelect({
   );
 }
 
+function NativeScheduleHeader({
+  weekLabel,
+  currentDate,
+  onPreviousWeek,
+  onToday,
+  onNextWeek,
+}: {
+  weekLabel: string;
+  currentDate: Date;
+  onPreviousWeek: () => void;
+  onToday: () => void;
+  onNextWeek: () => void;
+}) {
+  return (
+    <header>
+      <div className="rounded-[28px] border border-white/80 bg-white/92 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_44px_44px] items-center gap-2">
+          <button
+            type="button"
+            aria-label="Previous week"
+            onClick={onPreviousWeek}
+            className="flex h-11 items-center justify-center rounded-[18px] text-slate-600 transition active:scale-[0.97]"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={onToday}
+            className={cn(
+              "min-w-0 rounded-[20px] px-3 py-2 text-center transition active:scale-[0.98]",
+              isToday(currentDate) ? "bg-slate-950 text-white shadow-sm" : "bg-slate-50 text-slate-700"
+            )}
+          >
+            <span className={cn("block text-[10px] font-semibold uppercase tracking-[0.14em]", isToday(currentDate) ? "text-white/70" : "text-slate-400")}>
+              {isToday(currentDate) ? "This week" : "Jump to week"}
+            </span>
+            <span className="block truncate text-sm font-semibold leading-5">{weekLabel}</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Next week"
+            onClick={onNextWeek}
+            className="flex h-11 items-center justify-center rounded-[18px] text-slate-600 transition active:scale-[0.97]"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+          <Button asChild size="icon" className="h-11 w-11 rounded-[18px] shadow-[0_10px_25px_rgba(249,115,22,0.18)]">
+            <Link
+              to="/appointments/new"
+              aria-label="New appointment"
+              onClick={() => {
+                void triggerImpactFeedback("light");
+              }}
+            >
+              <Plus className="h-5 w-5" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
 export default function AppointmentsPage() {
   const { businessId, currentLocationId, setCurrentLocationId } = useOutletContext<AuthOutletContext>();
   const location = useLocation();
+  const nativeIOS = isNativeIOSApp();
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [search, setSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [activeLocationId, setActiveLocationId] = useState<string>(currentLocationId ?? "all");
-  const [activeFilter, setActiveFilter] = useState<ScheduleFilter>("all");
   const [activeTechFilter, setActiveTechFilter] = useState<string>("all");
   const [inspectedDateKey, setInspectedDateKey] = useState<string | null>(null);
   const [inspectedAppointmentId, setInspectedAppointmentId] = useState<string | null>(null);
@@ -457,7 +497,7 @@ export default function AppointmentsPage() {
   const [{ data: appointmentsData, fetching, error }] = useFindMany(api.appointment, {
     startGte: queryStart,
     startLte: queryEnd,
-    locationId: activeLocationId !== "all" ? activeLocationId : undefined,
+    locationId: !nativeIOS && activeLocationId !== "all" ? activeLocationId : undefined,
     sort: { startTime: "Ascending" },
     first: 500,
     pause: !businessId,
@@ -506,22 +546,18 @@ export default function AppointmentsPage() {
 
   const filteredRecords = useMemo(() => {
     return records.filter((appointment) => {
-      if (activeTechFilter !== "all" && appointment.assignedStaffId !== activeTechFilter) return false;
+      if (!nativeIOS && activeTechFilter !== "all" && appointment.assignedStaffId !== activeTechFilter) return false;
       if (!searchTerm) return true;
 
       return smartSearchMatches(getAppointmentSearchParts(appointment), searchTerm);
     });
-  }, [activeTechFilter, records, searchTerm]);
+  }, [activeTechFilter, nativeIOS, records, searchTerm]);
 
   const weekSnapshots = useMemo(() => {
     return weekDays.map((date) => {
-      const dayRecords =
-        activeFilter === "all"
-          ? filteredRecords
-          : filteredRecords.filter((appointment) => matchesScheduleFilter(appointment, activeFilter, date));
-      return buildDaySnapshot(dayRecords, date);
+      return buildDaySnapshot(filteredRecords, date);
     });
-  }, [activeFilter, filteredRecords, weekDays]);
+  }, [filteredRecords, weekDays]);
 
   const weekCount = useMemo(() => {
     const ids = new Set<string>();
@@ -546,6 +582,20 @@ export default function AppointmentsPage() {
   const isInitialLoad = fetching && appointmentsData === undefined;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d")}`;
   const scheduleReturnTo = `${location.pathname}${location.search}`;
+  const goToPreviousWeek = useCallback(() => {
+    setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7));
+    scrollScheduleToTop();
+  }, []);
+
+  const goToCurrentWeek = useCallback(() => {
+    setCurrentDate(new Date());
+    scrollScheduleToTop();
+  }, []);
+
+  const goToNextWeek = useCallback(() => {
+    setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7));
+    scrollScheduleToTop();
+  }, []);
 
   useEffect(() => {
     if (isInitialLoad || typeof window === "undefined") return;
@@ -573,52 +623,72 @@ export default function AppointmentsPage() {
   }, [isInitialLoad, scheduleReturnTo]);
 
   return (
-    <div className="page-content page-section max-w-7xl">
-      <PageHeader
-        title="Schedule"
-        subtitle="Weekly operations"
-        right={
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <Button asChild variant="outline" className="w-full lg:w-auto">
-              <Link
-                to="/calendar?view=day"
-                onClick={() => {
-                  void triggerImpactFeedback("light");
-                }}
-              >
-                <CalendarRange className="mr-2 h-4 w-4" />
-                Open Calendar
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full lg:w-auto">
-              <Link
-                to="/appointments/requests"
-                onClick={() => {
-                  void triggerImpactFeedback("light");
-                }}
-              >
-                <Inbox className="mr-2 h-4 w-4" />
-                Booking Requests
-              </Link>
-            </Button>
-            <Button asChild className="w-full lg:w-auto">
-              <Link
-                to="/appointments/new"
-                onClick={() => {
-                  void triggerImpactFeedback("light");
-                }}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                New Appointment
-              </Link>
-            </Button>
-          </div>
-        }
-      />
+    <div
+      className={cn(
+        nativeIOS
+          ? "mx-auto w-full max-w-3xl space-y-4 px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2"
+          : "page-content page-section max-w-7xl"
+      )}
+    >
+      {nativeIOS ? (
+        <NativeScheduleHeader
+          weekLabel={weekLabel}
+          currentDate={currentDate}
+          onPreviousWeek={goToPreviousWeek}
+          onToday={goToCurrentWeek}
+          onNextWeek={goToNextWeek}
+        />
+      ) : (
+        <PageHeader
+          title="Schedule"
+          right={
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              <Button asChild variant="outline" className="w-full lg:w-auto">
+                <Link
+                  to="/calendar?view=day"
+                  onClick={() => {
+                    void triggerImpactFeedback("light");
+                  }}
+                >
+                  <CalendarRange className="mr-2 h-4 w-4" />
+                  Open Calendar
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full lg:w-auto">
+                <Link
+                  to="/appointments/requests"
+                  onClick={() => {
+                    void triggerImpactFeedback("light");
+                  }}
+                >
+                  <Inbox className="mr-2 h-4 w-4" />
+                  Booking Requests
+                </Link>
+              </Button>
+              <Button asChild className="w-full lg:w-auto">
+                <Link
+                  to="/appointments/new"
+                  onClick={() => {
+                    void triggerImpactFeedback("light");
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Appointment
+                </Link>
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       <section className="space-y-3 sm:space-y-4">
-        <div className="rounded-[1rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-3 shadow-[0_8px_22px_rgba(15,23,42,0.04)] sm:rounded-[1.35rem] sm:p-4 sm:shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
-          <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+        <div
+          className={cn(
+            "rounded-[1rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-3 shadow-[0_8px_22px_rgba(15,23,42,0.04)] sm:rounded-[1.35rem] sm:p-4 sm:shadow-[0_12px_30px_rgba(15,23,42,0.04)]",
+            nativeIOS && "rounded-[28px] border-white/80 bg-white/92 p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
+          )}
+        >
+          <div className={cn("flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between", nativeIOS && "hidden")}>
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scheduling</p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -627,19 +697,19 @@ export default function AppointmentsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 self-start xl:self-auto">
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7))}>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl" onClick={goToPreviousWeek}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" className="h-8 rounded-lg px-3 text-sm sm:h-9 sm:rounded-xl" onClick={() => setCurrentDate(new Date())}>
+              <Button variant="outline" className="h-8 rounded-lg px-3 text-sm sm:h-9 sm:rounded-xl" onClick={goToCurrentWeek}>
                 This week
               </Button>
-              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl" onClick={() => setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7))}>
+              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg sm:h-9 sm:w-9 sm:rounded-xl" onClick={goToNextWeek}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          <div className="mt-3 grid gap-2 lg:mt-4 lg:grid-cols-[minmax(0,1.25fr)_150px_170px_170px]">
+          <div className={cn("mt-3 grid gap-2 lg:mt-4 lg:grid-cols-[minmax(0,1.25fr)_150px_170px_170px]", nativeIOS && "mt-0 gap-2.5 lg:grid-cols-1")}>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -647,10 +717,10 @@ export default function AppointmentsPage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search name, time, vehicle, status, or tech"
-                className="h-9 rounded-lg pl-9 sm:h-10 sm:rounded-xl"
+                className={cn("h-9 rounded-lg pl-9 sm:h-10 sm:rounded-xl", nativeIOS && "h-12 rounded-[20px] border-white/80 bg-slate-50/80 text-[16px] shadow-inner")}
               />
             </div>
-            <div className="sm:hidden">
+            <div className={cn("sm:hidden", nativeIOS && "hidden")}>
               <MobileFilterSelect
                 value={activeLocationId}
                 ariaLabel="Filter schedule by location"
@@ -667,50 +737,42 @@ export default function AppointmentsPage() {
                 ))}
               </MobileFilterSelect>
             </div>
-            <Select
-              value={activeLocationId}
-              onValueChange={(value) => {
-                setActiveLocationId(value);
-                setCurrentLocationId(value === "all" ? null : value);
-              }}
-            >
-              <SelectTrigger className="hidden h-10 rounded-xl sm:flex">
-                <SelectValue placeholder="All locations" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All locations</SelectItem>
-                {locationRecords.map((location) => (
-                  <SelectItem key={location.id} value={location.id}>
-                    {location.name?.trim() || "Unnamed location"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={activeTechFilter} onValueChange={setActiveTechFilter}>
-              <SelectTrigger className="h-9 rounded-lg sm:h-10 sm:rounded-xl">
-                <SelectValue placeholder="All techs" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All techs</SelectItem>
-                {staffRecords.map((staff) => (
-                  <SelectItem key={staff.id} value={staff.id}>
-                    {[staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={activeFilter} onValueChange={(value) => setActiveFilter(value as ScheduleFilter)}>
-              <SelectTrigger className="h-9 rounded-lg sm:h-10 sm:rounded-xl">
-                <SelectValue placeholder="All work" />
-              </SelectTrigger>
-              <SelectContent>
-                {FILTER_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!nativeIOS ? (
+              <>
+                <Select
+                  value={activeLocationId}
+                  onValueChange={(value) => {
+                    setActiveLocationId(value);
+                    setCurrentLocationId(value === "all" ? null : value);
+                  }}
+                >
+                  <SelectTrigger className="hidden h-10 rounded-xl sm:flex">
+                    <SelectValue placeholder="All locations" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All locations</SelectItem>
+                    {locationRecords.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>
+                        {location.name?.trim() || "Unnamed location"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={activeTechFilter} onValueChange={setActiveTechFilter}>
+                  <SelectTrigger className="h-9 rounded-lg sm:h-10 sm:rounded-xl">
+                    <SelectValue placeholder="All techs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All techs</SelectItem>
+                    {staffRecords.map((staff) => (
+                      <SelectItem key={staff.id} value={staff.id}>
+                        {[staff.firstName, staff.lastName].filter(Boolean).join(" ").trim() || "Unnamed staff"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
           </div>
         </div>
       </section>
@@ -725,7 +787,7 @@ export default function AppointmentsPage() {
         </div>
       ) : isInitialLoad ? (
         <div className="mt-4">
-          <Card className="border-border/70">
+          <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_18px_40px_rgba(15,23,42,0.06)]")}>
             <CardContent className="space-y-4 p-4">
               {Array.from({ length: 7 }).map((_, index) => (
                 <div key={index} className="space-y-2 border-b border-border/60 pb-4 last:border-b-0 last:pb-0">
@@ -748,7 +810,6 @@ export default function AppointmentsPage() {
                 variant="outline"
                 onClick={() => {
                   setSearch("");
-                  setActiveFilter("all");
                   setActiveTechFilter("all");
                   setCurrentDate(new Date());
                 }}
@@ -759,25 +820,26 @@ export default function AppointmentsPage() {
           />
         </div>
       ) : (
-        <div className="mt-4">
-          <Card className="overflow-hidden border-border/70 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
+        <div className={cn("mt-4", nativeIOS && "mt-0")}>
+          <Card className={cn("overflow-hidden border-border/70 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:shadow-[0_14px_36px_rgba(15,23,42,0.04)]", nativeIOS && "rounded-[30px] border-white/80 bg-white/92 shadow-[0_18px_40px_rgba(15,23,42,0.06)]")}>
             <CardContent className="p-0">
-              <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5 sm:px-5 sm:py-3">
+              <div className={cn("flex items-center justify-between border-b border-border/70 px-3 py-2.5 sm:px-5 sm:py-3", nativeIOS && "px-4 py-4")}>
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Weekly board</p>
-                  <h3 className="text-sm font-semibold text-foreground sm:text-base">Operational week</h3>
+                  <h3 className={cn("text-sm font-semibold text-foreground sm:text-base", nativeIOS && "text-lg tracking-[-0.03em]")}>Operational week</h3>
                 </div>
-                <span className="rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <span className={cn("rounded-full border border-border/70 bg-muted/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground", nativeIOS && "border-slate-200 bg-slate-50 px-3 py-1.5")}>
                   {weekCount} jobs
                 </span>
               </div>
-              <div className="divide-y divide-border/70">
+              <div className={cn("divide-y divide-border/70", nativeIOS && "divide-slate-100")}>
                 {weekSnapshots.map((snapshot) => (
                   <WeeklyDaySection
                     key={snapshot.date.toISOString()}
                     snapshot={snapshot}
                     onOpenDay={(appointmentId) => openDayInspector(snapshot.date, appointmentId)}
                     returnTo={scheduleReturnTo}
+                    nativeIOS={nativeIOS}
                   />
                 ))}
               </div>
@@ -787,7 +849,10 @@ export default function AppointmentsPage() {
           <Dialog open={Boolean(inspectedSnapshot)} onOpenChange={(open) => !open && closeDayInspector()}>
             <DialogContent
               showCloseButton={false}
-              className="h-[min(92dvh,calc(100svh-1rem))] max-h-[calc(100svh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:h-[min(92dvh,calc(100svh-2rem))] sm:w-full sm:max-h-[calc(100svh-2rem)] sm:rounded-[1.5rem]"
+              className={cn(
+                "h-[min(92dvh,calc(100svh-1rem))] max-h-[calc(100svh-1rem)] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden rounded-[1.15rem] p-0 sm:h-[min(92dvh,calc(100svh-2rem))] sm:w-full sm:max-h-[calc(100svh-2rem)] sm:rounded-[1.5rem]",
+                nativeIOS && "rounded-[30px]"
+              )}
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
@@ -799,7 +864,7 @@ export default function AppointmentsPage() {
                       Review the day timeline, revenue, and job load for this week snapshot without leaving the board.
                     </DialogDescription>
                   </DialogHeader>
-                  <ScheduleDayInspector snapshot={inspectedSnapshot} selectedAppointmentId={inspectedAppointmentId} returnTo={scheduleReturnTo} />
+                  <ScheduleDayInspector snapshot={inspectedSnapshot} selectedAppointmentId={inspectedAppointmentId} returnTo={scheduleReturnTo} nativeIOS={nativeIOS} />
                 </>
               ) : null}
             </DialogContent>
@@ -816,10 +881,12 @@ function WeeklyDaySection({
   snapshot,
   onOpenDay,
   returnTo,
+  nativeIOS = false,
 }: {
   snapshot: DaySnapshot;
   onOpenDay: (appointmentId?: string) => void;
   returnTo: string;
+  nativeIOS?: boolean;
 }) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
@@ -830,31 +897,38 @@ function WeeklyDaySection({
   ].filter((group) => group.items.length > 0);
 
   return (
-    <section className={cn("px-3 py-3 sm:px-5 sm:py-4", isToday(snapshot.date) && "bg-primary/[0.025]")}>
-      <div className="flex flex-col gap-1 border-b border-border/60 pb-2.5 sm:pb-3 sm:flex-row sm:items-end sm:justify-between">
+    <section className={cn("px-3 py-3 sm:px-5 sm:py-4", isToday(snapshot.date) && "bg-primary/[0.025]", nativeIOS && "px-4 py-4")}>
+      <div className={cn("flex flex-col gap-1 border-b border-border/60 pb-2.5 sm:pb-3 sm:flex-row sm:items-end sm:justify-between", nativeIOS && "border-slate-100 pb-3")}>
         <div>
-          <h4 className="text-sm font-semibold text-foreground sm:text-base">
+          <h4 className={cn("text-sm font-semibold text-foreground sm:text-base", nativeIOS && "text-base tracking-[-0.02em]")}>
             {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMM d")}
           </h4>
-          <p className="text-[11px] text-muted-foreground sm:text-xs">
+          <p className={cn("text-[11px] text-muted-foreground sm:text-xs", nativeIOS && "mt-1 text-xs")}>
             {snapshot.jobs.length} {snapshot.jobs.length === 1 ? "job" : "jobs"}
             {dayRevenue > 0 ? ` - ${formatCurrency(dayRevenue)}` : ""}
           </p>
         </div>
-        {isToday(snapshot.date) ? (
-          <span className="w-fit rounded-full border border-primary/20 bg-primary/[0.06] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-            Today
-          </span>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {groups.map((group) => (
+            <span key={group.label} className={cn("rounded-full border border-border/70 bg-muted/20 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground", nativeIOS && "border-slate-200 bg-slate-50 px-2.5 py-1")}>
+              {group.items.length} {group.label}
+            </span>
+          ))}
+          {isToday(snapshot.date) ? (
+            <span className="w-fit rounded-full border border-primary/20 bg-primary/[0.06] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+              Today
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {snapshot.jobs.length === 0 ? (
-        <div className="py-4 text-sm text-muted-foreground">No jobs scheduled for this day.</div>
+        <div className={cn("py-4 text-sm text-muted-foreground", nativeIOS && "rounded-[22px] bg-slate-50/80 px-4 py-5 text-center")}>No jobs scheduled for this day.</div>
       ) : (
-        <div className="space-y-3 pt-3 sm:space-y-4 sm:pt-4">
+        <div className={cn("space-y-3 pt-3 sm:space-y-4 sm:pt-4", nativeIOS && "space-y-3")}>
           {groups.map((group) => (
             <div key={group.label} className="space-y-1.5 sm:space-y-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]">{group.label}</div>
+              <div className={cn("text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground sm:text-[11px]", nativeIOS && "px-1 text-[11px]")}>{group.label}</div>
               <div className="space-y-1.5 sm:space-y-2">
                 {group.items.map((appointment) => (
                   <ScheduleBoardRow
@@ -863,6 +937,7 @@ function WeeklyDaySection({
                     referenceDate={snapshot.date}
                     onOpenDay={() => onOpenDay(appointment.id)}
                     returnTo={returnTo}
+                    nativeIOS={nativeIOS}
                   />
                 ))}
               </div>
@@ -879,11 +954,13 @@ function ScheduleBoardRow({
   referenceDate,
   onOpenDay,
   returnTo,
+  nativeIOS = false,
 }: {
   appointment: AppointmentRecord;
   referenceDate: Date;
   onOpenDay: () => void;
   returnTo: string;
+  nativeIOS?: boolean;
 }) {
   const vehicleLabel = getVehicleLabel(appointment);
   const clientName = getClientName(appointment);
@@ -917,35 +994,40 @@ function ScheduleBoardRow({
         onTouchCancel={longPress.clearTimer}
         onTouchMove={longPress.handleTouchMove}
         onContextMenu={longPress.openContextMenu}
-        className="block select-none rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 text-left transition-[transform,background-color] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none"
+        className={cn(
+          "block w-full select-none rounded-lg border border-border/60 bg-white/92 px-2.5 py-2.5 text-left transition-[transform,background-color,border-color,box-shadow] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none",
+          nativeIOS && "rounded-[22px] border-white/80 bg-white px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
+        )}
         style={PRESSABLE_CARD_STYLE}
         draggable={false}
       >
-        <div className="pointer-events-none grid gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4">
+        <div className={cn("pointer-events-none grid gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.9fr)_auto] xl:items-start xl:gap-4", nativeIOS && "grid-cols-[4px_minmax(0,1fr)] gap-x-3")}>
+          {nativeIOS ? <span className={cn("row-span-3 h-full min-h-14 rounded-full", getJobPhaseTone(appointment.jobPhase))} /> : null}
           <div className="min-w-0">
             <div className="flex min-w-0 items-start gap-2">
-              <p className="min-w-0 flex-1 break-words text-[12.5px] font-semibold leading-4.5 text-foreground sm:text-sm sm:leading-5">
+              <p className={cn("min-w-0 flex-1 break-words text-[12.5px] font-semibold leading-4.5 text-foreground sm:text-sm sm:leading-5", nativeIOS && "text-[15px] leading-5 tracking-[-0.01em]")}>
                 {getAppointmentLabel(appointment)}
               </p>
-              {moneyLabel ? <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-[12px]">{moneyLabel}</span> : null}
+              {moneyLabel ? <span className={cn("shrink-0 text-[11px] font-semibold text-foreground sm:text-[12px]", nativeIOS && "text-sm")}>{moneyLabel}</span> : null}
             </div>
-            <p className="mt-0.5 break-words text-[11px] text-muted-foreground sm:mt-1 sm:text-[13px]">{identityLabel}</p>
+            <p className={cn("mt-0.5 break-words text-[11px] text-muted-foreground sm:mt-1 sm:text-[13px]", nativeIOS && "mt-1 text-[13px] leading-5")}>{identityLabel}</p>
           </div>
 
-          <div className="min-w-0 space-y-0.5">
-            <p className="break-words text-[11px] text-muted-foreground sm:text-[13px]">{timingLabel}</p>
-            {supportLabel ? <p className="break-words text-[10px] text-muted-foreground sm:text-[11px]">{supportLabel}</p> : null}
+          <div className={cn("min-w-0 space-y-0.5", nativeIOS && "col-start-2 rounded-2xl bg-slate-50/80 px-3 py-2")}>
+            <p className={cn("break-words text-[11px] text-muted-foreground sm:text-[13px]", nativeIOS && "text-xs font-semibold text-slate-700")}>{timingLabel}</p>
+            {supportLabel ? <p className={cn("break-words text-[10px] text-muted-foreground sm:text-[11px]", nativeIOS && "mt-0.5 text-xs")}>{supportLabel}</p> : null}
           </div>
 
-          <div className="flex min-w-0 items-center gap-1.5 xl:justify-end">
-            <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
-            <span className="max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
+          <div className={cn("flex min-w-0 items-center gap-1.5 xl:justify-end", nativeIOS && "col-start-2 justify-between")}>
+            {!nativeIOS ? <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} /> : null}
+            <span className={cn("max-w-full truncate rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]", nativeIOS && "border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px]")}>
               {stageLabel}
             </span>
+            {nativeIOS ? <ChevronRight className="h-4 w-4 text-slate-300" /> : null}
           </div>
         </div>
       </button>
-      <AppointmentQuickActionsSheet appointment={appointment} open={actionsOpen} onOpenChange={setActionsOpen} returnTo={returnTo} />
+      <AppointmentQuickActionsSheet appointment={appointment} open={actionsOpen} onOpenChange={setActionsOpen} returnTo={returnTo} nativeIOS={nativeIOS} />
     </>
   );
 }
@@ -954,10 +1036,12 @@ function ScheduleDayInspector({
   snapshot,
   selectedAppointmentId,
   returnTo,
+  nativeIOS = false,
 }: {
   snapshot: DaySnapshot;
   selectedAppointmentId: string | null;
   returnTo: string;
+  nativeIOS?: boolean;
 }) {
   const dayRevenue = getCalendarDayRevenue(snapshot.jobs, snapshot.date);
   const groups = [
@@ -986,11 +1070,11 @@ function ScheduleDayInspector({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <DialogHeader className="shrink-0 border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4">
+      <DialogHeader className={cn("shrink-0 border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.5))] px-4 py-3 sm:px-5 sm:py-4", nativeIOS && "border-slate-100 bg-white px-4 py-4")}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Day inspector</p>
-            <DialogTitle className="mt-1 text-left text-base sm:text-lg">
+            <DialogTitle className={cn("mt-1 text-left text-base sm:text-lg", nativeIOS && "text-xl tracking-[-0.03em]")}>
               {format(snapshot.date, "EEEE")} - {format(snapshot.date, "MMMM d")}
             </DialogTitle>
             <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
@@ -1013,7 +1097,7 @@ function ScheduleDayInspector({
         </div>
 
         {selectedAppointment ? (
-          <div className="mt-3 rounded-2xl border border-primary/15 bg-primary/[0.055] p-3 text-left">
+          <div className={cn("mt-3 rounded-2xl border border-primary/15 bg-primary/[0.055] p-3 text-left", nativeIOS && "rounded-[22px]")}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">{selectedGroupLabel}</p>
@@ -1039,7 +1123,7 @@ function ScheduleDayInspector({
           </div>
         ) : null}
       </DialogHeader>
-      <div className="app-native-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:px-5 sm:py-4">
+      <div className={cn("app-native-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:px-5 sm:py-4", nativeIOS && "bg-slate-50/50 px-4 py-4")}>
         {groups.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
             No jobs scheduled for this day.
@@ -1059,6 +1143,7 @@ function ScheduleDayInspector({
                       selected={selected}
                       selectedCardRef={selected ? selectedCardRef : undefined}
                       returnTo={returnTo}
+                      nativeIOS={nativeIOS}
                     />
                   );
                 })}
@@ -1077,12 +1162,14 @@ function InspectorAppointmentCard({
   selected = false,
   selectedCardRef,
   returnTo,
+  nativeIOS = false,
 }: {
   appointment: AppointmentRecord;
   snapshotDate: Date;
   selected?: boolean;
   selectedCardRef?: RefObject<HTMLDivElement | null>;
   returnTo: string;
+  nativeIOS?: boolean;
 }) {
   const navigate = useNavigate();
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -1126,22 +1213,24 @@ function InspectorAppointmentCard({
           "block select-none rounded-lg border px-2.5 py-2.5 transition-[transform,background-color,border-color,box-shadow] hover:bg-white active:scale-[0.985] sm:rounded-xl sm:px-3 sm:py-3 [&_*]:select-none",
           selected
             ? "border-primary/35 bg-primary/[0.055] shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
-            : "border-border/60 bg-white/92"
+            : "border-border/60 bg-white/92",
+          nativeIOS && "rounded-[22px] border-white/80 bg-white px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.05)]",
+          nativeIOS && selected && "border-primary/25 bg-primary/[0.06]"
         )}
         style={PRESSABLE_CARD_STYLE}
         draggable={false}
       >
         <div className="pointer-events-none space-y-1">
           <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 flex-1 break-words text-[13px] font-semibold text-foreground sm:text-sm">{getAppointmentLabel(appointment)}</p>
+            <p className={cn("min-w-0 flex-1 break-words text-[13px] font-semibold text-foreground sm:text-sm", nativeIOS && "text-[15px] leading-5 tracking-[-0.01em]")}>{getAppointmentLabel(appointment)}</p>
             {getAppointmentMoneyLabel(appointment) ? (
-              <span className="shrink-0 text-[11px] font-semibold text-foreground sm:text-xs">{getAppointmentMoneyLabel(appointment)}</span>
+              <span className={cn("shrink-0 text-[11px] font-semibold text-foreground sm:text-xs", nativeIOS && "text-sm")}>{getAppointmentMoneyLabel(appointment)}</span>
             ) : null}
           </div>
-          <p className="break-words text-[11px] text-muted-foreground sm:text-sm">
+          <p className={cn("break-words text-[11px] text-muted-foreground sm:text-sm", nativeIOS && "text-[13px] leading-5")}>
             {joinMeta([getClientName(appointment) || "Internal", getVehicleLabel(appointment) || "No vehicle"])}
           </p>
-          <p className="break-words text-[11px] text-muted-foreground sm:text-sm">{getScheduleTimingLabel(appointment)}</p>
+          <p className={cn("break-words text-[11px] text-muted-foreground sm:text-sm", nativeIOS && "text-[13px] font-semibold text-slate-700")}>{getScheduleTimingLabel(appointment)}</p>
           <div className="flex items-center gap-1.5">
             <span className={cn("h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5", getJobPhaseTone(appointment.jobPhase))} />
             <span className="rounded-full border border-border/70 bg-muted/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:px-2 sm:text-[10px]">
@@ -1150,7 +1239,7 @@ function InspectorAppointmentCard({
           </div>
         </div>
       </div>
-      <AppointmentQuickActionsSheet appointment={appointment} open={actionsOpen} onOpenChange={setActionsOpen} returnTo={returnTo} />
+      <AppointmentQuickActionsSheet appointment={appointment} open={actionsOpen} onOpenChange={setActionsOpen} returnTo={returnTo} nativeIOS={nativeIOS} />
     </>
   );
 }
@@ -1160,11 +1249,13 @@ function AppointmentQuickActionsSheet({
   open,
   onOpenChange,
   returnTo,
+  nativeIOS = false,
 }: {
   appointment: AppointmentRecord;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   returnTo: string;
+  nativeIOS?: boolean;
 }) {
   const navigate = useNavigate();
   const clientName = getClientName(appointment) || "Appointment";
@@ -1191,24 +1282,24 @@ function AppointmentQuickActionsSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <SheetContent side="bottom" className={cn("max-h-[85vh] overflow-y-auto rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))]", nativeIOS && "rounded-t-[30px] px-4")}>
         <SheetHeader>
           <SheetTitle>{clientName}</SheetTitle>
           <SheetDescription>Long-press appointment cards to move faster through client follow-up and job details.</SheetDescription>
         </SheetHeader>
         <div className="mt-4 grid gap-2">
-          <Button type="button" variant="outline" className="justify-start" onClick={openAppointment}>
+          <Button type="button" variant="outline" className={cn("justify-start", nativeIOS && "h-12 rounded-[18px]")} onClick={openAppointment}>
             <CalendarRange className="mr-2 h-4 w-4" />
             Open appointment
           </Button>
           {clientHref ? (
-            <Button type="button" variant="outline" className="justify-start" onClick={openClient}>
+            <Button type="button" variant="outline" className={cn("justify-start", nativeIOS && "h-12 rounded-[18px]")} onClick={openClient}>
               <Users className="mr-2 h-4 w-4" />
               Open client
             </Button>
           ) : null}
           {phoneHref ? (
-            <Button asChild variant="outline" className="justify-start">
+            <Button asChild variant="outline" className={cn("justify-start", nativeIOS && "h-12 rounded-[18px]")}>
               <a href={phoneHref} onClick={() => onOpenChange(false)}>
                 <Phone className="mr-2 h-4 w-4" />
                 Call client {displayPhone ? `(${displayPhone})` : ""}
@@ -1216,7 +1307,7 @@ function AppointmentQuickActionsSheet({
             </Button>
           ) : null}
           {textHref ? (
-            <Button asChild variant="outline" className="justify-start">
+            <Button asChild variant="outline" className={cn("justify-start", nativeIOS && "h-12 rounded-[18px]")}>
               <a href={textHref} onClick={() => onOpenChange(false)}>
                 <MessageSquare className="mr-2 h-4 w-4" />
                 Text client
@@ -1224,7 +1315,7 @@ function AppointmentQuickActionsSheet({
             </Button>
           ) : null}
           {emailHref ? (
-            <Button asChild variant="outline" className="justify-start">
+            <Button asChild variant="outline" className={cn("justify-start", nativeIOS && "h-12 rounded-[18px]")}>
               <a href={emailHref} onClick={() => onOpenChange(false)}>
                 <Mail className="mr-2 h-4 w-4" />
                 Email client

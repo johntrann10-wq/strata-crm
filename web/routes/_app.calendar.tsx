@@ -41,6 +41,7 @@ import {
 } from "@/lib/calendarJobSpans";
 import { buildCalendarBlockInternalNotes, getCalendarBlockLabel, getCalendarBlockNote, isCalendarBlockAppointment, isFullDayCalendarBlock, parseCalendarBlock, type CalendarBlockMode } from "@/lib/calendarBlocks";
 import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
+import { isNativeIOSApp } from "@/lib/mobileShell";
 import { triggerImpactFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 
 function toLocalDateString(date: Date): string {
@@ -233,7 +234,7 @@ const GALLERY_SWIPE_THRESHOLD_PX = 44;
 const GALLERY_SWIPE_LOCK_PX = 10;
 const GALLERY_FLICK_THRESHOLD_PX = 24;
 const GALLERY_FLICK_VELOCITY = 0.34;
-const GALLERY_SETTLE_MS = 270;
+const GALLERY_SETTLE_MS = 240;
 
 function dampenGalleryOffset(offset: number, width: number, blockedAtEdge: boolean): number {
   if (blockedAtEdge) {
@@ -460,13 +461,15 @@ function MobileAppointmentGallery({
 
   if (appointments.length === 0) {
     return (
-      <div className="mobile-gallery-scroll h-full overflow-y-auto px-1 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="mobile-gallery-scroll h-full overflow-y-auto px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
         <AppointmentInspectorPanel
           appointment={null}
           emptyTitle="Select an appointment"
           emptyDescription={emptyDescription}
           compact
           minimalChrome
+          nativeSheetMode
+          preferNativeInputs
           onAppointmentChange={onAppointmentChange}
           onRequestClose={onRequestClose}
         />
@@ -477,12 +480,12 @@ function MobileAppointmentGallery({
   return (
     <div
       ref={containerRef}
-      className="relative h-full min-h-0 overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_18%_0%,rgba(251,146,60,0.18),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.28),rgba(15,23,42,0.05))]"
+      className="relative h-full min-h-0 overflow-hidden rounded-t-[2rem] bg-transparent"
     >
       <button
         type="button"
         onClick={onRequestClose}
-        className="absolute right-3.5 top-3.5 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-500 shadow-[0_12px_28px_rgba(15,23,42,0.16)] backdrop-blur-xl transition-colors active:scale-95 hover:text-slate-950"
+        className="absolute right-4 top-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/80 bg-white/92 text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-colors active:scale-95 hover:text-slate-950"
         aria-label="Close appointment inspector"
       >
         <X className="h-4 w-4" />
@@ -492,7 +495,7 @@ function MobileAppointmentGallery({
           <div
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute bottom-4 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/70 bg-white/84 px-3 py-1.5 shadow-[0_12px_28px_rgba(15,23,42,0.14)] backdrop-blur-xl",
+              "pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl",
               dragging && "opacity-90"
             )}
           >
@@ -514,14 +517,14 @@ function MobileAppointmentGallery({
           <div
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-y-10 left-0 z-20 w-12 bg-gradient-to-r from-slate-950/12 to-transparent transition-opacity",
+              "pointer-events-none absolute inset-y-16 left-0 z-20 w-10 bg-gradient-to-r from-slate-950/8 to-transparent transition-opacity",
               canGoPrevious ? "opacity-100" : "opacity-0"
             )}
           />
           <div
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-y-10 right-0 z-20 w-12 bg-gradient-to-l from-slate-950/12 to-transparent transition-opacity",
+              "pointer-events-none absolute inset-y-16 right-0 z-20 w-10 bg-gradient-to-l from-slate-950/8 to-transparent transition-opacity",
               canGoNext ? "opacity-100" : "opacity-0"
             )}
           />
@@ -538,7 +541,7 @@ function MobileAppointmentGallery({
         {slideSlots.map(({ key, appointment }) => (
           <div
             key={`${key}-${appointment?.id ?? "edge"}`}
-            className="mobile-gallery-scroll h-full min-w-full overflow-y-auto overscroll-contain px-2.5 pb-[max(2.75rem,env(safe-area-inset-bottom))] pt-3"
+            className="mobile-gallery-scroll h-full min-w-full overflow-y-auto overscroll-contain px-3.5 pb-[max(3.25rem,env(safe-area-inset-bottom))] pt-5"
             style={{ touchAction: "pan-y" }}
             aria-hidden={key !== "current"}
           >
@@ -565,6 +568,8 @@ function MobileAppointmentGallery({
                   emptyDescription={emptyDescription}
                   compact
                   minimalChrome
+                  nativeSheetMode
+                  preferNativeInputs
                   onAppointmentChange={onAppointmentChange}
                   onRequestClose={onRequestClose}
                 />
@@ -587,6 +592,7 @@ function AgendaPreviewRow({
   onClick,
   onLongPress,
   emphasized = false,
+  nativeIOS = false,
 }: {
   appointment: ApptRecord;
   kind: "timed" | "onsite";
@@ -595,6 +601,7 @@ function AgendaPreviewRow({
   onClick: () => void;
   onLongPress?: () => void;
   emphasized?: boolean;
+  nativeIOS?: boolean;
 }) {
   const openActions = useCallback(() => {
     if (!onLongPress) return;
@@ -639,9 +646,11 @@ function AgendaPreviewRow({
       onTouchMove={longPress.handleTouchMove}
       onContextMenu={onLongPress ? longPress.openContextMenu : undefined}
       className={cn(
-        "flex w-full select-none items-start gap-3 rounded-2xl border border-border/60 bg-white/82 text-left transition-colors hover:bg-white [&_*]:select-none",
+        "flex w-full select-none items-start gap-3 rounded-2xl border border-border/60 bg-white/82 text-left transition-[transform,background-color,border-color,box-shadow] duration-150 hover:bg-white active:scale-[0.985] [&_*]:select-none",
         emphasized ? "gap-3.5 rounded-[1.35rem] px-3.5 py-3.5 shadow-[0_10px_30px_rgba(15,23,42,0.06)]" : "px-3 py-3",
-        selected && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05]"
+        nativeIOS &&
+          "gap-3.5 rounded-[1.35rem] border-white/85 bg-white/94 px-4 py-4 shadow-[0_14px_30px_rgba(15,23,42,0.07)] active:border-primary/20 active:bg-primary/[0.05] active:shadow-[0_10px_22px_rgba(15,23,42,0.08)]",
+        selected && !isCalendarBlockAppointment(appointment) && "border-primary/35 bg-primary/[0.05] shadow-[0_10px_26px_rgba(249,115,22,0.12)]"
       )}
       style={PRESSABLE_CARD_STYLE}
       draggable={false}
@@ -649,11 +658,16 @@ function AgendaPreviewRow({
       <div className="min-w-0 flex-1">
         <div className={cn("flex items-start justify-between gap-3", emphasized && "gap-2.5")}>
           <div className="min-w-0 flex-1">
-            <p className={cn("truncate font-semibold text-foreground", emphasized ? "text-[15px] leading-5" : "text-sm")}>
+            <p
+              className={cn(
+                "font-semibold text-foreground",
+                nativeIOS ? "line-clamp-2 text-[15px] leading-5" : emphasized ? "truncate text-[15px] leading-5" : "text-sm"
+              )}
+            >
               {appointmentLabel}
             </p>
             {appointmentAmount > 0 ? (
-              <p className={cn("mt-1 font-semibold text-foreground/90", emphasized ? "text-sm" : "text-xs")}>
+              <p className={cn("mt-1 font-semibold text-foreground/90", nativeIOS ? "text-sm" : emphasized ? "text-sm" : "text-xs")}>
                 {formatCurrency(appointmentAmount)}
               </p>
             ) : null}
@@ -671,9 +685,15 @@ function AgendaPreviewRow({
                 : getOperationalDayLabel(appointment, currentDate)}
           </span>
         </div>
-        <p className={cn("mt-1.5 truncate text-muted-foreground", emphasized ? "text-[13px]" : "text-xs")}>{clientLabel}</p>
-        <p className={cn("truncate text-muted-foreground", emphasized ? "text-[13px]" : "text-xs")}>{secondaryLabel}</p>
-        <p className={cn("mt-1.5 truncate text-muted-foreground", emphasized ? "text-[12px]" : "text-[11px]")}>{timingLabel}</p>
+        <p className={cn("mt-1.5 text-muted-foreground", nativeIOS ? "line-clamp-1 text-[13px]" : emphasized ? "truncate text-[13px]" : "truncate text-xs")}>
+          {clientLabel}
+        </p>
+        <p className={cn("text-muted-foreground", nativeIOS ? "line-clamp-1 text-[13px]" : emphasized ? "truncate text-[13px]" : "truncate text-xs")}>
+          {secondaryLabel}
+        </p>
+        <p className={cn("mt-1.5 text-muted-foreground", nativeIOS ? "line-clamp-2 text-[12px] leading-5" : emphasized ? "truncate text-[12px]" : "truncate text-[11px]")}>
+          {timingLabel}
+        </p>
       </div>
     </button>
   );
@@ -728,6 +748,7 @@ function mobileDateInputClassName(isMobileLayout: boolean) {
 
 function shouldUseMobileCalendarLayout(): boolean {
   if (typeof window === "undefined") return false;
+  if (isNativeIOSApp()) return true;
   const width = window.innerWidth;
   const height = window.innerHeight;
   const shortestSide = Math.min(width, height);
@@ -756,6 +777,7 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(() => requestedDate ?? new Date());
   const [view, setView] = useState<"month" | "week">(initialView ?? "month");
   const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const [isNativeIOSCalendar, setIsNativeIOSCalendar] = useState(false);
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
   const [blockMode, setBlockMode] = useState<CalendarBlockMode>("time");
@@ -791,6 +813,7 @@ export default function CalendarPage() {
   useEffect(() => {
     const check = () => {
       setIsMobileLayout(shouldUseMobileCalendarLayout());
+      setIsNativeIOSCalendar(isNativeIOSApp());
       if (!layoutInitializedRef.current) {
         setView(initialView ?? "month");
         layoutInitializedRef.current = true;
@@ -1026,6 +1049,11 @@ export default function CalendarPage() {
   const overviewAppointments = useMemo(() => getOverviewCalendarAppointments(appointments), [appointments]);
 
   function handlePrev() {
+    if (isNativeIOSCalendar) {
+      void triggerSelectionFeedback();
+      setIsAppointmentInspectorOpen(false);
+      setSelectedAppointmentId(null);
+    }
     if (view === "month") {
       const nextMonth = new Date(visibleMonthDate.getFullYear(), visibleMonthDate.getMonth() - 1, 1);
       setVisibleMonthDate(nextMonth);
@@ -1043,6 +1071,11 @@ export default function CalendarPage() {
   }
 
   function handleNext() {
+    if (isNativeIOSCalendar) {
+      void triggerSelectionFeedback();
+      setIsAppointmentInspectorOpen(false);
+      setSelectedAppointmentId(null);
+    }
     if (view === "month") {
       const nextMonth = new Date(visibleMonthDate.getFullYear(), visibleMonthDate.getMonth() + 1, 1);
       setVisibleMonthDate(nextMonth);
@@ -1061,6 +1094,11 @@ export default function CalendarPage() {
 
   function handleToday() {
     const today = new Date();
+    if (isNativeIOSCalendar) {
+      void triggerSelectionFeedback();
+      setIsAppointmentInspectorOpen(false);
+      setSelectedAppointmentId(null);
+    }
     if (view === "month") {
       setVisibleMonthDate(toMonthAnchor(today));
     } else {
@@ -1071,6 +1109,11 @@ export default function CalendarPage() {
 
   function handleViewChange(nextView: "month" | "week") {
     if (nextView === view) return;
+    if (isNativeIOSCalendar) {
+      void triggerSelectionFeedback();
+      setIsAppointmentInspectorOpen(false);
+      setSelectedAppointmentId(null);
+    }
     const dateValue = toLocalDateString(selectedDate);
     lastInternalUrlSyncRef.current = {
       view: nextView,
@@ -1089,6 +1132,9 @@ export default function CalendarPage() {
   }
 
   function handleDayClick(date: Date) {
+    if (isNativeIOSCalendar) {
+      void triggerSelectionFeedback();
+    }
     setSelectedDate(date);
     setCurrentDate(date);
     const shouldShiftVisibleMonth =
@@ -1097,6 +1143,16 @@ export default function CalendarPage() {
       if (view === "month") {
         setVisibleMonthDate(toMonthAnchor(date));
       }
+    }
+    if (isNativeIOSCalendar) {
+      setSelectedAppointmentId(null);
+      setIsAppointmentInspectorOpen(false);
+      if (view === "month") {
+        window.requestAnimationFrame(() => {
+          dayInspectorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+      return;
     }
     const daySnapshot = getCalendarDaySnapshot(appointments, date);
     const nextAppointment =
@@ -1424,9 +1480,138 @@ export default function CalendarPage() {
   }, [selectableDayAgendaItems, selectedAppointmentId]);
 
   const useFlowingMonthInspector = isMobileLayout && view === "month";
+  const useFlowingDayInspector = isNativeIOSCalendar || useFlowingMonthInspector;
   const dayInspectorTitleId = `day-inspector-title-${view}`;
+  const selectedDayKey = toLocalDateString(inspectorDate);
+  const isSelectedDayToday = toLocalDateString(inspectorDate) === toLocalDateString(new Date());
 
-  const dayInspectorPanel = (
+  const dayInspectorPanel = isNativeIOSCalendar ? (
+    <aside
+      ref={dayInspectorRef}
+      role="complementary"
+      aria-label="Selected day agenda"
+      aria-labelledby={dayInspectorTitleId}
+      className="flex flex-col gap-2.5"
+    >
+      <section
+        key={`${selectedDayKey}-summary`}
+        className="overflow-hidden rounded-[1.35rem] border border-white/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95))] px-3 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.07)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200"
+      >
+        <div className="flex items-stretch gap-2.5">
+          <div className="flex w-[4.45rem] shrink-0 flex-col items-center justify-center rounded-[1.15rem] bg-primary px-2 py-2.5 text-center text-primary-foreground shadow-[0_12px_24px_rgba(249,115,22,0.24)]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-foreground/75">
+              {inspectorDate.toLocaleDateString("en-US", { month: "short" })}
+            </span>
+            <span className="mt-1 text-[1.55rem] font-semibold leading-none tabular-nums">{inspectorDate.getDate()}</span>
+            <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-foreground/80">
+              {inspectorDate.toLocaleDateString("en-US", { weekday: "short" })}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Selected day</p>
+                  {isSelectedDayToday ? (
+                    <span className="rounded-full border border-primary/15 bg-primary/[0.08] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                      Today
+                    </span>
+                  ) : null}
+                </div>
+                <h3 id={dayInspectorTitleId} className="mt-1 text-[1rem] font-semibold leading-tight text-foreground">
+                  {formatPanelDate(inspectorDate)}
+                </h3>
+                <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                  {selectedDayAgendaItems.length > 0
+                    ? `${selectedDayAgendaItems.length} scheduled item${selectedDayAgendaItems.length === 1 ? "" : "s"} for this day.`
+                    : "Open schedule space for this day."}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 shrink-0 rounded-[0.9rem] px-3"
+                onClick={handleNewAppointment}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                New
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-2.5 grid grid-cols-2 gap-2">
+          <div className="rounded-[1rem] border border-white/80 bg-white/86 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Agenda</p>
+            <p className="mt-1 text-base font-semibold text-foreground">{selectedDayAgendaItems.length}</p>
+          </div>
+          <div className="rounded-[1rem] border border-white/80 bg-white/86 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Revenue</p>
+            <p className="mt-1 text-base font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
+          </div>
+          <div className="rounded-[1rem] border border-white/80 bg-white/86 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">In Shop</p>
+            <p className="mt-1 text-base font-semibold text-foreground">{selectedDayInShopCount}</p>
+          </div>
+          <div className="rounded-[1rem] border border-white/80 bg-white/86 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Conflicts</p>
+            <p className={cn("mt-1 text-base font-semibold", selectedDayConflicts > 0 ? "text-rose-700" : "text-foreground")}>
+              {selectedDayConflicts}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        key={`${selectedDayKey}-agenda`}
+        className="rounded-[1.35rem] border border-white/80 bg-white/94 px-3 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.07)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Schedule</p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {selectedDayAgendaItems.length > 0
+                ? `${selectedDayAgendaItems.length} scheduled item${selectedDayAgendaItems.length === 1 ? "" : "s"}`
+                : "No appointments scheduled"}
+            </p>
+          </div>
+          <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-3 py-1.5 text-[11px] font-semibold text-primary">
+            {view === "month" ? "Month view" : "Week view"}
+          </span>
+        </div>
+
+        {selectedDayAgendaItems.length > 0 ? (
+          <div className="space-y-3.5 overscroll-contain">
+            {selectedDayAgendaItems.map(({ appointment, kind }) => (
+              <AgendaPreviewRow
+                key={`${appointment.id}-${kind}-${view}`}
+                appointment={appointment}
+                kind={kind}
+                selected={selectedAppointmentId === appointment.id}
+                currentDate={inspectorDate}
+                onClick={() => handleApptClick(appointment)}
+                onLongPress={() => handleCalendarAppointmentLongPress(appointment)}
+                emphasized
+                nativeIOS
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[1.35rem] border border-dashed border-border/70 bg-[linear-gradient(180deg,rgba(248,250,252,0.7),rgba(255,255,255,0.92))] px-4 py-7 text-center">
+            <p className="text-sm font-semibold text-foreground">Nothing booked for this day.</p>
+            <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
+              Pick another date, or add a new appointment for {formatPanelShortDate(inspectorDate)}.
+            </p>
+            <div className="mt-4 flex justify-center">
+              <Button type="button" className="h-11 rounded-[1rem] px-4.5" onClick={handleNewAppointment}>
+                <Plus className="mr-2 h-4 w-4" />
+                New appointment
+              </Button>
+            </div>
+          </div>
+        )}
+      </section>
+    </aside>
+  ) : (
     <aside
       ref={dayInspectorRef}
       role="complementary"
@@ -1434,7 +1619,7 @@ export default function CalendarPage() {
       aria-labelledby={dayInspectorTitleId}
       className={cn(
         "native-foreground-panel flex min-h-0 flex-col",
-        useFlowingMonthInspector ? "h-auto overflow-visible" : "h-full overflow-hidden"
+        useFlowingDayInspector ? "h-auto overflow-visible" : "h-full overflow-hidden"
       )}
     >
         <div
@@ -1478,12 +1663,12 @@ export default function CalendarPage() {
             </div>
           )}
       </div>
-      <div className={cn(isMobileLayout ? "mt-2" : "mt-3", useFlowingMonthInspector ? "overflow-visible" : "min-h-0 flex-1")}>
-        <div className={cn("grid grid-cols-1 gap-3", useFlowingMonthInspector ? "h-auto" : "h-full min-h-0")}>
+      <div className={cn(isMobileLayout ? "mt-2" : "mt-3", useFlowingDayInspector ? "overflow-visible" : "min-h-0 flex-1")}>
+        <div className={cn("grid grid-cols-1 gap-3", useFlowingDayInspector ? "h-auto" : "h-full min-h-0")}>
           <div
             className={cn(
               "flex flex-col rounded-[1.3rem] border border-border/60 bg-white/72",
-              useFlowingMonthInspector
+              useFlowingDayInspector
                 ? "overflow-visible p-2.5"
                 : isMobileLayout
                   ? "h-full min-h-[15.5rem] overflow-hidden p-2"
@@ -1506,14 +1691,14 @@ export default function CalendarPage() {
             {selectedDayAgendaItems.length > 0 ? (
               <div
                 className={cn(
-                  useFlowingMonthInspector
+                  useFlowingDayInspector
                     ? "space-y-2.5 pb-1"
                     : "min-h-0 flex-1 space-y-2 overflow-y-auto scroll-pb-8 pb-2",
-                  isMobileLayout && !useFlowingMonthInspector
+                  isMobileLayout && !useFlowingDayInspector
                     ? view === "month"
                       ? "touch-pan-y overscroll-contain px-0.5 pb-4 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
                       : "touch-pan-y overscroll-contain px-1 pb-4 pr-0.5 pt-0.5 [-webkit-overflow-scrolling:touch]"
-                    : !useFlowingMonthInspector
+                    : !useFlowingDayInspector
                       ? "pr-1 pt-0.5"
                       : null
                 )}
@@ -1530,7 +1715,7 @@ export default function CalendarPage() {
                     emphasized={isMobileLayout && view === "week"}
                   />
                 ))}
-                {isMobileLayout && !useFlowingMonthInspector ? <div aria-hidden="true" className="h-6 shrink-0" /> : null}
+                {isMobileLayout && !useFlowingDayInspector ? <div aria-hidden="true" className="h-6 shrink-0" /> : null}
               </div>
             ) : (
               <div className={cn("rounded-2xl border border-dashed border-border/70 bg-muted/10", isMobileLayout ? "px-3 py-4" : "px-4 py-5")}>
@@ -1548,7 +1733,68 @@ export default function CalendarPage() {
     </aside>
   );
 
-  const mobileWeekPanel = (
+  const mobileWeekPanel = isNativeIOSCalendar ? (
+    <div className="surface-panel shrink-0 rounded-[1.35rem] p-3 shadow-[0_10px_28px_rgba(15,23,42,0.07)]">
+      <div className="mb-2.5 flex items-center justify-between gap-3 px-0.5">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Week overview</p>
+          <p className="mt-0.5 text-[0.98rem] font-semibold text-foreground">
+            {formatPanelShortDate(mobileWeekDays[0] ?? currentDate)} - {formatPanelShortDate(mobileWeekDays[6] ?? currentDate)}
+          </p>
+        </div>
+        <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2.5 py-1 text-[11px] font-semibold text-primary">
+          {selectedDayAgendaItems.length} items
+        </span>
+      </div>
+      <div className="grid grid-cols-7 gap-1 pb-1">
+        {mobileWeekDays.map((day) => {
+          const dayKey = toLocalDateString(day);
+          const selectedKey = toLocalDateString(selectedDate);
+          const todayKey = toLocalDateString(new Date());
+          const daySnapshot = getCalendarDaySnapshot(appointments, day);
+          const indicatorAppointments = daySnapshot.agendaItems.map(({ appointment }) => appointment);
+          const isSelected = dayKey === selectedKey;
+          const isTodayColumn = dayKey === todayKey;
+
+          return (
+            <button
+              key={dayKey}
+              type="button"
+              onClick={() => {
+                void triggerSelectionFeedback();
+                setSelectedDate(day);
+                setCurrentDate(day);
+                setSelectedAppointmentId(null);
+                setIsAppointmentInspectorOpen(false);
+              }}
+              className={cn(
+                "native-touch-surface flex min-h-[4.55rem] min-w-0 flex-col items-center justify-between rounded-[0.85rem] border px-0.5 py-1.5 text-center transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.98]",
+                isSelected
+                  ? "border-primary/30 bg-primary/[0.1] text-foreground shadow-[0_8px_18px_rgba(15,23,42,0.1)]"
+                  : "border-border/70 bg-white/92 text-foreground",
+                isTodayColumn && !isSelected && "border-primary/30 bg-primary/[0.05]"
+              )}
+              aria-pressed={isSelected}
+              aria-label={`Select ${formatPanelDate(day)}`}
+            >
+              <span className={cn("text-[8px] font-semibold uppercase tracking-[0.08em]", isSelected ? "text-primary" : "text-muted-foreground")}>
+                {day.toLocaleDateString("en-US", { weekday: "short" })}
+              </span>
+              <span
+                className={cn(
+                  "inline-flex h-7 w-7 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums",
+                  isSelected ? "bg-primary text-primary-foreground shadow-sm" : isTodayColumn ? "border border-primary/20 bg-primary/[0.07] text-primary" : "text-foreground"
+                )}
+              >
+                {day.getDate()}
+              </span>
+              <MobileWeekDayIndicators appointments={indicatorAppointments} selected={isSelected} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : (
     <div className="surface-panel shrink-0 rounded-[1.2rem] p-2">
       <div className="mb-2 flex items-center justify-between gap-3 px-1">
         <div>
@@ -1581,7 +1827,7 @@ export default function CalendarPage() {
                 setCurrentDate(day);
               }}
               className={cn(
-                "native-touch-surface flex min-h-[4.35rem] min-w-0 flex-col items-center justify-between rounded-[0.85rem] border px-1 py-2 text-center transition-colors",
+                "native-touch-surface flex min-h-[4.35rem] min-w-0 flex-col items-center justify-between rounded-[0.85rem] border px-1 py-2 text-center transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.98]",
                 isSelected
                   ? "border-foreground bg-foreground text-background shadow-[0_10px_24px_rgba(15,23,42,0.16)]"
                   : "border-border/70 bg-white/84 text-foreground",
@@ -1602,11 +1848,51 @@ export default function CalendarPage() {
     </div>
   );
 
+  const nativeIOSLoadingState = (
+    <div className="flex flex-col gap-3">
+      <div className="surface-panel shrink-0 rounded-[1.45rem] p-3.5">
+        <div className="animate-pulse space-y-3">
+          <div className="h-6 w-40 rounded-full bg-muted/50" />
+          <div className="h-11 rounded-[1rem] bg-muted/40" />
+          <div className="h-11 rounded-[1rem] bg-muted/40" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-10 rounded-[1rem] bg-muted/40" />
+            <div className="h-10 rounded-[1rem] bg-muted/40" />
+          </div>
+        </div>
+      </div>
+      <div className="surface-panel rounded-[1.45rem] p-3.5">
+        <div className="animate-pulse space-y-3">
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: 7 }).map((_, index) => (
+              <div key={index} className="h-5 rounded-full bg-muted/40" />
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-[1.25rem] bg-border/50">
+            {Array.from({ length: 35 }).map((_, index) => (
+              <div key={index} className="min-h-[5rem] bg-white/90" />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="surface-panel rounded-[1.45rem] p-3.5">
+        <div className="animate-pulse space-y-2.5">
+          <div className="h-5 w-32 rounded-full bg-muted/40" />
+          <div className="h-24 rounded-[1.1rem] bg-muted/35" />
+          <div className="h-24 rounded-[1.1rem] bg-muted/35" />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div
       className={cn(
         "page-content flex flex-col",
-        isMobileLayout ? "h-auto min-h-full overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]" : "h-full min-h-0 overflow-hidden"
+        isMobileLayout
+          ? "h-auto min-h-full overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]"
+          : "h-full min-h-0 overflow-hidden",
+        isNativeIOSCalendar && "pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]"
       )}
     >
       <div
@@ -1615,92 +1901,185 @@ export default function CalendarPage() {
           isMobileLayout ? "overflow-visible" : "flex-1 overflow-hidden"
         )}
       >
-        <div className={cn("surface-panel shrink-0 overflow-hidden", isMobileLayout ? "rounded-[1.15rem]" : "rounded-[1.35rem] sm:rounded-[1.7rem]")}>
-          <div className="border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5">
-            <div className={cn("flex flex-col", isMobileLayout ? "gap-2.5" : "gap-3 xl:flex-row xl:items-center xl:justify-between")}>
-              <div className={cn("flex min-w-0 flex-1 flex-col", isMobileLayout ? "gap-2" : "gap-3")}>
-                <div className={cn("flex flex-wrap items-center", isMobileLayout ? "gap-1.5" : "gap-2")}>
-                  <h1 className={cn("font-semibold tracking-[-0.02em] text-foreground", isMobileLayout ? "text-sm" : "text-lg sm:text-xl")}>
-                    {getHeaderTitle(visibleDate, view)}
-                  </h1>
-                  {activeLocationName ? (
-                    <span className={cn("inline-flex items-center gap-1.5 text-muted-foreground", isMobileLayout ? "text-[11px]" : "text-sm")}>
-                      <MapPin className="h-3.5 w-3.5" />
-                      {activeLocationName}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className={cn(isMobileLayout ? "grid gap-2" : "flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center")}>
-                  <div className={cn("inline-flex items-center rounded-full border border-white/70 bg-white/78 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_rgba(15,23,42,0.04)]", isMobileLayout ? "w-full justify-between" : "w-full sm:w-auto sm:justify-start")}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-10 w-10 sm:h-8 sm:w-8")}
-                      onClick={handlePrev}
-                      aria-label="Previous"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
+        <div
+          className={cn(
+            "surface-panel shrink-0 overflow-hidden",
+            isMobileLayout ? "rounded-[1.15rem]" : "rounded-[1.35rem] sm:rounded-[1.7rem]",
+            isNativeIOSCalendar && "rounded-[1.35rem] border border-white/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.12),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.96))] shadow-[0_10px_30px_rgba(15,23,42,0.07)]"
+          )}
+        >
+          {isNativeIOSCalendar ? (
+            <div className="px-3.5 pb-3 pt-2.5">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Calendar</p>
+                    <h1 className="mt-0.5 text-[1.45rem] font-semibold leading-tight tracking-[-0.02em] text-foreground">
+                      {getHeaderTitle(visibleDate, view)}
+                    </h1>
+                    {activeLocationName ? (
+                      <span className="mt-1 inline-flex max-w-full items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        {activeLocationName}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <Button className="h-9 rounded-[0.9rem] px-3 text-xs" onClick={handleNewAppointment}>
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      New
                     </Button>
                     <Button
-                      variant={isToday ? "default" : "secondary"}
-                      size="sm"
-                      className={cn("rounded-full font-semibold", isMobileLayout ? "h-6.5 px-3 text-[11px]" : "h-10 px-5 text-sm sm:h-8 sm:px-4 sm:text-sm")}
-                      onClick={handleToday}
+                      variant="outline"
+                      className="h-9 rounded-[0.9rem] border-border/70 bg-white/82 px-3 text-xs"
+                      onClick={handleOpenBlockDialog}
                     >
-                      Today
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-10 w-10 sm:h-8 sm:w-8")}
-                      onClick={handleNext}
-                      aria-label="Next"
-                    >
-                      <ChevronRight className="h-4 w-4" />
+                      <Ban className="mr-1.5 h-3.5 w-3.5" />
+                      Block
                     </Button>
                   </div>
+                </div>
 
-                  {availableViews.length > 1 ? (
-                    <div className={cn("inline-flex items-center overflow-x-auto rounded-full border border-white/70 bg-white/78 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_rgba(15,23,42,0.04)]", isMobileLayout ? "w-full flex-nowrap" : "w-full sm:w-auto")}>
-                      {availableViews.map((calendarView) => (
-                        <button
-                          key={calendarView}
-                          type="button"
-                          onClick={() => handleViewChange(calendarView)}
-                          aria-pressed={view === calendarView}
-                          className={cn(
-                            "shrink-0 rounded-full font-medium capitalize transition-colors",
-                            isMobileLayout ? "min-h-8 flex-1 px-3 py-1.5 text-xs" : "px-4 py-1.5 text-sm",
-                            view === calendarView
-                              ? "bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
-                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                          )}
-                        >
-                          {calendarView === "month" ? "Month" : "Week"}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                <div className="grid grid-cols-[auto_1fr_auto] items-center gap-1.5 rounded-[1rem] border border-border/70 bg-white/90 p-1 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 rounded-[0.85rem]"
+                    onClick={handlePrev}
+                    aria-label="Previous"
+                  >
+                    <ChevronLeft className="h-4.5 w-4.5" />
+                  </Button>
+                  <Button
+                    variant={isToday ? "default" : "secondary"}
+                    size="sm"
+                    className="h-10 rounded-[0.85rem] px-4 text-sm font-semibold"
+                    onClick={handleToday}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 rounded-[0.85rem]"
+                    onClick={handleNext}
+                    aria-label="Next"
+                  >
+                    <ChevronRight className="h-4.5 w-4.5" />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 rounded-[1rem] border border-border/70 bg-white/90 p-1 shadow-[0_8px_20px_rgba(15,23,42,0.04)]">
+                  {availableViews.map((calendarView) => (
+                    <button
+                      key={calendarView}
+                      type="button"
+                      onClick={() => handleViewChange(calendarView)}
+                      aria-pressed={view === calendarView}
+                      className={cn(
+                        "min-h-10 rounded-[0.85rem] px-3 py-2 text-sm font-semibold transition-colors",
+                        view === calendarView
+                          ? "bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {calendarView === "month" ? "Month" : "Week"}
+                    </button>
+                  ))}
                 </div>
               </div>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "border-b border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-4 py-3 sm:px-5"
+              )}
+            >
+              <div className={cn("flex flex-col", isMobileLayout ? "gap-2.5" : "gap-3 xl:flex-row xl:items-center xl:justify-between")}>
+                <div className={cn("flex min-w-0 flex-1 flex-col", isMobileLayout ? "gap-2" : "gap-3")}>
+                  <div className={cn("flex flex-wrap items-center", isMobileLayout ? "gap-1.5" : "gap-2")}>
+                    <h1 className={cn("font-semibold tracking-[-0.02em] text-foreground", isMobileLayout ? "text-sm" : "text-lg sm:text-xl")}>
+                      {getHeaderTitle(visibleDate, view)}
+                    </h1>
+                    {activeLocationName ? (
+                      <span className={cn("inline-flex items-center gap-1.5 text-muted-foreground", isMobileLayout ? "text-[11px]" : "text-sm")}>
+                        <MapPin className="h-3.5 w-3.5" />
+                        {activeLocationName}
+                      </span>
+                    ) : null}
+                  </div>
 
-              <div className={cn("flex", isMobileLayout ? "gap-2" : "flex-col gap-2 sm:flex-row xl:shrink-0")}>
-                <Button className={cn("rounded-2xl px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")} onClick={handleNewAppointment}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {isMobileLayout ? "New" : "New appointment"}
-                </Button>
-                <Button
-                  variant="outline"
-                  className={cn("rounded-2xl border-border/70 bg-white/82 px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")}
-                  onClick={handleOpenBlockDialog}
-                >
-                  <Ban className="mr-2 h-4 w-4" />
-                  {isMobileLayout ? "Block" : "Block time"}
-                </Button>
+                  <div className={cn(isMobileLayout ? "grid gap-2" : "flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center")}>
+                    <div className={cn("inline-flex items-center rounded-full border border-white/70 bg-white/78 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_rgba(15,23,42,0.04)]", isMobileLayout ? "w-full justify-between" : "w-full sm:w-auto sm:justify-start")}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-10 w-10 sm:h-8 sm:w-8")}
+                        onClick={handlePrev}
+                        aria-label="Previous"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant={isToday ? "default" : "secondary"}
+                        size="sm"
+                        className={cn("rounded-full font-semibold", isMobileLayout ? "h-6.5 px-3 text-[11px]" : "h-10 px-5 text-sm sm:h-8 sm:px-4 sm:text-sm")}
+                        onClick={handleToday}
+                      >
+                        Today
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn("rounded-full", isMobileLayout ? "h-6.5 w-6.5" : "h-10 w-10 sm:h-8 sm:w-8")}
+                        onClick={handleNext}
+                        aria-label="Next"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {availableViews.length > 1 ? (
+                      <div className={cn("inline-flex items-center overflow-x-auto rounded-full border border-white/70 bg-white/78 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_8px_20px_rgba(15,23,42,0.04)]", isMobileLayout ? "w-full flex-nowrap" : "w-full sm:w-auto")}>
+                        {availableViews.map((calendarView) => (
+                          <button
+                            key={calendarView}
+                            type="button"
+                            onClick={() => handleViewChange(calendarView)}
+                            aria-pressed={view === calendarView}
+                            className={cn(
+                              "shrink-0 rounded-full font-medium capitalize transition-colors",
+                              isMobileLayout ? "min-h-8 flex-1 px-3 py-1.5 text-xs" : "px-4 py-1.5 text-sm",
+                              view === calendarView
+                                ? "bg-foreground text-background shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            {calendarView === "month" ? "Month" : "Week"}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className={cn("flex", isMobileLayout ? "gap-2" : "flex-col gap-2 sm:flex-row xl:shrink-0")}>
+                  <Button className={cn("rounded-2xl px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")} onClick={handleNewAppointment}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {isMobileLayout ? "New" : "New appointment"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={cn("rounded-2xl border-border/70 bg-white/82 px-4", isMobileLayout ? "h-8 flex-1 text-[11px]" : "h-10")}
+                    onClick={handleOpenBlockDialog}
+                  >
+                    <Ban className="mr-2 h-4 w-4" />
+                    {isMobileLayout ? "Block" : "Block time"}
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         <ConflictBanner
@@ -1710,7 +2089,12 @@ export default function CalendarPage() {
         />
 
         {error ? (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-4 shadow-sm">
+          <div
+            className={cn(
+              "rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-4 shadow-sm",
+              isNativeIOSCalendar && "rounded-[1.45rem] border-rose-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,241,242,0.96))] shadow-[0_16px_34px_rgba(244,63,94,0.08)]"
+            )}
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="rounded-full bg-rose-100 p-2 text-rose-700">
@@ -1733,26 +2117,29 @@ export default function CalendarPage() {
           </div>
         ) : null}
 
-        {view === "month" ? (
+        {isNativeIOSCalendar && isFirstLoad ? (
+          nativeIOSLoadingState
+        ) : view === "month" ? (
           <div
             className={cn(
               "min-h-0 flex-1 gap-3",
-              isMobileLayout ? "flex flex-col overflow-visible" : "grid overflow-hidden lg:grid-cols-[minmax(0,1fr)_24rem]"
+              isMobileLayout ? "flex flex-col overflow-visible" : "flex flex-col overflow-visible"
             )}
           >
             <div
               className={cn(
                 "flex min-h-0 flex-col gap-3 overflow-hidden",
-                isMobileLayout && "h-[clamp(20rem,44dvh,23rem)] shrink-0"
+                isMobileLayout ? "shrink-0 overflow-visible" : "shrink-0"
               )}
             >
               <div
                 className={cn(
-                  "surface-panel h-full min-h-0 overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
+                  "surface-panel rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3",
+                  isMobileLayout ? "overflow-visible" : "h-full min-h-0 overflow-hidden",
                   (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
                 )}
               >
-                <div className={cn("overflow-hidden", isMobileLayout ? "h-full min-h-0" : desktopMonthHeightClassName)}>
+                <div className={cn(isMobileLayout ? "overflow-visible" : `overflow-hidden ${desktopMonthHeightClassName}`)}>
                   <MonthView
                     currentDate={visibleMonthDate}
                     selectedDate={selectedDate}
@@ -1762,6 +2149,7 @@ export default function CalendarPage() {
                     onApptClick={handleApptClick}
                     conflictIds={activeConflicts}
                     isMobileLayout={isMobileLayout}
+                    isNativeIOSCalendar={isNativeIOSCalendar}
                   />
                 </div>
               </div>
@@ -1775,7 +2163,7 @@ export default function CalendarPage() {
                 "min-h-0",
                 isMobileLayout
                   ? "surface-panel overflow-visible rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3"
-                  : "flex h-full min-h-[24rem] overflow-hidden lg:min-h-0"
+                  : "surface-panel flex min-h-[20rem] overflow-hidden rounded-[1.45rem] p-2.5 sm:rounded-[1.7rem] sm:p-3"
               )}
             >
               {isMobileLayout ? dayInspectorPanel : <div className="flex min-h-0 flex-1">{dayInspectorPanel}</div>}
@@ -1797,7 +2185,7 @@ export default function CalendarPage() {
                   (isFirstLoad || rescheduling) && "pointer-events-none opacity-70"
                 )}
               >
-                <div className="h-[23rem] overflow-hidden xl:h-[clamp(24rem,46dvh,34rem)]">
+                <div className="h-[32rem] overflow-hidden xl:h-[clamp(34rem,62dvh,46rem)]">
                   <WeekView
                     currentDate={currentDate}
                     appointments={appointments}
@@ -1872,80 +2260,134 @@ export default function CalendarPage() {
         </SheetContent>
       </Sheet>
 
-      <Dialog
-        open={isAppointmentInspectorOpen}
-        onOpenChange={(open) => {
-          setIsAppointmentInspectorOpen(open);
-          if (!open) setSelectedAppointmentId(null);
-        }}
-      >
-        <DialogContent
-          showCloseButton={!isMobileLayout}
-          className={cn(
-            "grid max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]",
-            isMobileLayout
-              ? "h-[min(92dvh,46rem)] grid-rows-[minmax(0,1fr)] !border-0 !bg-transparent !p-0 !shadow-none"
-              : "grid-rows-[auto_minmax(0,1fr)]"
-          )}
+      {isNativeIOSCalendar ? (
+        <Sheet
+          open={isAppointmentInspectorOpen}
+          onOpenChange={(open) => {
+            if (!open) void triggerImpactFeedback("light");
+            setIsAppointmentInspectorOpen(open);
+            if (!open) setSelectedAppointmentId(null);
+          }}
         >
-          {isMobileLayout ? (
-            <>
-              <DialogTitle className="sr-only">Appointment inspector</DialogTitle>
-              <DialogDescription className="sr-only">
-                Swipe horizontally between appointments on this day, or scroll vertically inside the selected appointment.
-              </DialogDescription>
-              {isAppointmentInspectorOpen ? (
-                <MobileAppointmentGallery
-                  appointments={sameDayGalleryAppointments}
-                  selectedAppointmentId={selectedAppointmentId}
-                  onSelectAppointment={setSelectedAppointmentId}
-                  onAppointmentChange={() => refetchAppointments()}
-                  onRequestClose={() => {
-                    setIsAppointmentInspectorOpen(false);
-                    setSelectedAppointmentId(null);
-                  }}
-                  emptyDescription={
-                    view === "month"
-                      ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
-                      : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
-                  }
-                />
-              ) : null}
-            </>
-          ) : (
-            <>
-              <DialogHeader className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-left sm:py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Appointment inspector</p>
-                <DialogTitle className="mt-1 text-lg font-semibold text-foreground">
-                  {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
-                </DialogTitle>
+          <SheetContent
+            side="bottom"
+            swipeToClose
+            showCloseButton={false}
+            onSwipeClose={() => {
+              void triggerImpactFeedback("light");
+              setIsAppointmentInspectorOpen(false);
+              setSelectedAppointmentId(null);
+            }}
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+            className="h-[min(90dvh,45rem)] !max-h-none !overflow-visible !rounded-t-none !border-0 !bg-transparent !p-0 !pb-[max(0.5rem,env(safe-area-inset-bottom))] !shadow-none"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Appointment inspector</SheetTitle>
+              <SheetDescription>Swipe between appointments for this day, or swipe down to close.</SheetDescription>
+            </SheetHeader>
+            <div
+              data-sheet-swipe-handle="true"
+              aria-hidden="true"
+              className="absolute left-1/2 top-2 z-40 flex h-8 w-24 -translate-x-1/2 touch-none items-start justify-center pt-2"
+            >
+              <span className="h-1.5 w-12 rounded-full bg-slate-300/90 shadow-[0_1px_8px_rgba(15,23,42,0.12)] backdrop-blur-sm" />
+            </div>
+            {isAppointmentInspectorOpen ? (
+              <MobileAppointmentGallery
+                appointments={sameDayGalleryAppointments}
+                selectedAppointmentId={selectedAppointmentId}
+                onSelectAppointment={setSelectedAppointmentId}
+                onAppointmentChange={() => refetchAppointments()}
+                onRequestClose={() => {
+                  setIsAppointmentInspectorOpen(false);
+                  setSelectedAppointmentId(null);
+                }}
+                emptyDescription={
+                  view === "month"
+                    ? "Choose a job from the selected day agenda to inspect timing, customer, vehicle, and money."
+                    : "Choose a job from the selected day agenda to inspect timing, customer, vehicle, and money."
+                }
+              />
+            ) : null}
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog
+          open={isAppointmentInspectorOpen}
+          onOpenChange={(open) => {
+            setIsAppointmentInspectorOpen(open);
+            if (!open) setSelectedAppointmentId(null);
+          }}
+        >
+          <DialogContent
+            showCloseButton={!isMobileLayout}
+            className={cn(
+              "grid max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.25rem] p-0 sm:ml-auto sm:mr-4 sm:mt-6 sm:max-h-[calc(100dvh-3rem)] sm:w-[30rem] sm:max-w-[30rem] sm:rounded-[1.75rem] lg:w-[34rem] lg:max-w-[34rem]",
+              isMobileLayout
+                ? "h-[min(92dvh,46rem)] grid-rows-[minmax(0,1fr)] !border-0 !bg-transparent !p-0 !shadow-none"
+                : "grid-rows-[auto_minmax(0,1fr)]"
+            )}
+          >
+            {isMobileLayout ? (
+              <>
+                <DialogTitle className="sr-only">Appointment inspector</DialogTitle>
                 <DialogDescription className="sr-only">
-                  Review appointment money, customer, vehicle, timing, and status details for the selected calendar job.
+                  Swipe horizontally between appointments on this day, or scroll vertically inside the selected appointment.
                 </DialogDescription>
-              </DialogHeader>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
                 {isAppointmentInspectorOpen ? (
-                  <AppointmentInspectorPanel
-                    appointment={selectedAppointment}
-                    emptyTitle="Select an appointment"
-                    emptyDescription={
-                      view === "month"
-                        ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
-                        : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
-                    }
-                    compact={isMobileLayout}
+                  <MobileAppointmentGallery
+                    appointments={sameDayGalleryAppointments}
+                    selectedAppointmentId={selectedAppointmentId}
+                    onSelectAppointment={setSelectedAppointmentId}
                     onAppointmentChange={() => refetchAppointments()}
                     onRequestClose={() => {
                       setIsAppointmentInspectorOpen(false);
                       setSelectedAppointmentId(null);
                     }}
+                    emptyDescription={
+                      view === "month"
+                        ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
+                        : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+                    }
                   />
                 ) : null}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+              </>
+            ) : (
+              <>
+                <DialogHeader className="border-b border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-left sm:py-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Appointment inspector</p>
+                  <DialogTitle className="mt-1 text-lg font-semibold text-foreground">
+                    {selectedAppointment ? getCalendarAppointmentLabel(selectedAppointment) : "Appointment"}
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Review appointment money, customer, vehicle, timing, and status details for the selected calendar job.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+                  {isAppointmentInspectorOpen ? (
+                    <AppointmentInspectorPanel
+                      appointment={selectedAppointment}
+                      emptyTitle="Select an appointment"
+                      emptyDescription={
+                        view === "month"
+                          ? "Choose a job from the month day list or calendar to inspect money, customer, vehicle, timing, and stage."
+                          : "Choose a job from the day agenda or timeline to inspect money, customer, vehicle, timing, and stage."
+                      }
+                      compact={isMobileLayout}
+                      onAppointmentChange={() => refetchAppointments()}
+                      onRequestClose={() => {
+                        setIsAppointmentInspectorOpen(false);
+                        setSelectedAppointmentId(null);
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Dialog
         open={showBlockDialog}

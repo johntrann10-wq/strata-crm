@@ -278,12 +278,6 @@ export default function NewClientPage() {
         </Button>
       </div>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">New Client</h1>
-        <p className="text-muted-foreground mt-1">Add a new client to your business</p>
-      </div>
-
       {/* General error */}
       {localErrors.general && (
         <div className="mb-6 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">

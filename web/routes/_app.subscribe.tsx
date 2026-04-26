@@ -7,7 +7,7 @@ import { CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { getBillingAccessLabel, getTrialDaysLeft, hasFullBillingAccess, type BillingAccessState } from "../lib/billingAccess";
 import type { AuthOutletContext } from "./_app";
 import type { BillingActivationMilestone, BillingPromptState } from "../lib/billingPrompts";
-import { isNativeShell } from "@/lib/mobileShell";
+import { shouldShowWebBillingSurface } from "@/lib/mobileShell";
 
 type BillingStatus = {
   status: string | null;
@@ -61,7 +61,8 @@ function getPrimaryBillingAction(status: BillingStatus | null): {
 }
 
 export default function SubscribePage() {
-  const nativeShellSession = isNativeShell();
+  const showWebBillingSurface = shouldShowWebBillingSurface();
+  const nativeShellSession = !showWebBillingSurface;
   const { membershipRole } = useOutletContext<AuthOutletContext>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -73,7 +74,7 @@ export default function SubscribePage() {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
 
   useEffect(() => {
-    if (nativeShellSession) return;
+    if (!showWebBillingSurface) return;
     let cancelled = false;
     (async () => {
       setError(null);
@@ -92,7 +93,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, nativeShellSession]);
+  }, [navigate, showWebBillingSurface]);
 
   const daysLeft = useMemo(() => getTrialDaysLeft(billingStatus?.trialEndsAt), [billingStatus?.trialEndsAt]);
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
@@ -140,7 +141,7 @@ export default function SubscribePage() {
   };
 
   useEffect(() => {
-    if (nativeShellSession) return;
+    if (!showWebBillingSurface) return;
     const billingPortalReturn = searchParams.get("billingPortal") === "return";
     const legacyCheckoutCanceled = searchParams.get("canceled") === "1";
     if (!billingPortalReturn && !legacyCheckoutCanceled) return;
@@ -190,7 +191,7 @@ export default function SubscribePage() {
     return () => {
       cancelled = true;
     };
-  }, [nativeShellSession, searchParams, setSearchParams]);
+  }, [showWebBillingSurface, searchParams, setSearchParams]);
 
   const handleRetrySetup = async () => {
     setError(null);

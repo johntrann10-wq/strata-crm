@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import {
@@ -379,6 +379,7 @@ export function HomeWeeklyAppointmentOverviewCard({
   selectedDate,
   onSelectDate,
   onChangeWeek,
+  nativeIOS = false,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
   loading?: boolean;
@@ -387,6 +388,7 @@ export function HomeWeeklyAppointmentOverviewCard({
   selectedDate?: string | null;
   onSelectDate?: (date: string | null) => void;
   onChangeWeek?: (weekStartDate: string | null, selectedDate?: string | null) => void;
+  nativeIOS?: boolean;
 }) {
   if (loading) return <CardLoadingShell title="Weekly Appointment Overview" rows={7} />;
   if (error) return <WidgetErrorState title="Weekly Appointment Overview" error={error} onRetry={onRetry} />;
@@ -429,6 +431,123 @@ export function HomeWeeklyAppointmentOverviewCard({
         </CardHeader>
         <CardContent>
           <EmptyState icon={CalendarClock} title="No week selected" description="Choose a week to review your appointment load." />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (nativeIOS) {
+    return (
+      <Card className="overflow-hidden rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_14px_32px_rgba(15,23,42,0.07)]">
+        <CardHeader className="border-b border-slate-100/90 px-3.5 pb-3 pt-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700">Week pulse</p>
+              <CardTitle className="mt-1 text-[1.2rem] tracking-[-0.03em]">Today and next jobs</CardTitle>
+              <CardDescription className="mt-1 text-[12px] leading-5 text-slate-500">
+                {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-full border-slate-200 bg-white/88"
+                onClick={() => onChangeWeek?.(shiftDateKey(overview.days[0]?.date ?? activeDay.date, -7), shiftDateKey(activeDay.date, -7))}
+                aria-label="Previous week"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-full border-slate-200 bg-white/88"
+                onClick={() => onChangeWeek?.(shiftDateKey(overview.days[0]?.date ?? activeDay.date, 7), shiftDateKey(activeDay.date, 7))}
+                aria-label="Next week"
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 px-3.5 py-3.5">
+          <div className="grid grid-cols-7 gap-1.5">
+            {overview.days.map((day) => {
+              const isActive = day.date === activeDay.date;
+              return (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => {
+                    void triggerSelectionFeedback();
+                    onSelectDate?.(day.date);
+                  }}
+                  className={cn(
+                    "native-touch-surface flex min-h-[4.25rem] flex-col items-center justify-between rounded-[0.95rem] border px-0.5 py-1.5 text-center transition-all",
+                    isActive
+                      ? "border-primary/35 bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(249,115,22,0.2)]"
+                      : "border-slate-200/75 bg-slate-50/80 text-slate-600 active:bg-slate-100"
+                  )}
+                  aria-pressed={isActive}
+                >
+                  <span className={cn("text-[8px] font-semibold uppercase tracking-[0.12em]", isActive ? "text-primary-foreground/75" : "text-slate-500")}>
+                    {day.shortLabel}
+                  </span>
+                  <span className="text-[15px] font-semibold leading-none tabular-nums">{formatDateLabel(day.date, "d")}</span>
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", isActive ? "bg-white/18" : "bg-white text-slate-700")}>
+                    {day.appointmentCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-[1.2rem] border border-slate-200/75 bg-slate-50/75 px-3.5 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Selected day</p>
+                <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                  {activeDay.label}, {formatDateLabel(activeDay.date, "MMM d")}
+                </p>
+                <p className="mt-1 text-[12px] leading-5 text-slate-500">
+                  {activeDay.appointmentCount} appointment{activeDay.appointmentCount === 1 ? "" : "s"} · {formatDashboardCurrency(activeDay.bookedValue)} booked
+                </p>
+              </div>
+              <Button asChild variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-full border-slate-200 bg-white/90">
+                <Link to={activeDay.calendarUrl} aria-label={`Open ${activeDay.label} in calendar`}>
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            {activeDay.previewItems.length === 0 ? (
+              <div className="rounded-[1.15rem] border border-dashed border-slate-200/80 bg-white/80 px-3.5 py-4 text-sm text-slate-500">
+                No jobs queued for this day.
+              </div>
+            ) : (
+              activeDay.previewItems.slice(0, 4).map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.url}
+                  className="native-touch-surface flex min-h-[4.35rem] items-start gap-3 rounded-[1.15rem] border border-white/80 bg-white/94 px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.05)] active:scale-[0.99]"
+                >
+                  <div className="shrink-0 rounded-[0.9rem] bg-slate-100 px-2.5 py-2 text-center">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">Start</p>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-800">{formatDateLabel(item.startTime, "h:mm a")}</p>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.title}</p>
+                    <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">
+                      {item.clientName}
+                      {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
+                    </p>
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -785,12 +904,12 @@ export function HomeUpcomingAttentionPanel({
   error,
   onRetry,
   onDismiss,
-  onSnooze,
+  nativeIOS = false,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
   range: HomeDashboardRange;
   onDismiss?: (itemId: string) => void;
-  onSnooze?: (itemId: string) => void;
+  nativeIOS?: boolean;
 } & WidgetStateProps) {
   if (loading) return <CardLoadingShell title="Upcoming Jobs / Needs Attention" rows={6} />;
   if (error) return <WidgetErrorState title="Upcoming Jobs / Needs Attention" error={error} onRetry={onRetry} />;
@@ -801,6 +920,52 @@ export function HomeUpcomingAttentionPanel({
   const scheduleCount = scheduleItems.length;
   const queueCount = queueItems.length;
   const priorityMoneyAtRisk = queueItems.reduce((sum, item) => sum + (item.amountAtRisk ?? 0), 0);
+
+  if (nativeIOS) {
+    return (
+      <Card className="overflow-hidden rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_14px_32px_rgba(15,23,42,0.07)]">
+        <CardHeader className="border-b border-slate-100/90 px-3.5 pb-3 pt-3.5">
+          <CardTitle className="text-[1.15rem] tracking-[-0.03em]">Needs attention</CardTitle>
+          <CardDescription className="text-[12px] leading-5 text-slate-500">
+            {scheduleCount} upcoming · {queueCount} action item{queueCount === 1 ? "" : "s"} · {formatDashboardCompactCurrency(priorityMoneyAtRisk)} at risk
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2.5 px-3.5 py-3.5">
+          {scheduleItems.length === 0 && queueItems.length === 0 ? (
+            <div className="rounded-[1.15rem] border border-dashed border-slate-200/80 bg-slate-50/80 px-3.5 py-4 text-sm text-slate-500">
+              No upcoming jobs or urgent action items in this view.
+            </div>
+          ) : null}
+          {scheduleItems.slice(0, 2).map((item) => (
+            <Link
+              key={item.id}
+              to={item.urls.appointment}
+              className="native-touch-surface flex min-h-[4.25rem] items-start gap-3 rounded-[1.15rem] border border-amber-100 bg-amber-50/70 px-3.5 py-3 active:scale-[0.99]"
+            >
+              <div className="shrink-0 rounded-[0.85rem] bg-white/80 px-2.5 py-2 text-center">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-700">Next</p>
+                <p className="mt-1 text-[11px] font-semibold text-amber-900">{formatDateLabel(item.startTime, "h:mm a")}</p>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.title}</p>
+                <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">
+                  {item.client.name} · {item.vehicle.label}
+                </p>
+              </div>
+              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-amber-700/70" />
+            </Link>
+          ))}
+          {queueItems.slice(0, 3).map((item) => (
+            <NativeAttentionQueueItem
+              key={item.id}
+              item={item}
+              onDismiss={item.supportsDismiss ? onDismiss : undefined}
+            />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={dashboardPanelClassName}>
@@ -915,18 +1080,11 @@ export function HomeUpcomingAttentionPanel({
                         <Link to={item.ctaUrl}>{item.ctaLabel}</Link>
                       </Button>
                     </div>
-                    {(item.supportsSnooze || item.supportsDismiss) && (onSnooze || onDismiss) ? (
+                    {item.supportsDismiss && onDismiss ? (
                       <div className="mt-3 flex gap-2">
-                        {item.supportsSnooze && onSnooze ? (
-                          <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onSnooze(item.id)}>
-                            Snooze
-                          </Button>
-                        ) : null}
-                        {item.supportsDismiss && onDismiss ? (
-                          <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onDismiss(item.id)}>
-                            Dismiss
-                          </Button>
-                        ) : null}
+                        <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onDismiss(item.id)}>
+                          Dismiss
+                        </Button>
                       </div>
                     ) : null}
                     </div>
@@ -938,6 +1096,143 @@ export function HomeUpcomingAttentionPanel({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function NativeAttentionQueueItem({
+  item,
+  onDismiss,
+}: {
+  item: HomeDashboardSnapshot["actionQueue"]["items"][number];
+  onDismiss?: (itemId: string) => void;
+}) {
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const gestureRef = useRef({
+    active: false,
+    dragging: false,
+    pointerId: null as number | null,
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+  });
+
+  const completeDismiss = () => {
+    if (!onDismiss || removing) return;
+    void triggerSelectionFeedback();
+    setRemoving(true);
+    window.setTimeout(() => onDismiss(item.id), 170);
+  };
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[1.15rem] transition-[max-height,opacity,transform] duration-200",
+        removing ? "max-h-0 scale-[0.98] opacity-0" : "max-h-56 opacity-100"
+      )}
+    >
+      {onDismiss ? (
+        <div className="absolute inset-0 flex items-center justify-end rounded-[1.15rem] bg-emerald-500 px-4 text-sm font-semibold text-white">
+          Dismiss
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "rounded-[1.15rem] border border-slate-200/80 bg-slate-50/90 px-3.5 py-3 shadow-[0_8px_18px_rgba(15,23,42,0.04)] transition-[transform,background-color,box-shadow] duration-150",
+          dragging && "transition-none",
+          onDismiss && "active:bg-white"
+        )}
+        style={{ transform: `translate3d(${offset}px,0,0)`, touchAction: "pan-y" }}
+        onPointerDown={(event) => {
+          if (!onDismiss || event.pointerType === "mouse") return;
+          gestureRef.current = {
+            active: true,
+            dragging: false,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startTime: performance.now(),
+          };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const gesture = gestureRef.current;
+          if (!onDismiss || !gesture.active || gesture.pointerId !== event.pointerId) return;
+          const dx = event.clientX - gesture.startX;
+          const dy = event.clientY - gesture.startY;
+          if (!gesture.dragging) {
+            if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+            if (Math.abs(dx) <= Math.abs(dy) * 1.25) return;
+            gesture.dragging = true;
+            setDragging(true);
+          }
+          event.preventDefault();
+          setOffset(Math.max(-124, Math.min(124, dx * 0.82)));
+        }}
+        onPointerUp={(event) => {
+          const gesture = gestureRef.current;
+          event.currentTarget.releasePointerCapture?.(event.pointerId);
+          if (!gesture.active || gesture.pointerId !== event.pointerId) return;
+          const elapsed = Math.max(1, performance.now() - gesture.startTime);
+          const velocity = Math.abs(offset) / elapsed;
+          const shouldDismiss = gesture.dragging && onDismiss && (Math.abs(offset) > 82 || velocity > 0.65);
+          gestureRef.current.active = false;
+          gestureRef.current.dragging = false;
+          gestureRef.current.pointerId = null;
+          setDragging(false);
+          if (shouldDismiss) {
+            setOffset(offset < 0 ? -420 : 420);
+            completeDismiss();
+          } else {
+            setOffset(0);
+          }
+        }}
+        onPointerCancel={() => {
+          gestureRef.current.active = false;
+          gestureRef.current.dragging = false;
+          gestureRef.current.pointerId = null;
+          setDragging(false);
+          setOffset(0);
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                  item.urgency === "critical"
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : item.urgency === "high"
+                      ? "border-orange-200 bg-orange-50 text-orange-700"
+                      : "border-slate-200 bg-white text-slate-600"
+                )}
+              >
+                {item.urgency}
+              </span>
+              {item.amountAtRisk != null ? (
+                <Badge variant="outline" className="border-slate-200 bg-white text-[10px]">
+                  {formatDashboardCurrency(item.amountAtRisk)}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.label}</p>
+            <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-500">{item.reason}</p>
+          </div>
+          <Button asChild size="sm" className="min-h-9 shrink-0 rounded-full bg-slate-950 px-3 text-xs text-white hover:bg-slate-800">
+            <Link to={item.ctaUrl}>{item.ctaLabel}</Link>
+          </Button>
+        </div>
+        {onDismiss ? (
+          <div className="mt-3 flex gap-2">
+            <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-white/80 text-xs text-slate-700" onClick={completeDismiss}>
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1430,7 +1725,8 @@ export function HomeCompactQuickActions({
   loading,
   error,
   onRetry,
-}: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
+  nativeIOS = false,
+}: { snapshot?: HomeDashboardSnapshot | null; nativeIOS?: boolean } & WidgetStateProps) {
   const { setOpen: setCommandPaletteOpen } = useCommandPalette();
   const [customizing, setCustomizing] = useState(false);
   const [selectedShortcutKeys, setSelectedShortcutKeys] = useState<string[] | null>(() => loadStoredDashboardShortcuts());
@@ -1455,11 +1751,17 @@ export function HomeCompactQuickActions({
   if (availableActions.length === 0) return null;
 
   return (
-    <Card className={cn(dashboardPanelClassName, "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78")}>
+    <Card
+      className={cn(
+        dashboardPanelClassName,
+        "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78",
+        nativeIOS && "rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
+      )}
+    >
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base tracking-[-0.02em] text-slate-800">Shortcuts</CardTitle>
+            <CardTitle className={cn("text-base tracking-[-0.02em] text-slate-800", nativeIOS && "text-[1.05rem]")}>Shortcuts</CardTitle>
           </div>
           <Button
             type="button"
@@ -1467,6 +1769,7 @@ export function HomeCompactQuickActions({
             size="icon"
             className={cn(
               "h-8 w-8 rounded-full border-slate-200 bg-white/88 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950",
+              nativeIOS && "h-10 w-10",
               customizing && "border-slate-300 bg-slate-950 text-white hover:bg-slate-900 hover:text-white"
             )}
             onClick={() => setCustomizing((current) => !current)}
@@ -1481,7 +1784,7 @@ export function HomeCompactQuickActions({
       <CardContent className="space-y-3">
         {customizing ? (
           <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/82 p-3">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-4", nativeIOS && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2")}>
               {availableActions.map((action) => {
                 const activeKeys = selectedShortcutKeys ?? defaultActions.map((item) => item.key);
                 const checked = activeKeys.includes(action.key);
@@ -1537,15 +1840,16 @@ export function HomeCompactQuickActions({
           </div>
         ) : null}
 
-        <div className="grid gap-2 sm:flex sm:flex-wrap">
+        <div className={cn("grid gap-2 sm:flex sm:flex-wrap", nativeIOS && "grid-cols-2 sm:grid")}>
           {visibleActions.length > 0 ? (
-            visibleActions.map((action) => {
+            (nativeIOS ? visibleActions.slice(0, 6) : visibleActions).map((action) => {
               const primary = action.key === "new_appointment";
               const className = cn(
                 "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
                 primary
                   ? "bg-slate-950 text-white hover:bg-slate-800"
-                  : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50"
+                  : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50",
+                nativeIOS && "min-h-[3.25rem] rounded-[1rem] px-3 text-sm shadow-[0_8px_18px_rgba(15,23,42,0.04)] sm:w-full sm:justify-center"
               );
 
               if (action.behavior === "command") {

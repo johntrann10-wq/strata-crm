@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAction, useFindMany, useGlobalAction } from "../hooks/useApi";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
-import { isNativeShell } from "@/lib/mobileShell";
+import { isNativeIOSApp, isNativeShell } from "@/lib/mobileShell";
 import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 import type { AuthOutletContext } from "./_app";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
@@ -77,6 +77,7 @@ export default function DashboardHomeRoute() {
   const outletContext = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
   const nativeShellSession = isNativeShell();
+  const nativeIOSDashboard = isNativeIOSApp();
   const canViewDashboard = outletContext.permissions.has("dashboard.view");
   const canReadPayments = outletContext.permissions.has("payments.read");
 
@@ -116,6 +117,13 @@ export default function DashboardHomeRoute() {
   const [, runPreferenceUpdate] = useAction(api.updateHomeDashboardPreferences);
   const [showInsights, setShowInsights] = useState(() => !nativeShellSession);
   const snapshot = (data ?? null) as HomeDashboardSnapshot | null;
+  const visibleSnapshot = useMemo(() => {
+    if (!nativeIOSDashboard || !snapshot?.nudges?.length) return snapshot;
+    return {
+      ...snapshot,
+      nudges: snapshot.nudges.filter((nudge) => !/(billing|checkout|stripe|subscribe|subscription|trial|upgrade|payment method)/i.test(`${nudge.label} ${nudge.detail} ${nudge.url}`)),
+    };
+  }, [nativeIOSDashboard, snapshot]);
   const financeDashboard = (financeDashboardData ?? null) as FinanceDashboardSummary | null;
   const lastMarkedSeenRef = useRef<string | null>(null);
   const lastRefreshRef = useRef(0);
@@ -265,24 +273,24 @@ export default function DashboardHomeRoute() {
   const pageLoading = fetching && !snapshot;
   const staleSnapshotWarning = !pageLoading && pageError && snapshot;
   const hasMeaningfulMonthlyRevenue =
-    !!snapshot?.monthlyRevenueChart.allowed &&
+    !!visibleSnapshot?.monthlyRevenueChart.allowed &&
     (
-      snapshot.monthlyRevenueChart.totalBookedThisMonth > 0
+      visibleSnapshot.monthlyRevenueChart.totalBookedThisMonth > 0
       || (financeDashboard?.kpis.grossRevenue ?? 0) > 0
       || (financeDashboard?.kpis.expenses ?? 0) > 0
       || (financeDashboard?.kpis.projectedNetProfit ?? 0) !== 0
     );
   const hasMeaningfulBookingsOverview =
-    !!snapshot?.bookingsOverview.allowed &&
+    !!visibleSnapshot?.bookingsOverview.allowed &&
     (
-      snapshot.bookingsOverview.bookingsToday > 0
-      || snapshot.bookingsOverview.bookingsThisWeek > 0
-      || snapshot.bookingsOverview.bookingsThisMonth > 0
-      || snapshot.bookingsOverview.quotesSent > 0
-      || snapshot.bookingsOverview.quotesAccepted > 0
-      || snapshot.bookingsOverview.depositsCollectedAmount > 0
-      || snapshot.bookingsOverview.depositsDueAmount > 0
-      || snapshot.bookingsOverview.funnel.length > 0
+      visibleSnapshot.bookingsOverview.bookingsToday > 0
+      || visibleSnapshot.bookingsOverview.bookingsThisWeek > 0
+      || visibleSnapshot.bookingsOverview.bookingsThisMonth > 0
+      || visibleSnapshot.bookingsOverview.quotesSent > 0
+      || visibleSnapshot.bookingsOverview.quotesAccepted > 0
+      || visibleSnapshot.bookingsOverview.depositsCollectedAmount > 0
+      || visibleSnapshot.bookingsOverview.depositsDueAmount > 0
+      || visibleSnapshot.bookingsOverview.funnel.length > 0
     );
   const shouldRenderInsights = pageLoading || hasMeaningfulMonthlyRevenue || hasMeaningfulBookingsOverview;
 
@@ -291,11 +299,11 @@ export default function DashboardHomeRoute() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className={nativeIOSDashboard ? "space-y-3 pb-[max(1rem,env(safe-area-inset-bottom))]" : "space-y-4 sm:space-y-5"}>
       <HomeDashboardTopBar
         title="Dashboard"
         businessName={outletContext.businessName}
-        roleLabel={getRoleLabel(snapshot?.context.role ?? outletContext.membershipRole)}
+        roleLabel={getRoleLabel(visibleSnapshot?.context.role ?? outletContext.membershipRole)}
         range={range}
         onRangeChange={setRange}
         showRangeSelector={!nativeShellSession}
@@ -306,7 +314,7 @@ export default function DashboardHomeRoute() {
         lastUpdatedLabel={lastUpdatedLabel}
         refreshing={fetching && !!snapshot}
         primaryAction={
-          <Button asChild className="min-h-[44px] w-full rounded-xl bg-slate-950 text-white hover:bg-slate-800 sm:w-auto">
+          <Button asChild className={nativeIOSDashboard ? "min-h-11 w-full rounded-full bg-primary text-primary-foreground shadow-[0_12px_24px_rgba(249,115,22,0.18)] hover:bg-primary/90" : "min-h-[44px] w-full rounded-xl bg-slate-950 text-white hover:bg-slate-800 sm:w-auto"}>
             <Link to="/appointments/new">
               <CalendarPlus className="mr-2 h-4 w-4" />
               New appointment
@@ -314,6 +322,7 @@ export default function DashboardHomeRoute() {
           </Button>
         }
         secondaryAction={featureEnabled ? null : <Badge variant="outline" className="rounded-full bg-slate-50 px-3 py-2 text-xs text-slate-600">Stable dashboard mode</Badge>}
+        nativeIOS={nativeIOSDashboard}
       />
 
       {staleSnapshotWarning ? (
@@ -335,55 +344,54 @@ export default function DashboardHomeRoute() {
       {pageError && !snapshot ? (
         <DashboardPageErrorGrid error={safePageError ?? new Error("Dashboard data is temporarily unavailable.")} onRetry={() => void refreshDashboard("force")} />
       ) : (
-        <div className="surface-panel overflow-hidden rounded-[1.9rem] border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_20px_50px_rgba(15,23,42,0.07)] sm:p-5">
-          <div className="space-y-4">
+        <div className={nativeIOSDashboard ? "space-y-3" : "surface-panel overflow-hidden rounded-[1.9rem] border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] p-4 shadow-[0_20px_50px_rgba(15,23,42,0.07)] sm:p-5"}>
+          <div className={nativeIOSDashboard ? "space-y-3" : "space-y-4"}>
             <HomeCompactQuickActions
-              snapshot={snapshot}
+              snapshot={visibleSnapshot}
               loading={pageLoading || staffFetching}
-              error={snapshot?.widgetErrors?.quick_actions ? new Error(snapshot.widgetErrors.quick_actions.message) : null}
+              error={visibleSnapshot?.widgetErrors?.quick_actions ? new Error(visibleSnapshot.widgetErrors.quick_actions.message) : null}
               onRetry={() => void refreshDashboard("force")}
+              nativeIOS={nativeIOSDashboard}
             />
 
-            <div className="grid gap-4 lg:grid-cols-12">
+            <div className={nativeIOSDashboard ? "grid gap-3" : "grid gap-4 lg:grid-cols-12"}>
               <div className="lg:col-span-8">
                 <HomeWeeklyAppointmentOverviewCard
-                  snapshot={snapshot}
+                  snapshot={visibleSnapshot}
                   loading={pageLoading}
-                  error={snapshot?.widgetErrors?.today_schedule ? new Error(snapshot.widgetErrors.today_schedule.message) : null}
+                  error={visibleSnapshot?.widgetErrors?.today_schedule ? new Error(visibleSnapshot.widgetErrors.today_schedule.message) : null}
                   onRetry={() => void refreshDashboard("force")}
                   selectedDate={selectedWeekDay}
                   onSelectDate={setSelectedWeekDay}
                   onChangeWeek={setWeekStart}
+                  nativeIOS={nativeIOSDashboard}
                 />
               </div>
               <div className="lg:col-span-4">
                 <HomeUpcomingAttentionPanel
-                  snapshot={snapshot}
+                  snapshot={visibleSnapshot}
                   range={range}
                   loading={pageLoading}
-                  error={snapshot?.widgetErrors?.action_queue ? new Error(snapshot.widgetErrors.action_queue.message) : null}
+                  error={visibleSnapshot?.widgetErrors?.action_queue ? new Error(visibleSnapshot.widgetErrors.action_queue.message) : null}
                   onRetry={() => void refreshDashboard("force")}
                   onDismiss={(itemId) => void updateQueueItem({ dismissQueueItemId: itemId })}
-                  onSnooze={(itemId) =>
-                    void updateQueueItem({
-                      snoozeQueueItemId: itemId,
-                      snoozeUntil: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-                    })
-                  }
+                  nativeIOS={nativeIOSDashboard}
                 />
               </div>
             </div>
 
-            <HomeOverviewKpiStrip snapshot={snapshot} loading={pageLoading} error={snapshot?.widgetErrors?.summary_today ? new Error(snapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
+            <HomeOverviewKpiStrip snapshot={visibleSnapshot} loading={pageLoading} error={visibleSnapshot?.widgetErrors?.summary_today ? new Error(visibleSnapshot.widgetErrors.summary_today.message) : null} onRetry={() => void refreshDashboard("force")} />
 
-            <HomeBottomPanels
-              snapshot={snapshot}
-              loading={pageLoading}
-              error={snapshot?.widgetErrors?.recent_activity ? new Error(snapshot.widgetErrors.recent_activity.message) : null}
-              onRetry={() => void refreshDashboard("force")}
-            />
+            {!nativeIOSDashboard ? (
+              <HomeBottomPanels
+                snapshot={visibleSnapshot}
+                loading={pageLoading}
+                error={visibleSnapshot?.widgetErrors?.recent_activity ? new Error(visibleSnapshot.widgetErrors.recent_activity.message) : null}
+                onRetry={() => void refreshDashboard("force")}
+              />
+            ) : null}
 
-            {shouldRenderInsights ? (
+            {shouldRenderInsights && !nativeIOSDashboard ? (
               <div className="native-panel-card rounded-[1.6rem] border border-slate-200/75 bg-white/92 p-4 sm:p-5">
                 <button
                   type="button"
@@ -412,7 +420,7 @@ export default function DashboardHomeRoute() {
                     {pageLoading || hasMeaningfulMonthlyRevenue ? (
                       <div className="lg:col-span-8">
                         <HomeMonthlyRevenueChartCard
-                          snapshot={snapshot}
+                          snapshot={visibleSnapshot}
                           financeDashboard={financeDashboard}
                           loading={pageLoading || (canReadPayments && financeFetching && !financeDashboard)}
                           error={financeError as Error | null}
@@ -423,9 +431,9 @@ export default function DashboardHomeRoute() {
                     {pageLoading || hasMeaningfulBookingsOverview ? (
                       <div className="lg:col-span-4">
                         <HomeBookingsOverviewCard
-                          snapshot={snapshot}
+                          snapshot={visibleSnapshot}
                           loading={pageLoading}
-                          error={snapshot?.widgetErrors?.pipeline ? new Error(snapshot.widgetErrors.pipeline.message) : null}
+                          error={visibleSnapshot?.widgetErrors?.pipeline ? new Error(visibleSnapshot.widgetErrors.pipeline.message) : null}
                           onRetry={() => void refreshDashboard("force")}
                         />
                       </div>

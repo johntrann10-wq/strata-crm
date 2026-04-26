@@ -52,6 +52,7 @@ type SheetContentProps = React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left";
   swipeToClose?: boolean;
   onSwipeClose?: () => void;
+  showCloseButton?: boolean;
 };
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
@@ -62,6 +63,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
       side = "right",
       swipeToClose = false,
       onSwipeClose,
+      showCloseButton = true,
       style,
       onPointerDown,
       onPointerMove,
@@ -120,13 +122,20 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
       }
     }, []);
 
-    const applyDragStyles = React.useCallback((offset: number, animated: boolean, durationMs = 220) => {
-      const node = localRef.current;
-      if (!node) return;
-      node.style.willChange = "transform";
-      node.style.transition = animated ? `transform ${durationMs}ms cubic-bezier(0.22, 1, 0.36, 1)` : "none";
-      node.style.transform = `translate3d(${offset}px, 0, 0)`;
-    }, []);
+    const isHorizontalSheet = side === "left" || side === "right";
+    const isVerticalSheet = side === "top" || side === "bottom";
+    const canSwipeToClose = swipeToClose && (isHorizontalSheet || isVerticalSheet);
+
+    const applyDragStyles = React.useCallback(
+      (offset: number, animated: boolean, durationMs = 220) => {
+        const node = localRef.current;
+        if (!node) return;
+        node.style.willChange = "transform";
+        node.style.transition = animated ? `transform ${durationMs}ms cubic-bezier(0.22, 1, 0.36, 1)` : "none";
+        node.style.transform = isHorizontalSheet ? `translate3d(${offset}px, 0, 0)` : `translate3d(0, ${offset}px, 0)`;
+      },
+      [isHorizontalSheet]
+    );
 
     const applyOverlayProgress = React.useCallback((progress: number, animated: boolean, durationMs = 220) => {
       const overlay = overlayRef.current;
@@ -150,13 +159,19 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
       [clearCloseTimer]
     );
 
-    const isHorizontalSheet = side === "left" || side === "right";
-    const canSwipeToClose = swipeToClose && isHorizontalSheet;
-
     const handlePointerDown = React.useCallback(
       (event: React.PointerEvent<HTMLDivElement>) => {
         onPointerDown?.(event);
         if (!canSwipeToClose || event.pointerType === "mouse") return;
+
+        if (isVerticalSheet) {
+          const target = event.target;
+          const startedOnHandle =
+            target instanceof Element ? Boolean(target.closest("[data-sheet-swipe-handle='true']")) : false;
+          const sheetRect = localRef.current?.getBoundingClientRect();
+          const startedNearSheetEdge = sheetRect ? event.clientY - sheetRect.top <= 56 : false;
+          if (!startedOnHandle && !startedNearSheetEdge) return;
+        }
 
         clearCloseTimer();
         clearPresentationStyles();
@@ -169,7 +184,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
         gestureRef.current.startTime = performance.now();
         gestureRef.current.offset = 0;
       },
-      [canSwipeToClose, clearCloseTimer, clearPresentationStyles, onPointerDown]
+      [canSwipeToClose, clearCloseTimer, clearPresentationStyles, isVerticalSheet, onPointerDown]
     );
 
     const handlePointerMove = React.useCallback(
@@ -182,22 +197,36 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
 
         const dx = event.clientX - gesture.startX;
         const dy = event.clientY - gesture.startY;
-        const width = localRef.current?.offsetWidth ?? 320;
-        const rawOffset = side === "left" ? Math.min(0, dx) : Math.max(0, dx);
-        const offset = side === "left" ? Math.max(-width, rawOffset * 0.98) : Math.min(width, rawOffset * 0.98);
+        const sheetSize = isHorizontalSheet ? localRef.current?.offsetWidth ?? 320 : localRef.current?.offsetHeight ?? 480;
+        const rawOffset =
+          side === "left"
+            ? Math.min(0, dx)
+            : side === "right"
+              ? Math.max(0, dx)
+              : side === "top"
+                ? Math.min(0, dy)
+                : Math.max(0, dy);
+        const offset =
+          side === "left" || side === "top"
+            ? Math.max(-sheetSize, rawOffset * 0.98)
+            : Math.min(sheetSize, rawOffset * 0.98);
+        const primaryDelta = isHorizontalSheet ? dx : dy;
+        const secondaryDelta = isHorizontalSheet ? dy : dx;
 
         if (!gesture.dragging) {
-          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-          if (Math.abs(dx) <= Math.abs(dy) || offset === 0) return;
+          const activationDistance = isVerticalSheet ? 16 : 8;
+          const axisBias = isVerticalSheet ? 1.35 : 1;
+          if (Math.abs(primaryDelta) < activationDistance && Math.abs(secondaryDelta) < activationDistance) return;
+          if (Math.abs(primaryDelta) <= Math.abs(secondaryDelta) * axisBias || offset === 0) return;
           gesture.dragging = true;
         }
 
         event.preventDefault();
         gesture.offset = offset;
         applyDragStyles(offset, false);
-        applyOverlayProgress(Math.abs(offset) / width, false);
+        applyOverlayProgress(Math.abs(offset) / sheetSize, false);
       },
-      [applyDragStyles, applyOverlayProgress, canSwipeToClose, onPointerMove, side]
+      [applyDragStyles, applyOverlayProgress, canSwipeToClose, isHorizontalSheet, isVerticalSheet, onPointerMove, side]
     );
 
     const finishGesture = React.useCallback(
@@ -217,17 +246,20 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
         }
 
         const node = localRef.current;
-        const width = node?.offsetWidth ?? 320;
+        const sheetSize = isHorizontalSheet ? node?.offsetWidth ?? 320 : node?.offsetHeight ?? 480;
         const elapsed = Math.max(1, performance.now() - gesture.startTime);
         const velocity = distance / elapsed;
-        const progress = distance / width;
-        const threshold = Math.min(Math.max(width * 0.22, 64), 120);
-        const shouldClose = distance >= threshold || velocity > 0.55;
+        const progress = distance / sheetSize;
+        const threshold = isVerticalSheet
+          ? Math.min(Math.max(sheetSize * 0.32, 140), 220)
+          : Math.min(Math.max(sheetSize * 0.22, 64), 120);
+        const velocityThreshold = isVerticalSheet ? 0.95 : 0.55;
+        const shouldClose = distance >= threshold || velocity > velocityThreshold;
 
         clearCloseTimer();
 
         if (shouldClose) {
-          const exitOffset = side === "left" ? -width : width;
+          const exitOffset = side === "left" || side === "top" ? -sheetSize : sheetSize;
           const exitDuration = Math.max(190, Math.round(300 - progress * 70));
           if (node) {
             node.style.animation = "none";
@@ -253,7 +285,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
 
         resetGesture();
       },
-      [applyDragStyles, applyOverlayProgress, canSwipeToClose, clearCloseTimer, clearPresentationStyles, onSwipeClose, resetGesture, side]
+      [applyDragStyles, applyOverlayProgress, canSwipeToClose, clearCloseTimer, clearPresentationStyles, isHorizontalSheet, isVerticalSheet, onSwipeClose, resetGesture, side]
     );
 
     const handlePointerUp = React.useCallback(
@@ -309,10 +341,12 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
         >
           {!hasTitle ? <SheetTitle className="sr-only">Panel</SheetTitle> : null}
           {children}
-          <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-background/88 opacity-80 transition hover:border-border hover:bg-accent focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
-            <XIcon className="size-4" />
-            <span className="sr-only">Close</span>
-          </SheetPrimitive.Close>
+          {showCloseButton ? (
+            <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-[max(0.75rem,env(safe-area-inset-top))] right-[max(0.75rem,env(safe-area-inset-right))] inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-background/88 opacity-80 transition hover:border-border hover:bg-accent focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+              <XIcon className="size-4" />
+              <span className="sr-only">Close</span>
+            </SheetPrimitive.Close>
+          ) : null}
         </SheetPrimitive.Content>
       </SheetPortal>
     );

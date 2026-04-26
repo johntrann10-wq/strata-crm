@@ -8,14 +8,12 @@ export default function VehiclesPage() {
   return (
     <div className="page-content page-section max-w-4xl">
       <PageHeader
-        title="Vehicles Live Inside Client Records"
-        subtitle="Vehicle intake still exists, but it now starts from a lead or client so the car stays attached to the right person, appointment, quote, and invoice."
+        title="Vehicles"
       />
 
       <EmptyState
         icon={Car}
-        title="No separate vehicle workspace"
-        description="Use Lead Intake when someone calls in, or open a client record and add the vehicle there. That keeps the workflow tighter and removes one extra CRM page."
+        title="Open a lead or client"
         action={
           <>
             <Button asChild>
