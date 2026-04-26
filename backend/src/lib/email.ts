@@ -662,6 +662,16 @@ export function resolveAppointmentConfirmationActionLabel(options: {
   return optionalValue(options.confirmationUrl) ? "View appointment" : "";
 }
 
+export function resolveInvoiceEmailPrimaryAction(options: {
+  invoiceUrl?: string | null;
+}): { label: string; url: string; detailsCopy: string } {
+  return {
+    label: optionalValue(options.invoiceUrl) ? "View invoice" : "",
+    url: optionalValue(options.invoiceUrl),
+    detailsCopy: "Open the invoice to review the completed work, payment status, and your service record.",
+  };
+}
+
 /** Send appointment confirmation. Vars: clientName, businessName, dateTime, vehicle?, address?, serviceSummary?, confirmationUrl? */
 export async function sendAppointmentConfirmation(options: {
   to: string;
@@ -1081,8 +1091,7 @@ export async function sendInvoiceEmail(options: {
   portalUrl?: string | null;
   message?: string | null;
 }) {
-  const canPayInvoice = options.invoiceStatus !== "paid" && options.invoiceStatus !== "void" && !!options.invoicePayUrl;
-  const primaryUrl = canPayInvoice ? options.invoicePayUrl : options.invoiceUrl;
+  const primaryAction = resolveInvoiceEmailPrimaryAction({ invoiceUrl: options.invoiceUrl });
   await sendTemplatedEmail({
     to: options.to,
     templateSlug: "invoice_sent",
@@ -1094,11 +1103,9 @@ export async function sendInvoiceEmail(options: {
       invoiceNumber: options.invoiceNumber,
       invoiceUrl: optionalValue(options.invoiceUrl),
       invoicePayUrl: optionalValue(options.invoicePayUrl),
-      invoicePrimaryUrl: optionalValue(primaryUrl),
-      invoicePrimaryLabel: canPayInvoice ? "Pay invoice" : "View invoice",
-      invoiceDetailsCopy: canPayInvoice
-        ? "Use the payment link to pay the invoice now, or open the invoice to review the completed work, payment status, and your service record."
-        : "Open the invoice to review the completed work, payment status, and your service record.",
+      invoicePrimaryUrl: primaryAction.url,
+      invoicePrimaryLabel: primaryAction.label,
+      invoiceDetailsCopy: primaryAction.detailsCopy,
       portalUrl: optionalValue(options.portalUrl),
       message: optionalValue(options.message),
     },
@@ -1253,4 +1260,3 @@ export async function retryFailedEmailNotifications(businessId: string): Promise
   }
   return { retried: failed.length, succeeded };
 }
-

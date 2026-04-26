@@ -46,7 +46,7 @@ describe("appointment template finance messaging", () => {
 
     expect(html).toContain("No deposit required");
     expect(html).not.toContain("Deposit collected");
-    expect(html).not.toContain("Pay $0.00 with Stripe");
+    expect(html).not.toContain("Pay deposit");
     expect(html).not.toContain("Secure checkout powered by Stripe.");
   });
 
@@ -60,7 +60,7 @@ describe("appointment template finance messaging", () => {
 
     expect(html).toContain("Paid in full");
     expect(html).not.toContain("Deposit collected");
-    expect(html).not.toContain("Pay $0.00 with Stripe");
+    expect(html).not.toContain("Pay deposit");
   });
 
   it("shows deposit-required appointments as collected only when the deposit is satisfied", () => {
@@ -73,7 +73,35 @@ describe("appointment template finance messaging", () => {
 
     expect(html).toContain("Deposit collected");
     expect(html).toContain("$515.85");
-    expect(html).not.toContain("Pay $200.00 with Stripe");
+    expect(html).not.toContain("Pay deposit");
+  });
+
+  it("shows a Pay deposit CTA only when a public payment URL is available", () => {
+    const html = renderTemplate({
+      depositAmount: 200,
+      collectedAmount: 0,
+      balanceDue: 715.85,
+      depositSatisfied: false,
+      publicPaymentUrl: "https://example.com/pay-deposit",
+    });
+
+    expect(html).toContain('href="https://example.com/pay-deposit"');
+    expect(html).toContain("Pay deposit");
+    expect(html).toContain("Secure checkout powered by Stripe.");
+  });
+
+  it("does not show a Pay deposit CTA when online deposit payment is unavailable", () => {
+    const html = renderTemplate({
+      depositAmount: 200,
+      collectedAmount: 0,
+      balanceDue: 715.85,
+      depositSatisfied: false,
+      publicPaymentUrl: null,
+    });
+
+    expect(html).toContain("Deposit payment will appear here as soon as online payments are available.");
+    expect(html).not.toContain("Pay deposit");
+    expect(html).not.toContain("Secure checkout powered by Stripe.");
   });
 
   it("shows a customer-friendly change-request error state instead of raw API messaging", () => {
