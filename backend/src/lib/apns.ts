@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 type ApnsAlertPayload = {
   title: string;
   body: string;
+  badge?: number | null;
   data?: Record<string, unknown>;
   topic?: string | null;
 };
@@ -88,6 +89,7 @@ export async function sendApnsAlert(deviceToken: string, payload: ApnsAlertPaylo
           body: payload.body,
         },
         sound: "default",
+        ...(typeof payload.badge === "number" ? { badge: Math.max(0, Math.floor(payload.badge)) } : {}),
       },
       ...(payload.data ?? {}),
     });

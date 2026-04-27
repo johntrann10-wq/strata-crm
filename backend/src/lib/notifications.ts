@@ -365,6 +365,7 @@ async function deliverNativePushNotification(input: NotificationInput, notificat
   const deviceRows = await db
     .select({
       id: notificationPushDevices.id,
+      userId: notificationPushDevices.userId,
       deviceToken: notificationPushDevices.deviceToken,
       enabledBuckets: notificationPushDevices.enabledBuckets,
       appBundleId: notificationPushDevices.appBundleId,
@@ -386,9 +387,23 @@ async function deliverNativePushNotification(input: NotificationInput, notificat
     if (!parseEnabledPushBuckets(device.enabledBuckets).has(bucket)) continue;
 
     try {
+      const visibilityFilter = device.userId
+        ? or(isNull(notifications.userId), eq(notifications.userId, device.userId))
+        : isNull(notifications.userId);
+      const [badgeRow] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.businessId, input.businessId),
+            eq(notifications.isRead, false),
+            visibilityFilter
+          )
+        );
       const response = await sendApnsAlert(device.deviceToken, {
         title: input.title,
         body: input.message,
+        badge: badgeRow?.count ?? 0,
         topic: device.appBundleId,
         data,
       });
