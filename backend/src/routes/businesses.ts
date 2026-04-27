@@ -4994,13 +4994,36 @@ businessesRouter.post(
       action: "booking.public_booked",
       entityType: "appointment",
       entityId: createdAppointment.id,
+      metadata: {
+        source: normalizedSource,
+        campaign,
+        serviceSummary: selection.serviceSummary,
+        locationId: locationId ?? null,
+      },
+    });
+
+    await safeCreateNotification(
+      {
+        businessId: business.id,
+        type: "appointment_created",
+        title: "New instant booking",
+        message:
+          `${`${client.firstName} ${client.lastName}`.trim() || "A customer"}` +
+          ` booked ${selection.serviceSummary} for ${formatBookingDateTime(startTime, business.timezone)}.`,
+        entityType: "appointment",
+        entityId: createdAppointment.id,
+        bucket: "calendar",
+        dedupeKey: `appointment-created:${createdAppointment.id}`,
         metadata: {
-          source: normalizedSource,
-          campaign,
+          sourceType: "public_booking",
+          bookingFlow: "self_book",
+          leadClientId: client.id,
           serviceSummary: selection.serviceSummary,
-          locationId: locationId ?? null,
+          path: `/appointments/${encodeURIComponent(createdAppointment.id)}`,
         },
-      });
+      },
+      { source: "businesses.public-bookings.self-book" }
+    );
 
     if (email && isEmailConfigured() && (business.notificationAppointmentConfirmationEmailEnabled ?? true)) {
       sendAppointmentConfirmation({
