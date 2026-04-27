@@ -5,7 +5,7 @@ import { logger } from "./logger.js";
 
 const APPLE_ISSUER = "https://appleid.apple.com";
 const APPLE_JWKS_URL = `${APPLE_ISSUER}/auth/keys`;
-const DEFAULT_APPLE_CLIENT_ID = "app.stratacrm.mobile";
+const DEFAULT_APPLE_CLIENT_IDS = ["app.stratacrm.mobile", "app.stratacrm.ios"];
 const DEFAULT_JWKS_CACHE_MS = 60 * 60 * 1000;
 
 type AppleJwk = {
@@ -57,17 +57,16 @@ function parseCacheControlMaxAge(headerValue: string | null): number | null {
 }
 
 export function resolveAppleSignInClientIds(): string[] {
-  const configured =
-    process.env.APPLE_SIGN_IN_CLIENT_IDS?.trim() ||
-    process.env.STRATA_CAPACITOR_APP_ID?.trim() ||
-    DEFAULT_APPLE_CLIENT_ID;
+  const configured = [process.env.APPLE_SIGN_IN_CLIENT_IDS, process.env.STRATA_CAPACITOR_APP_ID]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(",");
 
-  const clientIds = configured
+  const configuredClientIds = configured
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
 
-  return clientIds.length > 0 ? Array.from(new Set(clientIds)) : [DEFAULT_APPLE_CLIENT_ID];
+  return Array.from(new Set([...DEFAULT_APPLE_CLIENT_IDS, ...configuredClientIds]));
 }
 
 async function fetchAppleJwks(forceRefresh = false): Promise<AppleJwk[]> {
