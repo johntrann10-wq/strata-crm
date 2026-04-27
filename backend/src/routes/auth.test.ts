@@ -132,6 +132,16 @@ describe("auth route helper logic", () => {
     expect(updates?.updatedAt).toBeInstanceOf(Date);
   });
 
+  it("builds a stable fallback email when Apple does not resend an email", async () => {
+    const { buildAppleSubjectFallbackEmail, resolveAppleAccountEmail } = await import("./auth.js");
+    const fallback = buildAppleSubjectFallbackEmail("apple-sub-after-delete");
+
+    expect(fallback).toMatch(/^apple-[a-f0-9]{24}@accounts\.stratacrm\.local$/);
+    expect(buildAppleSubjectFallbackEmail("apple-sub-after-delete")).toBe(fallback);
+    expect(resolveAppleAccountEmail(null, "apple-sub-after-delete")).toBe(fallback);
+    expect(resolveAppleAccountEmail("owner@example.com", "apple-sub-after-delete")).toBe("owner@example.com");
+  });
+
   it("rejects Apple sign-in when the email is linked to a different Apple account", async () => {
     const { resolveAppleAccountUpdates } = await import("./auth.js");
     expect(() =>

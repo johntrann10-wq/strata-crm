@@ -9,7 +9,7 @@ import { verifyAppleIdentityToken } from "../lib/appleAuth.js";
 import { logger } from "../lib/logger.js";
 import { googleClient } from "../lib/googleAuth.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { getDefaultPermissionsForRole, resolvePermissionsForRole } from "../lib/permissions.js";
 import { createRateLimiter } from "../middleware/security.js";
 import { createAccessToken, createPasswordResetToken, verifyAccessToken, verifyPasswordResetToken, verifyTeamInviteToken } from "../lib/jwt.js";
@@ -248,6 +248,15 @@ function resolveAppleNameParts(params: {
     };
   }
   return splitFullName(params.fullName);
+}
+
+export function buildAppleSubjectFallbackEmail(appleSubject: string): string {
+  const subjectHash = createHash("sha256").update(appleSubject).digest("hex").slice(0, 24);
+  return `apple-${subjectHash}@accounts.stratacrm.local`;
+}
+
+export function resolveAppleAccountEmail(verifiedEmail: string | null, appleSubject: string): string {
+  return verifiedEmail ?? buildAppleSubjectFallbackEmail(appleSubject);
 }
 
 function serializeAuthUser(user: {
@@ -1152,13 +1161,8 @@ authRouter.post(
           user = invitedUser;
         }
       } else {
-        if (!verifiedEmail) {
-          throw new BadRequestError(
-            "Apple did not provide an email for this account. If this is your first Apple sign-in, try again and allow email sharing, or use your existing login method first."
-          );
-        }
-
-        const existingByEmail = await loadUserByEmailSafe(verifiedEmail);
+        const accountEmail = resolveAppleAccountEmail(verifiedEmail, verifiedApple.subject);
+        const existingByEmail = verifiedEmail ? await loadUserByEmailSafe(verifiedEmail) : null;
         if (existingByEmail) {
           const accountUpdates = resolveAppleAccountUpdates(existingByEmail, appleProfile);
           if (accountUpdates) {
@@ -1177,7 +1181,7 @@ authRouter.post(
           }
         } else {
           user = await createUserSafe({
-            email: verifiedEmail,
+            email: accountEmail,
             firstName: resolvedNames.firstName,
             lastName: resolvedNames.lastName,
             appleSubject: appleProfile.appleSubject,
