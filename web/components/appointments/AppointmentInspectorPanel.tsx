@@ -1550,17 +1550,20 @@ export function AppointmentInspectorPanel({
           {appointmentServices.length > 0 ? (
             <div className="space-y-2">
               {appointmentServices.map((item) => (
-                <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2.5">
+                <div key={item.id} className="flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/[0.12] px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{item.service?.name ?? "Service"}</p>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="break-words text-sm font-semibold leading-5 text-foreground">{item.service?.name ?? "Service"}</p>
+                    <p className="break-words text-xs leading-5 text-muted-foreground">
                       {[item.service?.category, item.quantity ? `Qty ${item.quantity}` : null, item.service?.durationMinutes ? `${item.service.durationMinutes} min` : null]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{formatCurrency(Number(item.unitPrice ?? 0))}</span>
+                  <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                    <div className="text-left sm:text-right">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Service price</p>
+                      <p className="text-sm font-semibold text-foreground">{formatCurrency(Number(item.unitPrice ?? 0))}</p>
+                    </div>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -1597,6 +1600,24 @@ export function AppointmentInspectorPanel({
                 <Link to={`/appointments/${appointment.id}`}>Manage</Link>
               </Button>
             </div>
+            {appointmentServices.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {appointmentServices.map((item) => (
+                  <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl border border-border/60 bg-background/70 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="break-words text-[13px] font-semibold leading-5 text-foreground">{item.service?.name ?? "Service"}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {[item.service?.category, item.quantity ? `Qty ${item.quantity}` : null].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Price</p>
+                      <p className="text-[13px] font-semibold text-foreground">{formatCurrency(Number(item.unitPrice ?? 0))}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 

@@ -551,13 +551,16 @@ export default function JobDetailPage() {
                           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                             <div className="min-w-0 space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className={isCompleted ? "font-semibold line-through text-muted-foreground" : "font-semibold"}>{service.name ?? "Service"}</p>
+                                <p className={isCompleted ? "break-words font-semibold leading-5 line-through text-muted-foreground" : "break-words font-semibold leading-5"}>{service.name ?? "Service"}</p>
                                 {isCompleted ? <StatusBadge status="completed" type="job" /> : <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">{service.category ?? "General"}</span>}
                               </div>
-                              <p className="text-sm text-muted-foreground">Qty {service.quantity ?? 1}{service.durationMinutes ? ` - ${service.durationMinutes} min` : ""}</p>
+                              <p className="break-words text-sm leading-5 text-muted-foreground">Qty {service.quantity ?? 1}{service.durationMinutes ? ` - ${service.durationMinutes} min` : ""}</p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full border border-border/70 px-3 py-1 text-sm font-semibold text-foreground">{formatCurrency(service.unitPrice)}</span>
+                              <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-left text-sm font-semibold text-foreground">
+                                <span className="block text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Service price</span>
+                                {formatCurrency(service.unitPrice)}
+                              </span>
                               {canEdit ? (
                                 <Button variant="outline" size="sm" className="h-9" onClick={() => void (isCompleted ? handleReopenService(service.id) : handleCompleteService(service.id))} disabled={completingService || reopeningService}>
                                   {completingService || reopeningService ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1 h-4 w-4" />}

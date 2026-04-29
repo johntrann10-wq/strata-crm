@@ -225,28 +225,28 @@ export default function PortalTokenRoute() {
                       Review your current estimate, unpaid invoices, appointments, and vehicle details without digging through separate links.
                     </CardDescription>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    <p className="font-medium text-slate-900">{clientName}</p>
-                    {data.client.email ? <p>{data.client.email}</p> : null}
-                    {data.client.phone ? <p>{data.client.phone}</p> : null}
+                  <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <p className="break-words font-medium text-slate-900">{clientName}</p>
+                    {data.client.email ? <p className="break-all">{data.client.email}</p> : null}
+                    {data.client.phone ? <p className="break-words">{data.client.phone}</p> : null}
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-start gap-3">
-                      <ShieldCheck className="mt-0.5 h-5 w-5 text-emerald-600" />
-                      <div className="space-y-1">
+                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                      <div className="min-w-0 space-y-1">
                         <p className="text-sm font-medium text-slate-900">Current document</p>
-                        <p className="text-sm text-slate-600">
+                        <p className="break-words text-sm leading-6 text-slate-600">
                           You came in from {data.currentDocument.title.toLowerCase()}. Use the hub to open that same document or jump to the rest of your active items with {data.business.name || "the shop"}.
                         </p>
                       </div>
                     </div>
                   </div>
-                  <Button asChild className="h-auto rounded-2xl px-5 py-3">
-                    <a href={data.currentDocument.url}>
-                      Open {data.currentDocument.title}
-                      <ExternalLink className="ml-2 h-4 w-4" />
+                  <Button asChild className="h-auto min-w-0 rounded-2xl px-5 py-3 md:w-auto">
+                    <a href={data.currentDocument.url} className="w-full justify-center text-center md:w-auto">
+                      <span className="min-w-0 break-words">Open {data.currentDocument.title}</span>
+                      <ExternalLink className="ml-2 h-4 w-4 shrink-0" />
                     </a>
                   </Button>
                 </div>
@@ -355,12 +355,12 @@ export default function PortalTokenRoute() {
                       data.sections.upcomingAppointments.map((appointment) => (
                         <div key={appointment.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
                           <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold text-slate-950">{appointment.title}</p>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="break-words text-sm font-semibold leading-5 text-slate-950">{appointment.title}</p>
                               <p className="text-sm text-slate-600">{formatDateTime(appointment.startTime)}</p>
-                              {appointment.vehicleLabel ? <p className="text-sm text-slate-500">{appointment.vehicleLabel}</p> : null}
+                              {appointment.vehicleLabel ? <p className="break-words text-sm text-slate-500">{appointment.vehicleLabel}</p> : null}
                             </div>
-                            <div className="space-y-2 text-right">
+                            <div className="shrink-0 space-y-2 text-left sm:text-right">
                               <ResourceBadge status={appointment.status} />
                               {appointment.depositAmount > 0 ? (
                                 <p className="text-sm text-slate-700">
@@ -380,14 +380,14 @@ export default function PortalTokenRoute() {
                             </div>
                           </div>
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <Button asChild variant="outline" size="sm" className="rounded-full">
+                            <Button asChild variant="outline" size="sm" className="min-w-0 rounded-full">
                               <a href={appointment.url}>View appointment</a>
                             </Button>
-                            <Button asChild variant="outline" size="sm" className="rounded-full">
+                            <Button asChild variant="outline" size="sm" className="min-w-0 rounded-full">
                               <a href={`${appointment.url}#request-change`}>Request change</a>
                             </Button>
                             {appointment.payUrl ? (
-                              <Button asChild size="sm" className="rounded-full">
+                              <Button asChild size="sm" className="min-w-0 rounded-full">
                                 <a href={appointment.payUrl}>Pay deposit</a>
                               </Button>
                             ) : null}
@@ -436,12 +436,12 @@ export default function PortalTokenRoute() {
                       data.sections.recentAppointments.map((appointment) => (
                         <a key={appointment.id} href={appointment.url} className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
                           <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1">
-                              <p className="text-sm font-semibold text-slate-950">{appointment.title}</p>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="break-words text-sm font-semibold leading-5 text-slate-950">{appointment.title}</p>
                               <p className="text-sm text-slate-600">{formatDateTime(appointment.startTime)}</p>
-                              {appointment.vehicleLabel ? <p className="text-sm text-slate-500">{appointment.vehicleLabel}</p> : null}
+                              {appointment.vehicleLabel ? <p className="break-words text-sm text-slate-500">{appointment.vehicleLabel}</p> : null}
                             </div>
-                            <div className="space-y-2 text-right">
+                            <div className="shrink-0 space-y-2 text-left sm:text-right">
                               <ResourceBadge status={appointment.status} />
                               <p className="text-sm text-slate-700">{formatCurrency(appointment.totalPrice)}</p>
                             </div>

@@ -2689,21 +2689,24 @@ export default function AppointmentDetail() {
                         const isCompleted = completedServiceIds.get(item.id) === true;
                         return (
                           <div key={item.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className={isCompleted ? "font-medium line-through text-muted-foreground" : "font-medium"}>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className={isCompleted ? "break-words font-medium leading-5 line-through text-muted-foreground" : "break-words font-medium leading-5"}>
                                   {item.service?.name ?? "Service"}
                                 </p>
                                 {isCompleted ? <StatusBadge status="completed" type="job" /> : null}
                               </div>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="break-words text-sm leading-5 text-muted-foreground">
                                 {item.service?.category ?? "General"} · Qty {item.quantity ?? 1}
                                 {item.service?.durationMinutes ? ` · ${item.service.durationMinutes} min` : ""}
                               </p>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <div className="text-sm font-medium text-foreground">
-                                {formatCurrency(Number(item.unitPrice ?? 0))}
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-left sm:text-right">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Service price</p>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {formatCurrency(Number(item.unitPrice ?? 0))}
+                                </p>
                               </div>
                               <Button
                                 variant="outline"
