@@ -232,20 +232,20 @@ export default function PortalTokenRoute() {
                   </div>
                 </div>
                 <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-start gap-3">
                       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
                       <div className="min-w-0 space-y-1">
                         <p className="text-sm font-medium text-slate-900">Current document</p>
-                        <p className="break-words text-sm leading-6 text-slate-600">
+                        <p className="min-w-0 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">
                           You came in from {data.currentDocument.title.toLowerCase()}. Use the hub to open that same document or jump to the rest of your active items with {data.business.name || "the shop"}.
                         </p>
                       </div>
                     </div>
                   </div>
-                  <Button asChild className="h-auto min-w-0 rounded-2xl px-5 py-3 md:w-auto">
-                    <a href={data.currentDocument.url} className="w-full justify-center text-center md:w-auto">
-                      <span className="min-w-0 break-words">Open {data.currentDocument.title}</span>
+                  <Button asChild className="h-auto min-w-0 max-w-full overflow-hidden rounded-2xl px-5 py-3 md:w-auto">
+                    <a href={data.currentDocument.url} className="w-full min-w-0 justify-center text-center md:w-auto">
+                      <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">Open {data.currentDocument.title}</span>
                       <ExternalLink className="ml-2 h-4 w-4 shrink-0" />
                     </a>
                   </Button>
@@ -270,14 +270,14 @@ export default function PortalTokenRoute() {
                       data.sections.quotes.map((quote) => (
                         <div key={quote.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
                           <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1">
+                            <div className="min-w-0 flex-1 space-y-1">
                               <p className="text-sm font-semibold text-slate-950">Estimate</p>
-                              <p className="text-sm text-slate-600">{quote.vehicleLabel || "Vehicle details attached in the estimate"}</p>
-                              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                              <p className="break-words text-sm text-slate-600 [overflow-wrap:anywhere]">{quote.vehicleLabel || "Vehicle details attached in the estimate"}</p>
+                              <p className="break-words text-xs uppercase tracking-[0.16em] text-slate-500 [overflow-wrap:anywhere]">
                                 Created {formatDate(quote.createdAt)}{quote.expiresAt ? ` • valid through ${formatDate(quote.expiresAt)}` : ""}
                               </p>
                             </div>
-                            <div className="space-y-2 text-right">
+                            <div className="shrink-0 space-y-2 text-left sm:text-right">
                               <ResourceBadge status={quote.status} />
                               <p className="text-base font-semibold text-slate-950">{formatCurrency(quote.total)}</p>
                             </div>
@@ -311,15 +311,15 @@ export default function PortalTokenRoute() {
                       data.sections.invoices.map((invoice) => (
                         <div key={invoice.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
                           <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="space-y-1">
+                            <div className="min-w-0 flex-1 space-y-1">
                               <p className="text-sm font-semibold text-slate-950">
                                 {invoice.invoiceNumber ? `Invoice #${invoice.invoiceNumber}` : "Invoice"}
                               </p>
-                              <p className="text-sm text-slate-600">
+                              <p className="break-words text-sm text-slate-600 [overflow-wrap:anywhere]">
                                 Due {formatDate(invoice.dueDate)} • total {formatCurrency(invoice.total)}
                               </p>
                             </div>
-                            <div className="space-y-2 text-right">
+                            <div className="shrink-0 space-y-2 text-left sm:text-right">
                               <ResourceBadge status={invoice.status} />
                               <p className="text-base font-semibold text-slate-950">{formatCurrency(invoice.balance)} due</p>
                             </div>
@@ -356,9 +356,9 @@ export default function PortalTokenRoute() {
                         <div key={appointment.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0 flex-1 space-y-1">
-                              <p className="break-words text-sm font-semibold leading-5 text-slate-950">{appointment.title}</p>
+                              <p className="break-words text-sm font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">{appointment.title}</p>
                               <p className="text-sm text-slate-600">{formatDateTime(appointment.startTime)}</p>
-                              {appointment.vehicleLabel ? <p className="break-words text-sm text-slate-500">{appointment.vehicleLabel}</p> : null}
+                              {appointment.vehicleLabel ? <p className="break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{appointment.vehicleLabel}</p> : null}
                             </div>
                             <div className="shrink-0 space-y-2 text-left sm:text-right">
                               <ResourceBadge status={appointment.status} />
@@ -437,9 +437,9 @@ export default function PortalTokenRoute() {
                         <a key={appointment.id} href={appointment.url} className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0 flex-1 space-y-1">
-                              <p className="break-words text-sm font-semibold leading-5 text-slate-950">{appointment.title}</p>
+                              <p className="break-words text-sm font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">{appointment.title}</p>
                               <p className="text-sm text-slate-600">{formatDateTime(appointment.startTime)}</p>
-                              {appointment.vehicleLabel ? <p className="break-words text-sm text-slate-500">{appointment.vehicleLabel}</p> : null}
+                              {appointment.vehicleLabel ? <p className="break-words text-sm text-slate-500 [overflow-wrap:anywhere]">{appointment.vehicleLabel}</p> : null}
                             </div>
                             <div className="shrink-0 space-y-2 text-left sm:text-right">
                               <ResourceBadge status={appointment.status} />

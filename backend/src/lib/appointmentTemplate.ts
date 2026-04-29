@@ -21,6 +21,12 @@ type AppointmentTemplateData = {
     model?: string | null;
   } | null;
   serviceSummary?: string | null;
+  services?: Array<{
+    name?: string | null;
+    category?: string | null;
+    unitPrice?: string | number | null;
+    quantity?: string | number | null;
+  }> | null;
   totalPrice?: string | number | null;
   depositAmount?: string | number | null;
   collectedAmount?: string | number | null;
@@ -101,10 +107,21 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       : hasTotal
         ? Math.max(totalPrice - collectedAmount, 0)
         : 0;
-  const serviceItems = (data.serviceSummary ?? "Appointment details confirmed")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const serviceItems =
+    data.services && data.services.length > 0
+      ? data.services
+          .map((item) => ({
+            name: item.name?.trim() || "Service",
+            category: item.category?.trim() || "",
+            unitPrice: item.unitPrice,
+            quantity: Number(item.quantity ?? 1),
+          }))
+          .filter((item) => item.name)
+      : (data.serviceSummary ?? "Appointment details confirmed")
+          .replace(/^Services:\s*/i, "")
+          .split(",")
+          .map((item) => ({ name: item.trim(), category: "", unitPrice: null, quantity: 1 }))
+          .filter((item) => item.name);
   const paymentBanner =
     data.stripePaymentState === "success"
       ? `<div class="banner banner-success">Deposit received. Your payment has been recorded.</div>`
@@ -173,20 +190,24 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
       .card { border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; padding: 18px; }
       .soft { background: #f8fafc; }
       .label { color: #94a3b8; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-      .value { margin-top: 6px; font-size: 15px; line-height: 1.6; color: #0f172a; font-weight: 600; }
+      .value { margin-top: 6px; font-size: 15px; line-height: 1.6; color: #0f172a; font-weight: 600; overflow-wrap: anywhere; }
       .muted { color: #475569; font-weight: 400; }
       .amount { border-radius: 16px; padding: 18px; background: #f8fafc; border: 1px solid #e2e8f0; }
       .amount .big { margin: 8px 0 6px; font-size: 34px; line-height: 1; letter-spacing: -0.04em; font-weight: 800; }
       .pricing-grid { display: grid; gap: 10px; margin-top: 16px; }
-      .pricing-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 14px; }
+      .pricing-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 14px; min-width: 0; }
       .pricing-row span:first-child { color: #64748b; }
       .pricing-row span:last-child { font-weight: 700; color: #0f172a; text-align: right; }
       .pricing-row.total { padding-top: 10px; border-top: 1px solid #e2e8f0; }
       .pricing-row.remaining span:last-child { color: #c2410c; }
       .service-list { margin-top: 14px; display: grid; gap: 10px; }
-      .service-item { border-radius: 14px; border: 1px solid #e2e8f0; background: #f8fafc; padding: 12px 14px; }
-      .service-item-title { font-size: 14px; font-weight: 700; color: #0f172a; }
-      .service-item-detail { margin-top: 4px; font-size: 13px; color: #64748b; line-height: 1.5; }
+      .service-item { display: grid; gap: 8px; border-radius: 14px; border: 1px solid #e2e8f0; background: #f8fafc; padding: 12px 14px; min-width: 0; }
+      .service-item-main { min-width: 0; }
+      .service-item-title { font-size: 14px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; word-break: break-word; }
+      .service-item-detail { margin-top: 4px; font-size: 13px; color: #64748b; line-height: 1.5; overflow-wrap: anywhere; }
+      .service-item-price { display: inline-grid; justify-self: start; gap: 2px; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; padding: 7px 10px; color: #0f172a; }
+      .service-item-price span:first-child { color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+      .service-item-price span:last-child { font-size: 14px; font-weight: 800; }
       .cta { display: inline-flex; align-items: center; justify-content: center; margin-top: 16px; padding: 12px 18px; border-radius: 999px; background: #ea580c; color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; }
       .sub-cta { display: inline-flex; align-items: center; justify-content: center; margin-top: 12px; padding: 12px 18px; border-radius: 999px; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; text-decoration: none; font-weight: 700; font-size: 14px; }
       .cta-note { margin-top: 10px; color: #64748b; font-size: 13px; line-height: 1.5; }
@@ -233,8 +254,18 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
                 ${serviceItems
                   .map(
                     (service) => `<div class="service-item">
-                  <div class="service-item-title">${escapeHtml(service)}</div>
-                  <div class="service-item-detail">Scheduled for this appointment.</div>
+                  <div class="service-item-main">
+                    <div class="service-item-title">${escapeHtml(service.name)}</div>
+                    <div class="service-item-detail">${escapeHtml(
+                      [service.category || null, Number.isFinite(service.quantity) && service.quantity > 1 ? `Qty ${service.quantity}` : null, "Scheduled for this appointment."]
+                        .filter(Boolean)
+                        .join(" · ")
+                    )}</div>
+                  </div>
+                  <div class="service-item-price">
+                    <span>Service price</span>
+                    <span>${formatCurrency(service.unitPrice)}</span>
+                  </div>
                 </div>`
                   )
                   .join("")}

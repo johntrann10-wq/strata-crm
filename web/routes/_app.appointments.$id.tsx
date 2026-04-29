@@ -578,7 +578,7 @@ export default function AppointmentDetail() {
   const [pricingAdminFeeRateDraft, setPricingAdminFeeRateDraft] = useState("0");
   const [pricingApplyAdminFeeDraft, setPricingApplyAdminFeeDraft] = useState(false);
   const [showMobileAppointmentInfo, setShowMobileAppointmentInfo] = useState(false);
-  const [showMobileServices, setShowMobileServices] = useState(false);
+  const [showMobileServices, setShowMobileServices] = useState(true);
   const [showMobileNotes, setShowMobileNotes] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);

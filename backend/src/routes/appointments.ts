@@ -3236,7 +3236,12 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
   }
 
   const serviceRows = await db
-    .select({ name: services.name })
+    .select({
+      name: services.name,
+      category: services.category,
+      unitPrice: appointmentServices.unitPrice,
+      quantity: appointmentServices.quantity,
+    })
     .from(appointmentServices)
     .innerJoin(services, eq(appointmentServices.serviceId, services.id))
     .where(eq(appointmentServices.appointmentId, appointment.id))
@@ -3294,6 +3299,7 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
     },
     serviceSummary:
       serviceRows.length > 0 ? serviceRows.map((service) => service.name).join(", ") : "Appointment confirmed",
+    services: serviceRows,
     totalPrice: appointment.totalPrice,
     depositAmount: appointment.depositAmount,
     collectedAmount: finance?.collectedAmount ?? 0,
