@@ -243,10 +243,12 @@ export default function PortalTokenRoute() {
                       </div>
                     </div>
                   </div>
-                  <Button asChild className="h-auto min-w-0 max-w-full overflow-hidden rounded-2xl px-5 py-3 md:w-auto">
-                    <a href={data.currentDocument.url} className="w-full min-w-0 justify-center text-center md:w-auto">
-                      <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">Open {data.currentDocument.title}</span>
-                      <ExternalLink className="ml-2 h-4 w-4 shrink-0" />
+                  <Button asChild className="h-auto min-w-0 max-w-full overflow-hidden whitespace-normal rounded-2xl px-5 py-3 md:w-auto">
+                    <a href={data.currentDocument.url} className="flex w-full min-w-0 items-center justify-center gap-2 text-center md:w-auto">
+                      <span className="block min-w-0 max-w-full flex-1 whitespace-normal break-words leading-5 [overflow-wrap:anywhere] [word-break:break-word]">
+                        Open {data.currentDocument.title}
+                      </span>
+                      <ExternalLink className="h-4 w-4 shrink-0" />
                     </a>
                   </Button>
                 </div>
