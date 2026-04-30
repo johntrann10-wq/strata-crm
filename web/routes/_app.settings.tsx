@@ -1591,6 +1591,8 @@ export default function SettingsPage() {
     integrationStatus?.registry.find((item) => item.provider === "google_calendar") ?? null;
   const twilioConnection =
     integrationStatus?.connections.find((item) => item.provider === "twilio_sms") ?? null;
+  const twilioConnectionIsActive = twilioConnection?.status === "connected";
+  const twilioCanReuseStoredToken = twilioConnectionIsActive;
   const twilioRegistry =
     integrationStatus?.registry.find((item) => item.provider === "twilio_sms") ?? null;
   const outboundWebhookConnection =
@@ -2292,17 +2294,23 @@ export default function SettingsPage() {
   };
 
   const handleSaveTwilio = async () => {
+    const authToken = twilioSettings.authToken.trim();
+    if (!twilioCanReuseStoredToken && !authToken) {
+      toast.error("Twilio Auth Token is required to reconnect Twilio SMS.");
+      return;
+    }
+
     setTwilioSaving(true);
     try {
       await api.integration.connectTwilio({
         accountSid: twilioSettings.accountSid.trim(),
-        authToken: twilioSettings.authToken.trim() || undefined,
+        authToken: authToken || undefined,
         messagingServiceSid: twilioSettings.messagingServiceSid.trim(),
         enabledTemplateSlugs: twilioSettings.enabledTemplateSlugs,
       });
       await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
       setTwilioSettings((current) => ({ ...current, authToken: "" }));
-      toast.success(twilioConnection ? "Twilio settings saved." : "Twilio SMS connected.");
+      toast.success(twilioConnectionIsActive ? "Twilio settings saved." : "Twilio SMS connected.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save Twilio SMS settings.");
     } finally {
@@ -4004,13 +4012,16 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="space-y-1.5">
-                        <Label>{twilioConnection ? "Rotate Auth Token" : "Twilio Auth Token"}</Label>
+                        <Label>{twilioCanReuseStoredToken ? "Rotate Auth Token" : "Twilio Auth Token"}</Label>
                         <Input
-                          type="password"
+                          type="text"
                           value={twilioSettings.authToken}
                           onChange={(e) => setTwilioSettings((current) => ({ ...current, authToken: e.target.value }))}
-                          placeholder={twilioConnection ? "Leave blank to keep the stored token" : "Your Twilio auth token"}
+                          placeholder={twilioCanReuseStoredToken ? "Leave blank to keep the stored token" : "Paste your Twilio auth token"}
                           disabled={!canManageBusinessIntegrations}
+                          autoComplete="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
                         />
                         <p className="text-xs text-muted-foreground">
                           Stored encrypted in Strata. Status callbacks are validated against this token before delivery updates are accepted.
@@ -4083,7 +4094,7 @@ export default function SettingsPage() {
                       <Button
                         variant="outline"
                         onClick={handleDisconnectTwilio}
-                        disabled={!canManageBusinessIntegrations || !twilioConnection || twilioDisconnecting}
+                        disabled={!canManageBusinessIntegrations || !twilioConnectionIsActive || twilioDisconnecting}
                         className="w-full sm:w-auto"
                       >
                         {twilioDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
