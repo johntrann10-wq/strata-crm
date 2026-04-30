@@ -85,6 +85,13 @@ type BookingService = {
   addons: BookingAddon[];
 };
 
+type BookingDailyHoursEntry = {
+  dayIndex: number;
+  enabled: boolean;
+  openTime: string | null;
+  closeTime: string | null;
+};
+
 type BookingConfig = {
   businessId: string;
   businessName: string;
@@ -110,6 +117,8 @@ type BookingConfig = {
     dayIndexes: number[];
     openTime: string | null;
     closeTime: string | null;
+    dailyHours?: BookingDailyHoursEntry[];
+    blackoutDates?: string[];
   };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: BookingService[];
@@ -444,6 +453,8 @@ function buildSuggestedBookingDates(params: {
   minDate: string;
   maxDate: string;
   allowedDayIndexes: number[] | null | undefined;
+  dailyHours?: BookingDailyHoursEntry[] | null;
+  blackoutDates?: string[] | null;
   selectedDate: string;
   limit?: number;
 }) {
@@ -453,24 +464,69 @@ function buildSuggestedBookingDates(params: {
   const allowedDays = Array.isArray(params.allowedDayIndexes) && params.allowedDayIndexes.length > 0
     ? new Set(params.allowedDayIndexes)
     : null;
+  const blackoutDates = new Set(params.blackoutDates ?? []);
+  const dailyHoursByDay = new Map(
+    (params.dailyHours ?? [])
+      .filter((entry) => Number.isInteger(entry.dayIndex) && entry.dayIndex >= 0 && entry.dayIndex <= 6)
+      .map((entry) => [entry.dayIndex, entry])
+  );
   const results: string[] = [];
   const cursor = new Date(start);
 
   while (cursor.getTime() <= end.getTime() && results.length < (params.limit ?? 7)) {
-    if (!allowedDays || allowedDays.has(cursor.getDay())) {
-      results.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`);
+    const dateKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    const dayHours = dailyHoursByDay.get(cursor.getDay());
+    const dailyHoursAllowsDate = dayHours ? dayHours.enabled : true;
+    if ((!allowedDays || allowedDays.has(cursor.getDay())) && dailyHoursAllowsDate && !blackoutDates.has(dateKey)) {
+      results.push(dateKey);
     }
     cursor.setDate(cursor.getDate() + 1);
   }
 
   if (params.selectedDate && !results.includes(params.selectedDate)) {
     const selected = new Date(`${params.selectedDate}T00:00:00`);
-    if (!Number.isNaN(selected.getTime()) && selected.getTime() >= start.getTime() && selected.getTime() <= end.getTime()) {
+    const selectedDayHours = dailyHoursByDay.get(selected.getDay());
+    if (
+      !Number.isNaN(selected.getTime()) &&
+      selected.getTime() >= start.getTime() &&
+      selected.getTime() <= end.getTime() &&
+      !blackoutDates.has(params.selectedDate) &&
+      (selectedDayHours ? selectedDayHours.enabled : true)
+    ) {
       results.unshift(params.selectedDate);
     }
   }
 
   return Array.from(new Set(results)).slice(0, params.limit ?? 7);
+}
+
+function resolveAvailabilityWindowForDate(params: {
+  date: string;
+  dailyHours?: BookingDailyHoursEntry[] | null;
+  fallbackOpenTime: string | null | undefined;
+  fallbackCloseTime: string | null | undefined;
+}) {
+  const date = parseDateValue(params.date);
+  if (!date) {
+    return {
+      openTime: params.fallbackOpenTime ?? null,
+      closeTime: params.fallbackCloseTime ?? null,
+      closed: false,
+    };
+  }
+  const dayHours = (params.dailyHours ?? []).find((entry) => entry.dayIndex === date.getDay()) ?? null;
+  if (!dayHours) {
+    return {
+      openTime: params.fallbackOpenTime ?? null,
+      closeTime: params.fallbackCloseTime ?? null,
+      closed: false,
+    };
+  }
+  return {
+    openTime: dayHours.enabled ? dayHours.openTime ?? params.fallbackOpenTime ?? null : null,
+    closeTime: dayHours.enabled ? dayHours.closeTime ?? params.fallbackCloseTime ?? null : null,
+    closed: !dayHours.enabled,
+  };
 }
 
 function formatBookingDatePill(value: string) {
@@ -1658,8 +1714,36 @@ export default function PublicBookingPage() {
     () => selectedService?.availableDayIndexes ?? config?.availabilityDefaults?.dayIndexes ?? null,
     [config?.availabilityDefaults?.dayIndexes, selectedService?.availableDayIndexes]
   );
-  const effectiveOpenTime = selectedService?.openTime ?? config?.availabilityDefaults?.openTime ?? null;
-  const effectiveCloseTime = selectedService?.closeTime ?? config?.availabilityDefaults?.closeTime ?? null;
+  const businessDailyHours = useMemo(
+    () =>
+      selectedService?.openTime || selectedService?.closeTime
+        ? []
+        : config?.availabilityDefaults?.dailyHours ?? [],
+    [config?.availabilityDefaults?.dailyHours, selectedService?.closeTime, selectedService?.openTime]
+  );
+  const businessBlackoutDates = useMemo(
+    () => config?.availabilityDefaults?.blackoutDates ?? [],
+    [config?.availabilityDefaults?.blackoutDates]
+  );
+  const selectedDayAvailabilityWindow = useMemo(
+    () =>
+      resolveAvailabilityWindowForDate({
+        date: form.bookingDate,
+        dailyHours: businessDailyHours,
+        fallbackOpenTime: config?.availabilityDefaults?.openTime ?? null,
+        fallbackCloseTime: config?.availabilityDefaults?.closeTime ?? null,
+      }),
+    [
+      businessDailyHours,
+      config?.availabilityDefaults?.closeTime,
+      config?.availabilityDefaults?.openTime,
+      form.bookingDate,
+    ]
+  );
+  const effectiveOpenTime =
+    selectedService?.openTime ?? selectedDayAvailabilityWindow.openTime ?? config?.availabilityDefaults?.openTime ?? null;
+  const effectiveCloseTime =
+    selectedService?.closeTime ?? selectedDayAvailabilityWindow.closeTime ?? config?.availabilityDefaults?.closeTime ?? null;
   const availabilityWindowLabel = useMemo(
     () => formatAvailabilityWindow(effectiveAvailabilityDayIndexes, effectiveOpenTime, effectiveCloseTime),
     [effectiveAvailabilityDayIndexes, effectiveOpenTime, effectiveCloseTime]
@@ -1670,10 +1754,12 @@ export default function PublicBookingPage() {
         minDate: minBookingDate,
         maxDate: maxBookingDate,
         allowedDayIndexes: effectiveAvailabilityDayIndexes,
+        dailyHours: businessDailyHours,
+        blackoutDates: businessBlackoutDates,
         selectedDate: form.bookingDate,
         limit: 8,
       }),
-    [effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
+    [businessBlackoutDates, businessDailyHours, effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
   );
   const defaultBookingDate = suggestedBookingDates[0] ?? minBookingDate;
   const selectedScheduleDate =

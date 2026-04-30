@@ -134,6 +134,17 @@ const BOOKING_DAY_OPTIONS = [
   { value: 0, label: "Sun" },
 ] as const;
 
+function parseBookingBlackoutDatesText(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]+/)
+        .map((entry) => entry.trim())
+        .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry))
+    )
+  ).slice(0, 90);
+}
+
 const BILLING_FEATURES = [
   "Appointments & calendar",
   "Client & vehicle CRM",
@@ -1951,9 +1962,35 @@ export default function SettingsPage() {
 
   const handleFieldChange = (
     field: keyof BusinessSettingsFormData,
-    value: string | number | boolean | number[]
+    value: BusinessSettingsFormData[keyof BusinessSettingsFormData]
   ) => {
     setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleBookingDayToggle = (dayIndex: number, enabled: boolean) => {
+    setFormData((current) => {
+      const dailyHours = current.bookingDailyHours.map((entry) =>
+        entry.dayIndex === dayIndex ? { ...entry, enabled } : entry
+      );
+      return {
+        ...current,
+        bookingDailyHours: dailyHours,
+        bookingAvailableDays: dailyHours.filter((entry) => entry.enabled).map((entry) => entry.dayIndex),
+      };
+    });
+  };
+
+  const handleBookingDayTimeChange = (
+    dayIndex: number,
+    field: "openTime" | "closeTime",
+    value: string
+  ) => {
+    setFormData((current) => ({
+      ...current,
+      bookingDailyHours: current.bookingDailyHours.map((entry) =>
+        entry.dayIndex === dayIndex ? { ...entry, [field]: value } : entry
+      ),
+    }));
   };
 
   const normalizeAppointmentBufferInput = (value: string) => {
@@ -2617,6 +2654,13 @@ export default function SettingsPage() {
         bookingAvailableDays: formData.bookingAvailableDays,
         bookingAvailableStartTime: formData.bookingAvailableStartTime || null,
         bookingAvailableEndTime: formData.bookingAvailableEndTime || null,
+        bookingDailyHours: formData.bookingDailyHours.map((entry) => ({
+          dayIndex: entry.dayIndex,
+          enabled: entry.enabled,
+          openTime: entry.enabled ? entry.openTime : null,
+          closeTime: entry.enabled ? entry.closeTime : null,
+        })),
+        bookingBlackoutDates: parseBookingBlackoutDatesText(formData.bookingBlackoutDatesText),
       });
       toast.success("Settings saved successfully.");
     } catch (error: any) {
@@ -3073,65 +3117,83 @@ export default function SettingsPage() {
                     </p>
                   </div>
 
-                  <div className="mt-4 space-y-4">
-                    <div className="space-y-1.5">
-                      <Label>Operating days</Label>
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                        {BOOKING_DAY_OPTIONS.map((day) => {
-                          const checked = formData.bookingAvailableDays.includes(day.value);
-                          return (
-                            <label
-                              key={day.value}
-                              className={cn(
-                                "flex cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
-                                checked
-                                  ? "border-primary/35 bg-primary/10 text-primary"
-                                  : "border-slate-200 bg-white text-slate-600"
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                className="sr-only"
-                                checked={checked}
-                                onChange={() =>
-                                  handleFieldChange(
-                                    "bookingAvailableDays",
-                                    checked
-                                      ? formData.bookingAvailableDays.filter((value) => value !== day.value)
-                                      : [...formData.bookingAvailableDays, day.value].sort()
-                                  )
-                                }
-                              />
-                              {day.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
+	                  <div className="mt-4 space-y-4">
+	                    <div className="space-y-2">
+	                      <Label>Weekly booking hours</Label>
+	                      <div className="grid gap-2">
+	                        {BOOKING_DAY_OPTIONS.map((day) => {
+	                          const entry =
+	                            formData.bookingDailyHours.find((item) => item.dayIndex === day.value) ??
+	                            {
+	                              dayIndex: day.value,
+	                              enabled: false,
+	                              openTime: formData.bookingAvailableStartTime,
+	                              closeTime: formData.bookingAvailableEndTime,
+	                            };
+	                          return (
+	                            <div
+	                              key={day.value}
+	                              className={cn(
+	                                "grid gap-3 rounded-2xl border bg-background/85 p-3 sm:grid-cols-[7rem_1fr_1fr] sm:items-center",
+	                                entry.enabled ? "border-primary/25" : "border-border/70 opacity-75"
+	                              )}
+	                            >
+	                              <label className="flex min-h-10 items-center justify-between gap-3 sm:justify-start">
+	                                <span className="text-sm font-semibold">{day.label}</span>
+	                                <Switch
+	                                  checked={entry.enabled}
+	                                  onCheckedChange={(enabled) => handleBookingDayToggle(day.value, enabled)}
+	                                />
+	                              </label>
+	                              <div className="space-y-1">
+	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-open-${day.value}`}>
+	                                  Opens
+	                                </Label>
+	                                <Input
+	                                  id={`booking-open-${day.value}`}
+	                                  type="time"
+	                                  className={mobileTimeInputClassName}
+	                                  value={entry.openTime}
+	                                  disabled={!entry.enabled}
+	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "openTime", e.target.value)}
+	                                />
+	                              </div>
+	                              <div className="space-y-1">
+	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-close-${day.value}`}>
+	                                  Closes
+	                                </Label>
+	                                <Input
+	                                  id={`booking-close-${day.value}`}
+	                                  type="time"
+	                                  className={mobileTimeInputClassName}
+	                                  value={entry.closeTime}
+	                                  disabled={!entry.enabled}
+	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "closeTime", e.target.value)}
+	                                />
+	                              </div>
+	                            </div>
+	                          );
+	                        })}
+	                      </div>
+	                      <p className="text-xs leading-5 text-muted-foreground">
+	                        Use different hours for each day. Closed days never show bookable time slots.
+	                      </p>
+	                    </div>
 
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="bookingAvailableStartTime">Public booking start time</Label>
-                        <Input
-                          id="bookingAvailableStartTime"
-                          type="time"
-                          className={mobileTimeInputClassName}
-                          value={formData.bookingAvailableStartTime}
-                          onChange={(e) => handleFieldChange("bookingAvailableStartTime", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="bookingAvailableEndTime">Public booking end time</Label>
-                        <Input
-                          id="bookingAvailableEndTime"
-                          type="time"
-                          className={mobileTimeInputClassName}
-                          value={formData.bookingAvailableEndTime}
-                          onChange={(e) => handleFieldChange("bookingAvailableEndTime", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
+	                    <div className="space-y-1.5">
+	                      <Label htmlFor="bookingBlackoutDatesText">Closed dates</Label>
+	                      <textarea
+	                        id="bookingBlackoutDatesText"
+	                        className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40"
+	                        value={formData.bookingBlackoutDatesText}
+	                        onChange={(e) => handleFieldChange("bookingBlackoutDatesText", e.target.value)}
+	                        placeholder={"2026-07-04\n2026-12-25"}
+	                      />
+	                      <p className="text-xs leading-5 text-muted-foreground">
+	                        Add holidays or shop closure dates as YYYY-MM-DD, one per line. These dates are blocked from requests and instant booking.
+	                      </p>
+	                    </div>
+	                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

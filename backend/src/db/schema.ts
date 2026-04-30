@@ -263,6 +263,7 @@ export const businesses = pgTable("businesses", {
   bookingAvailableDays: text("booking_available_days"),
   bookingAvailableStartTime: text("booking_available_start_time"),
   bookingAvailableEndTime: text("booking_available_end_time"),
+  bookingDailyHours: text("booking_daily_hours"),
   bookingBlackoutDates: text("booking_blackout_dates"),
   bookingSlotIntervalMinutes: integer("booking_slot_interval_minutes").default(15),
   bookingBufferMinutes: integer("booking_buffer_minutes"),
