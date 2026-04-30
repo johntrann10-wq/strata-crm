@@ -189,6 +189,45 @@ interface BillingStatus {
   stripeConnectReady: boolean;
 }
 
+function getFallbackBillingStatus(): BillingStatus {
+  return {
+    status: null,
+    accessState: null,
+    trialStartedAt: null,
+    trialEndsAt: null,
+    currentPeriodEnd: null,
+    billingHasPaymentMethod: false,
+    billingPaymentMethodAddedAt: null,
+    billingSetupError: null,
+    billingSetupFailedAt: null,
+    billingLastStripeEventId: null,
+    billingLastStripeEventType: null,
+    billingLastStripeEventAt: null,
+    billingLastStripeSyncStatus: null,
+    billingLastStripeSyncError: null,
+    activationMilestone: {
+      reached: false,
+      type: null,
+      occurredAt: null,
+      detail: null,
+    },
+    billingPrompt: {
+      stage: "none",
+      visible: false,
+      daysLeftInTrial: null,
+      dismissedUntil: null,
+      cooldownDays: 5,
+    },
+    stripeConnectConfigured: false,
+    stripeConnectAccountId: null,
+    stripeConnectDetailsSubmitted: false,
+    stripeConnectChargesEnabled: false,
+    stripeConnectPayoutsEnabled: false,
+    stripeConnectOnboardedAt: null,
+    stripeConnectReady: false,
+  };
+}
+
 type LocationRecord = {
   id: string;
   name?: string | null;
@@ -804,42 +843,7 @@ function BillingTab({
       })
       .catch(() => {
         if (!cancelled) {
-          setBillingStatus({
-            status: null,
-            accessState: null,
-            trialStartedAt: null,
-            trialEndsAt: null,
-            currentPeriodEnd: null,
-            billingHasPaymentMethod: false,
-            billingPaymentMethodAddedAt: null,
-            billingSetupError: null,
-            billingSetupFailedAt: null,
-            billingLastStripeEventId: null,
-            billingLastStripeEventType: null,
-            billingLastStripeEventAt: null,
-            billingLastStripeSyncStatus: null,
-            billingLastStripeSyncError: null,
-            activationMilestone: {
-              reached: false,
-              type: null,
-              occurredAt: null,
-              detail: null,
-            },
-            billingPrompt: {
-              stage: "none",
-              visible: false,
-              daysLeftInTrial: null,
-              dismissedUntil: null,
-              cooldownDays: 5,
-            },
-            stripeConnectConfigured: false,
-            stripeConnectAccountId: null,
-            stripeConnectDetailsSubmitted: false,
-            stripeConnectChargesEnabled: false,
-            stripeConnectPayoutsEnabled: false,
-            stripeConnectOnboardedAt: null,
-            stripeConnectReady: false,
-          });
+          setBillingStatus(getFallbackBillingStatus());
         }
       });
 
@@ -1461,6 +1465,24 @@ export default function SettingsPage() {
     checkedAt: null,
   });
   const nativeShellSession = isNativeIOSApp();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.billing
+      .getStatus()
+      .then((result) => {
+        if (!cancelled) setBillingStatus(result);
+      })
+      .catch(() => {
+        if (!cancelled) setBillingStatus(getFallbackBillingStatus());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const hasFullBillingWorkspaceAccess = billingStatus !== null && hasFullBillingAccess(billingStatus.accessState);
   const integrationsBlockedByBilling = billingStatus !== null && !hasFullBillingAccess(billingStatus.accessState);
   const canLoadIntegrationData = Boolean(businessId) && activeTab === "integrations" && hasFullBillingWorkspaceAccess;
