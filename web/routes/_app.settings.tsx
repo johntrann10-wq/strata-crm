@@ -3860,7 +3860,7 @@ export default function SettingsPage() {
                           <p className="text-sm font-medium">Google Calendar</p>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          One-way appointment sync into your selected Google Calendar. Strata stays the source of truth.
+                          One-way appointment sync into a Strata-created Google Calendar. Strata stays the source of truth.
                         </p>
                       </div>
                       <Badge
@@ -3897,9 +3897,9 @@ export default function SettingsPage() {
                             <SelectValue
                               placeholder={
                                 googleCalendarCalendarsLoading
-                                  ? "Loading calendars..."
+                                  ? "Loading Strata calendar..."
                                   : googleCalendarConnection
-                                    ? "Select a Google Calendar"
+                                    ? "Strata calendar"
                                     : "Connect Google Calendar first"
                               }
                             />
@@ -3914,11 +3914,11 @@ export default function SettingsPage() {
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Only writable calendars from your Google account are listed here.
+                          Strata creates and manages its own calendar so it does not need access to your existing Google calendars.
                         </p>
                       </div>
                       <div className="space-y-2 text-xs text-muted-foreground">
-                        <p>Control scope: Your user account only.</p>
+                        <p>Control scope: Strata-created calendar only.</p>
                         <p>
                           Selected calendar:{" "}
                           {googleCalendarConnection?.configSummary.selectedCalendarSummary ?? "Not selected"}

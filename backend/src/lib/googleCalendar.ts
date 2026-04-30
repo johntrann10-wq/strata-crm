@@ -36,10 +36,9 @@ const GOOGLE_CALENDAR_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/a
 const GOOGLE_CALENDAR_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
-const GOOGLE_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-  "https://www.googleapis.com/auth/calendar.events.owned",
-] as const;
+const STRATA_CALENDAR_SUMMARY = "Strata CRM appointments";
+const STRATA_CALENDAR_DESCRIPTION = "Appointments synced from Strata CRM.";
+const GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.app.created"] as const;
 
 export type GoogleCalendarIntegrationState = {
   businessId: string;
@@ -69,8 +68,10 @@ export type GoogleCalendarListEntry = {
   timeZone?: string | null;
 };
 
-type GoogleCalendarListResponse = {
-  items?: GoogleCalendarListEntry[];
+type GoogleCalendarResource = {
+  id?: string;
+  summary?: string;
+  timeZone?: string | null;
 };
 
 type GoogleCalendarEvent = {
@@ -280,29 +281,77 @@ async function googleCalendarRequest<T>(
   };
 }
 
-function pickDefaultCalendar(calendars: GoogleCalendarListEntry[]) {
-  return (
-    calendars.find((calendar) => calendar.primary) ??
-    calendars.find((calendar) => ["owner", "writer"].includes(String(calendar.accessRole ?? "").toLowerCase())) ??
-    calendars[0] ??
-    null
-  );
+function shouldCreateReplacementCalendar(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("403") || message.includes("404");
+}
+
+function toGoogleCalendarListEntry(calendar: GoogleCalendarResource, fallbackId?: string): GoogleCalendarListEntry {
+  return {
+    id: calendar.id ?? fallbackId ?? "",
+    summary: calendar.summary ?? STRATA_CALENDAR_SUMMARY,
+    primary: false,
+    accessRole: "owner",
+    timeZone: calendar.timeZone ?? null,
+  };
+}
+
+async function createStrataGoogleCalendar(connection: IntegrationConnectionRecord) {
+  const response = await googleCalendarRequest<GoogleCalendarResource>(connection, "/calendars", {
+    method: "POST",
+    body: JSON.stringify({
+      summary: STRATA_CALENDAR_SUMMARY,
+      description: STRATA_CALENDAR_DESCRIPTION,
+    }),
+  });
+  const calendar = toGoogleCalendarListEntry(response.body);
+  if (!calendar.id) throw new BadRequestError("Google Calendar did not return a calendar id.");
+  return { connection: response.connection, calendar };
+}
+
+async function ensureStrataGoogleCalendar(
+  connection: IntegrationConnectionRecord,
+  config: GoogleCalendarConnectionConfig | null = readConnectionConfig<GoogleCalendarConnectionConfig>(connection)
+) {
+  const existingCalendarId = config?.selectedCalendarId?.trim();
+  if (existingCalendarId) {
+    try {
+      const response = await googleCalendarRequest<GoogleCalendarResource>(
+        connection,
+        `/calendars/${encodeURIComponent(existingCalendarId)}`
+      );
+      return {
+        connection: response.connection,
+        calendar: toGoogleCalendarListEntry(response.body, existingCalendarId),
+      };
+    } catch (error) {
+      if (!shouldCreateReplacementCalendar(error)) {
+        throw error;
+      }
+      logger.warn("Google Calendar selected calendar is unavailable; creating a Strata-owned calendar", {
+        businessId: connection.businessId,
+        connectionId: connection.id,
+        selectedCalendarId: existingCalendarId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return createStrataGoogleCalendar(connection);
 }
 
 export async function listGoogleCalendarsForConnection(connection: IntegrationConnectionRecord) {
-  const response = await googleCalendarRequest<GoogleCalendarListResponse>(
+  const config = readConnectionConfig<GoogleCalendarConnectionConfig>(connection);
+  if (!config?.selectedCalendarId) {
+    return { connection, calendars: [] as GoogleCalendarListEntry[] };
+  }
+  const response = await googleCalendarRequest<GoogleCalendarResource>(
     connection,
-    "/users/me/calendarList?minAccessRole=writer&showHidden=false"
+    `/calendars/${encodeURIComponent(config.selectedCalendarId)}`
   );
   return {
     connection: response.connection,
-    calendars: (response.body.items ?? []).map((calendar) => ({
-      id: calendar.id,
-      summary: calendar.summary ?? calendar.id,
-      primary: Boolean(calendar.primary),
-      accessRole: calendar.accessRole ?? null,
-      timeZone: calendar.timeZone ?? null,
-    })),
+    calendars: [toGoogleCalendarListEntry(response.body, config.selectedCalendarId)],
   };
 }
 
@@ -320,6 +369,8 @@ export async function connectGoogleCalendarUser(input: {
   code: string;
 }) {
   const token = await exchangeGoogleCalendarAuthorizationCode(input.code);
+  const existing = await getUserIntegrationConnection(input.businessId, input.userId, GOOGLE_CALENDAR_PROVIDER);
+  const existingConfig = existing ? readConnectionConfig<GoogleCalendarConnectionConfig>(existing) : null;
   const provisional = await upsertUserIntegrationConnection({
     businessId: input.businessId,
     userId: input.userId,
@@ -329,7 +380,7 @@ export async function connectGoogleCalendarUser(input: {
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? null,
     tokenExpiresAt: new Date(Date.now() + token.expires_in * 1000),
-    config: {},
+    config: existingConfig ?? {},
     scopes: token.scope?.split(" ").filter(Boolean) ?? [...GOOGLE_CALENDAR_SCOPES],
     connectedAt: new Date(),
     disconnectedAt: null,
@@ -338,8 +389,10 @@ export async function connectGoogleCalendarUser(input: {
   });
   if (!provisional) throw new BadRequestError("Could not connect Google Calendar.");
 
-  const { calendars } = await listGoogleCalendarsForConnection(provisional);
-  const selected = pickDefaultCalendar(calendars);
+  const { connection: calendarConnection, calendar: selected } = await ensureStrataGoogleCalendar(
+    provisional,
+    existingConfig
+  );
 
   const connected = await upsertUserIntegrationConnection({
     businessId: input.businessId,
@@ -347,16 +400,16 @@ export async function connectGoogleCalendarUser(input: {
     provider: GOOGLE_CALENDAR_PROVIDER,
     status: "connected",
     displayName: "Google Calendar",
-    accessToken: readConnectionAccessToken(provisional),
-    refreshToken: readConnectionRefreshToken(provisional),
-    tokenExpiresAt: provisional.tokenExpiresAt ? new Date(provisional.tokenExpiresAt) : null,
+    accessToken: readConnectionAccessToken(calendarConnection),
+    refreshToken: readConnectionRefreshToken(calendarConnection),
+    tokenExpiresAt: calendarConnection.tokenExpiresAt ? new Date(calendarConnection.tokenExpiresAt) : null,
     config: {
-      selectedCalendarId: selected?.id ?? null,
-      selectedCalendarSummary: selected?.summary ?? null,
-      selectedCalendarTimeZone: selected?.timeZone ?? null,
+      selectedCalendarId: selected.id,
+      selectedCalendarSummary: selected.summary,
+      selectedCalendarTimeZone: selected.timeZone ?? null,
     },
-    scopes: JSON.parse(provisional.scopes ?? "[]") as string[],
-    connectedAt: provisional.connectedAt ?? new Date(),
+    scopes: JSON.parse(calendarConnection.scopes ?? "[]") as string[],
+    connectedAt: calendarConnection.connectedAt ?? new Date(),
     disconnectedAt: null,
     lastError: null,
     actionRequired: null,
@@ -370,8 +423,8 @@ export async function connectGoogleCalendarUser(input: {
     userId: input.userId,
     metadata: {
       connectionId: connected.id,
-      selectedCalendarId: selected?.id ?? null,
-      selectedCalendarSummary: selected?.summary ?? null,
+      selectedCalendarId: selected.id,
+      selectedCalendarSummary: selected.summary,
     },
   });
 
@@ -388,11 +441,11 @@ export async function selectGoogleCalendarForUser(input: {
     throw new BadRequestError("Google Calendar is not connected for this user.");
   }
 
-  const { connection, calendars } = await listGoogleCalendarsForConnection(existing);
-  const selected = calendars.find((calendar) => calendar.id === input.calendarId);
-  if (!selected) {
+  const config = readConnectionConfig<GoogleCalendarConnectionConfig>(existing);
+  if (!config?.selectedCalendarId || config.selectedCalendarId !== input.calendarId) {
     throw new BadRequestError("Selected Google Calendar was not found or is not writable.");
   }
+  const { connection, calendar: selected } = await ensureStrataGoogleCalendar(existing, config);
 
   const currentConfig = readConnectionConfig<GoogleCalendarConnectionConfig>(connection) ?? {};
   const updated = await upsertUserIntegrationConnection({
