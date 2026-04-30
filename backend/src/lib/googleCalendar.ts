@@ -826,6 +826,20 @@ async function recordGoogleCalendarConnectionFailure(connectionId: string, error
     .where(eq(integrationConnections.id, connectionId));
 }
 
+function runQueuedGoogleCalendarJobSoon(job: IntegrationJobRecord | null) {
+  if (!job || (job.status !== "pending" && job.status !== "failed")) return;
+  setTimeout(() => {
+    void runGoogleCalendarIntegrationJob(job).catch((error) => {
+      logger.warn("Google Calendar immediate job run failed", {
+        businessId: job.businessId,
+        jobId: job.id,
+        jobType: job.jobType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, 0);
+}
+
 export async function enqueueGoogleCalendarAppointmentSync(input: {
   businessId: string;
   appointmentId: string;
@@ -833,7 +847,7 @@ export async function enqueueGoogleCalendarAppointmentSync(input: {
   updatedAt: Date;
   createdByUserId?: string | null;
 }) {
-  return enqueueIntegrationJob({
+  const job = await enqueueIntegrationJob({
     businessId: input.businessId,
     provider: GOOGLE_CALENDAR_PROVIDER,
     connectionId: input.connectionId,
@@ -842,6 +856,8 @@ export async function enqueueGoogleCalendarAppointmentSync(input: {
     payload: { appointmentId: input.appointmentId },
     createdByUserId: input.createdByUserId ?? null,
   });
+  runQueuedGoogleCalendarJobSoon(job);
+  return job;
 }
 
 export async function enqueueGoogleCalendarAppointmentRemoval(input: {
@@ -851,7 +867,7 @@ export async function enqueueGoogleCalendarAppointmentRemoval(input: {
   updatedAt: Date;
   createdByUserId?: string | null;
 }) {
-  return enqueueIntegrationJob({
+  const job = await enqueueIntegrationJob({
     businessId: input.businessId,
     provider: GOOGLE_CALENDAR_PROVIDER,
     connectionId: input.connectionId,
@@ -860,6 +876,8 @@ export async function enqueueGoogleCalendarAppointmentRemoval(input: {
     payload: { appointmentId: input.appointmentId },
     createdByUserId: input.createdByUserId ?? null,
   });
+  runQueuedGoogleCalendarJobSoon(job);
+  return job;
 }
 
 export async function scheduleGoogleCalendarAppointmentSync(input: {
@@ -960,6 +978,9 @@ export async function enqueueGoogleCalendarFullResync(input: {
       })
     )
   );
+  for (const job of queued) {
+    runQueuedGoogleCalendarJobSoon(job);
+  }
 
   await createIntegrationAuditLog({
     businessId: input.businessId,
