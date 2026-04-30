@@ -54,7 +54,9 @@ import {
   buildSlotsForDate,
   formatDateKeyInTimeZone,
   normalizeBookingDayIndexes,
+  normalizeBookingDailyHours,
   normalizeBookingServiceMode,
+  parseBookingDailyHours,
   parseDateKeyInTimeZone,
   parseOperatingHours,
   parseTimeToMinutes,
@@ -65,6 +67,7 @@ import {
   toBookingDurationMinutes,
   toBookingLeadTimeHours,
   toBookingWindowDays,
+  type BookingDailyHoursEntry,
   type BookingDefaultFlow,
 } from "../lib/booking.js";
 import {
@@ -159,6 +162,18 @@ const bookingBrandLogoTransformSchema = z
   .nullable()
   .optional();
 
+const bookingDailyHoursSchema = z
+  .array(
+    z.object({
+      dayIndex: z.number().int().min(0).max(6),
+      enabled: z.boolean(),
+      openTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
+      closeTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
+    })
+  )
+  .max(7)
+  .optional();
+
 const createSchema = z.object({
   name: z.string().min(1),
   type: z.enum([
@@ -245,6 +260,7 @@ const createSchema = z.object({
   bookingAvailableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   bookingAvailableStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
   bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  bookingDailyHours: bookingDailyHoursSchema,
   bookingBlackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(90).optional(),
   bookingSlotIntervalMinutes: z.number().int().min(15).max(120).optional(),
   bookingBufferMinutes: z.number().int().min(0).max(240).nullable().optional(),
@@ -677,6 +693,25 @@ function normalizeBlackoutDates(raw: string | null | undefined): Set<string> {
   return new Set(
     parseStoredStringArray(raw).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
   );
+}
+
+function serializeBookingDailyHoursForStorage(value: unknown): string | null {
+  const normalized = normalizeBookingDailyHours(value);
+  return normalized.length > 0 ? JSON.stringify(normalized) : null;
+}
+
+function assertBookingDailyHoursValid(value: unknown): void {
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as { enabled?: unknown; openTime?: unknown; closeTime?: unknown };
+    if (entry.enabled !== true) continue;
+    const openMinutes = typeof entry.openTime === "string" ? parseTimeToMinutes(entry.openTime) : null;
+    const closeMinutes = typeof entry.closeTime === "string" ? parseTimeToMinutes(entry.closeTime) : null;
+    if (openMinutes == null || closeMinutes == null || closeMinutes <= openMinutes) {
+      throw new BadRequestError("Each enabled booking day needs an opening time before its closing time.");
+    }
+  }
 }
 
 type BookingDraftRecord = typeof bookingDrafts.$inferSelect;
@@ -1329,6 +1364,7 @@ function resolveBookingSchedule(business: {
   bookingAvailableDays?: string | null;
   bookingAvailableStartTime?: string | null;
   bookingAvailableEndTime?: string | null;
+  bookingDailyHours?: string | null;
   bookingBlackoutDates?: string | null;
   bookingSlotIntervalMinutes?: number | null;
   bookingBufferMinutes?: number | null;
@@ -1349,6 +1385,7 @@ function resolveBookingSchedule(business: {
     availableDayIndexes: dayIndexes,
     openTime,
     closeTime,
+    dailyHours: parseBookingDailyHours(business.bookingDailyHours),
     incrementMinutes: Math.max(15, Math.min(Number(business.bookingSlotIntervalMinutes ?? 15), 120)),
     bufferMinutes: Math.max(
       0,
@@ -1902,16 +1939,22 @@ function minutesToTimeValue(value: number): string {
 
 function resolvePublicBookingAvailabilityDefaults(business: Pick<
   BusinessRecord,
-  "operatingHours" | "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime"
+  "operatingHours" | "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours" | "bookingBlackoutDates"
 >) {
   const bookingSchedule = resolveBookingSchedule(business);
   const parsedOperatingHours = parseOperatingHours(business.operatingHours);
+  const dailyHours = bookingSchedule.dailyHours;
   return {
     dayIndexes:
+      (dailyHours.length > 0
+        ? dailyHours.filter((entry) => entry.enabled).map((entry) => entry.dayIndex).sort((left, right) => left - right)
+        : null) ??
       sortedDayIndexes(bookingSchedule.availableDayIndexes) ??
       Array.from(parsedOperatingHours.dayIndexes).sort((left, right) => left - right),
     openTime: bookingSchedule.openTime ?? minutesToTimeValue(parsedOperatingHours.openMinutes),
     closeTime: bookingSchedule.closeTime ?? minutesToTimeValue(parsedOperatingHours.closeMinutes),
+    dailyHours,
+    blackoutDates: Array.from(bookingSchedule.blackoutDates).sort(),
   };
 }
 
@@ -1997,6 +2040,8 @@ type PublicBookingConfigPayload = {
     dayIndexes: number[];
     openTime: string | null;
     closeTime: string | null;
+    dailyHours: BookingDailyHoursEntry[];
+    blackoutDates: string[];
   };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: Array<{
@@ -2086,6 +2131,8 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingAvailableDays"
     | "bookingAvailableStartTime"
     | "bookingAvailableEndTime"
+    | "bookingDailyHours"
+    | "bookingBlackoutDates"
   > & { updatedAt?: Date | null };
   services: PublicBookingConfigPayload["services"];
   locations: PublicBookingConfigPayload["locations"];
@@ -3259,6 +3306,7 @@ async function assertBookableRequestSlot(params: {
     availableDayIndexes: params.selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
     openTime: params.selection.openTime ?? bookingSchedule.openTime,
     closeTime: params.selection.closeTime ?? bookingSchedule.closeTime,
+    dailyHours: bookingSchedule.dailyHours,
     timezone: bookingTimezone,
     now: new Date(),
   }).filter((slotStart) =>
@@ -3375,6 +3423,7 @@ function coerceBusinessRecord(
     bookingAvailableDays: record.bookingAvailableDays ?? null,
     bookingAvailableStartTime: record.bookingAvailableStartTime ?? null,
     bookingAvailableEndTime: record.bookingAvailableEndTime ?? null,
+    bookingDailyHours: record.bookingDailyHours ?? null,
     bookingBlackoutDates: record.bookingBlackoutDates ?? null,
     bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
@@ -3464,6 +3513,7 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingAvailableDays: parseStoredNumberArray(record.bookingAvailableDays),
     bookingAvailableStartTime: record.bookingAvailableStartTime ?? null,
     bookingAvailableEndTime: record.bookingAvailableEndTime ?? null,
+    bookingDailyHours: parseBookingDailyHours(record.bookingDailyHours),
     bookingBlackoutDates: parseStoredStringArray(record.bookingBlackoutDates),
     bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
@@ -3565,6 +3615,7 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS booking_available_days text,
           ADD COLUMN IF NOT EXISTS booking_available_start_time text,
           ADD COLUMN IF NOT EXISTS booking_available_end_time text,
+          ADD COLUMN IF NOT EXISTS booking_daily_hours text,
           ADD COLUMN IF NOT EXISTS booking_blackout_dates text,
           ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15,
           ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer,
@@ -4311,6 +4362,7 @@ businessesRouter.get(
       availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
       openTime: selection.openTime ?? bookingSchedule.openTime,
       closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      dailyHours: bookingSchedule.dailyHours,
       timezone: bookingTimezone,
       now: new Date(),
     }).filter((slotStart) =>
@@ -4448,6 +4500,30 @@ businessesRouter.post(
     if (selection.effectiveFlow === "request") {
       if (!requestedDate) {
         throw new BadRequestError("Choose the day you want so the shop can review your request.");
+      }
+      const requestedDateValue = parsePublicBookingDate(requestedDate, bookingTimezone);
+      const bookingSchedule = resolveBookingSchedule(business);
+      if (bookingSchedule.blackoutDates.has(toDateKey(requestedDateValue, bookingTimezone))) {
+        throw new BadRequestError("This date is unavailable for online booking.");
+      }
+      const requestDaySlots = buildSlotsForDate({
+        date: requestedDateValue,
+        operatingHours: business.operatingHours,
+        durationMinutes: selection.durationMinutes,
+        leadTimeHours: selection.leadTimeHours,
+        incrementMinutes: bookingSchedule.incrementMinutes,
+        availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
+        openTime: selection.openTime ?? bookingSchedule.openTime,
+        closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+        dailyHours: bookingSchedule.dailyHours,
+        timezone: bookingTimezone,
+        now: new Date(),
+      });
+      if (requestDaySlots.length === 0) {
+        throw new BadRequestError("This date is unavailable for online booking.");
+      }
+      if (requestedTimeStart && !requestDaySlots.some((slot) => slot.getTime() === requestedTimeStart.getTime())) {
+        throw new BadRequestError("Choose an available time inside the shop's booking hours.");
       }
       if (requestPolicy.requireExactTime || !requestPolicy.allowTimeWindows) {
         if (!requestedTimeStart) {
@@ -4851,6 +4927,7 @@ businessesRouter.post(
       availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
       openTime: selection.openTime ?? bookingSchedule.openTime,
       closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      dailyHours: bookingSchedule.dailyHours,
       timezone: bookingTimezone,
       now: new Date(),
     }).filter((slotStart) =>
@@ -5268,6 +5345,7 @@ businessesRouter.get(
       availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
       openTime: selection.openTime ?? bookingSchedule.openTime,
       closeTime: selection.closeTime ?? bookingSchedule.closeTime,
+      dailyHours: bookingSchedule.dailyHours,
       timezone: bookingTimezone,
       now: new Date(),
     })
@@ -6608,6 +6686,7 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
   ) {
     throw new BadRequestError("Booking start and end times cannot be the same.");
   }
+  assertBookingDailyHoursValid(parsed.data.bookingDailyHours);
   if (parsed.data.integrationWebhookEnabled && !parsed.data.integrationWebhookUrl?.trim()) {
     throw new BadRequestError("Add a webhook endpoint URL before enabling signed webhooks.");
   }
@@ -6705,6 +6784,10 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
         parsed.data.bookingAvailableDays !== undefined ? JSON.stringify(parsed.data.bookingAvailableDays) : null,
       bookingAvailableStartTime: parsed.data.bookingAvailableStartTime ?? null,
       bookingAvailableEndTime: parsed.data.bookingAvailableEndTime ?? null,
+      bookingDailyHours:
+        parsed.data.bookingDailyHours !== undefined
+          ? serializeBookingDailyHoursForStorage(parsed.data.bookingDailyHours)
+          : null,
       bookingBlackoutDates:
         parsed.data.bookingBlackoutDates !== undefined ? JSON.stringify(parsed.data.bookingBlackoutDates) : null,
       bookingSlotIntervalMinutes: parsed.data.bookingSlotIntervalMinutes ?? 15,
@@ -6995,6 +7078,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   if (parsed.data.bookingAvailableEndTime !== undefined) {
     updates.bookingAvailableEndTime = parsed.data.bookingAvailableEndTime ?? null;
   }
+  if (parsed.data.bookingDailyHours !== undefined) {
+    updates.bookingDailyHours = serializeBookingDailyHoursForStorage(parsed.data.bookingDailyHours);
+  }
   if (parsed.data.bookingBlackoutDates !== undefined) {
     updates.bookingBlackoutDates = JSON.stringify(parsed.data.bookingBlackoutDates ?? []);
   }
@@ -7074,6 +7160,7 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   ) {
     throw new BadRequestError("Booking start and end times cannot be the same.");
   }
+  assertBookingDailyHoursValid(parsed.data.bookingDailyHours);
   const nextWebhookEnabled = parsed.data.integrationWebhookEnabled ?? existing.integrationWebhookEnabled ?? false;
   const nextWebhookUrl =
     parsed.data.integrationWebhookUrl !== undefined
