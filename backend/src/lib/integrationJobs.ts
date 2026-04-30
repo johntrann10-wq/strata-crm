@@ -13,6 +13,30 @@ export type IntegrationJobRecord = typeof integrationJobs.$inferSelect;
 
 type SerializablePayload = Record<string, unknown>;
 
+function mapClaimedIntegrationJobRow(row: Record<string, unknown>): IntegrationJobRecord {
+  return {
+    id: String(row.id),
+    businessId: String(row.business_id),
+    connectionId: row.connection_id ? String(row.connection_id) : null,
+    provider: row.provider as IntegrationJobRecord["provider"],
+    jobType: String(row.job_type),
+    payload: String(row.payload ?? "{}"),
+    idempotencyKey: String(row.idempotency_key),
+    status: row.status as IntegrationJobRecord["status"],
+    attemptCount: Number(row.attempt_count ?? 0),
+    maxAttempts: Number(row.max_attempts ?? 5),
+    nextRunAt: row.next_run_at as Date,
+    lastAttemptAt: (row.last_attempt_at as Date | null) ?? null,
+    lockedAt: (row.locked_at as Date | null) ?? null,
+    lockedBy: row.locked_by ? String(row.locked_by) : null,
+    lastError: row.last_error ? String(row.last_error) : null,
+    deadLetteredAt: (row.dead_lettered_at as Date | null) ?? null,
+    createdByUserId: row.created_by_user_id ? String(row.created_by_user_id) : null,
+    createdAt: row.created_at as Date,
+    updatedAt: row.updated_at as Date,
+  };
+}
+
 export async function enqueueIntegrationJob(input: {
   businessId: string;
   provider: IntegrationProvider;
@@ -123,7 +147,7 @@ export async function claimDueIntegrationJobs(limit: number, workerId: string) {
     where jobs.id = due_jobs.id
     returning jobs.*;
   `);
-  return result.rows as IntegrationJobRecord[];
+  return result.rows.map((row) => mapClaimedIntegrationJobRow(row as Record<string, unknown>));
 }
 
 export async function markIntegrationJobSucceeded(jobId: string, requestSnapshot?: SerializablePayload, responseSnapshot?: SerializablePayload) {
@@ -205,4 +229,3 @@ export async function markIntegrationJobFailed(
     error: message,
   });
 }
-
