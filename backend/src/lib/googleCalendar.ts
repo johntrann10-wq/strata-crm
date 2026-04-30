@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   appointments,
@@ -626,10 +626,24 @@ function addDefaultDuration(startTime: Date) {
   return new Date(startTime.getTime() + 60 * 60 * 1000);
 }
 
+function parseCalendarBlockNote(internalNotes: string | null | undefined) {
+  const lines = String(internalNotes ?? "").split(/\r?\n/);
+  const firstLine = lines[0]?.trim();
+  if (!firstLine?.startsWith(CALENDAR_BLOCK_PREFIX)) return null;
+  const note = lines.slice(1).join("\n").trim();
+  return note || null;
+}
+
+function isCalendarBlockAppointment(appointment: Pick<AppointmentCalendarProjection, "internalNotes">) {
+  return String(appointment.internalNotes ?? "").trim().startsWith(CALENDAR_BLOCK_PREFIX);
+}
+
 function buildAppointmentEventPayload(
   appointment: AppointmentCalendarProjection,
   connectionId: string
 ): GoogleCalendarEventPayload {
+  const isBlock = isCalendarBlockAppointment(appointment);
+  const blockNote = isBlock ? parseCalendarBlockNote(appointment.internalNotes) : null;
   const vehicleLabel = buildVehicleDisplayName({
     year: appointment.vehicleYear,
     make: appointment.vehicleMake,
@@ -639,18 +653,25 @@ function buildAppointmentEventPayload(
   const clientLabel = [appointment.clientFirstName, appointment.clientLastName].filter(Boolean).join(" ").trim();
   const summary =
     appointment.title?.trim() ||
+    (isBlock ? blockNote?.split(/\r?\n/, 1)[0]?.trim() : null) ||
     [clientLabel || null, vehicleLabel || null].filter(Boolean).join(" • ") ||
-    "Service appointment";
+    (isBlock ? "Blocked time" : "Service appointment");
 
-  const lines = [
-    `Status: ${String(appointment.status ?? "scheduled").replace(/_/g, " ")}`,
-    appointment.jobPhase ? `Job phase: ${appointment.jobPhase.replace(/_/g, " ")}` : null,
-    clientLabel ? `Client: ${clientLabel}` : null,
-    vehicleLabel ? `Vehicle: ${vehicleLabel}` : null,
-    appointment.locationName ? `Location: ${appointment.locationName}` : null,
-    appointment.locationAddress ? `Address: ${appointment.locationAddress}` : null,
-    appointment.notes?.trim() ? `Notes: ${appointment.notes.trim()}` : null,
-  ].filter(Boolean);
+  const lines = isBlock
+    ? [
+        "Type: Blocked time",
+        `Status: ${String(appointment.status ?? "scheduled").replace(/_/g, " ")}`,
+        blockNote ? `Note: ${blockNote}` : null,
+      ].filter(Boolean)
+    : [
+        `Status: ${String(appointment.status ?? "scheduled").replace(/_/g, " ")}`,
+        appointment.jobPhase ? `Job phase: ${appointment.jobPhase.replace(/_/g, " ")}` : null,
+        clientLabel ? `Client: ${clientLabel}` : null,
+        vehicleLabel ? `Vehicle: ${vehicleLabel}` : null,
+        appointment.locationName ? `Location: ${appointment.locationName}` : null,
+        appointment.locationAddress ? `Address: ${appointment.locationAddress}` : null,
+        appointment.notes?.trim() ? `Notes: ${appointment.notes.trim()}` : null,
+      ].filter(Boolean);
 
   const endTime =
     appointment.endTime ??
@@ -709,12 +730,8 @@ export async function syncAppointmentToGoogleCalendar(businessId: string, connec
 
   const appointment = await loadAppointmentProjection(businessId, appointmentId);
   if (!appointment) throw new BadRequestError("Appointment not found for Google Calendar sync.");
-  if (!appointment.staffUserId || appointment.staffUserId !== connection.userId) return { skipped: true };
+  if (appointment.staffUserId && appointment.staffUserId !== connection.userId) return { skipped: true };
   if (String(appointment.status ?? "").toLowerCase() === "cancelled") {
-    await removeAppointmentFromGoogleCalendar(businessId, connectionId, appointmentId);
-    return { skipped: false, removed: true };
-  }
-  if (String(appointment.internalNotes ?? "").trim().startsWith(CALENDAR_BLOCK_PREFIX)) {
     await removeAppointmentFromGoogleCalendar(businessId, connectionId, appointmentId);
     return { skipped: false, removed: true };
   }
@@ -944,7 +961,7 @@ export async function scheduleGoogleCalendarAppointmentSync(input: {
   if (!appointment) return { queuedSyncJobs: 0, queuedRemovalJobs: 0 };
 
   const existingLinks = await listAppointmentSyncLinks(input.businessId, input.appointmentId);
-  const targetUserId = appointment.staffUserId;
+  const targetUserId = appointment.staffUserId ?? input.createdByUserId ?? null;
   const targetConnection =
     targetUserId != null
       ? await getUserIntegrationConnection(input.businessId, targetUserId, GOOGLE_CALENDAR_PROVIDER)
@@ -955,8 +972,7 @@ export async function scheduleGoogleCalendarAppointmentSync(input: {
     targetConnection.status === "connected" &&
     targetConnection.featureEnabled &&
     !!targetConfig?.selectedCalendarId &&
-    String(appointment.status ?? "").toLowerCase() !== "cancelled" &&
-    !String(appointment.internalNotes ?? "").trim().startsWith(CALENDAR_BLOCK_PREFIX);
+    String(appointment.status ?? "").toLowerCase() !== "cancelled";
 
   let queuedSyncJobs = 0;
   let queuedRemovalJobs = 0;
@@ -1009,14 +1025,18 @@ export async function enqueueGoogleCalendarFullResync(input: {
     .from(staff)
     .where(and(eq(staff.businessId, input.businessId), eq(staff.userId, input.userId)));
   const staffIds = staffRows.map((row) => row.id);
-  if (staffIds.length === 0) {
-    return { queuedJobs: 0, appointments: 0 };
-  }
 
   const appointmentRows = await db
     .select({ id: appointments.id })
     .from(appointments)
-    .where(and(eq(appointments.businessId, input.businessId), inArray(appointments.assignedStaffId, staffIds)));
+    .where(
+      and(
+        eq(appointments.businessId, input.businessId),
+        staffIds.length > 0
+          ? or(inArray(appointments.assignedStaffId, staffIds), isNull(appointments.assignedStaffId))
+          : isNull(appointments.assignedStaffId)
+      )
+    );
 
   const queued = await Promise.all(
     appointmentRows.map((row) =>
