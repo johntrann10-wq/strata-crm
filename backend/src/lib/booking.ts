@@ -204,6 +204,71 @@ export function parseBookingDailyHours(raw: string | null | undefined): BookingD
   }
 }
 
+function toDateKeyFromParts(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function toDateKeyFromUtcDate(date: Date): string {
+  return toDateKeyFromParts(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function observedDateKey(year: number, monthIndex: number, day: number): string {
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  const dayOfWeek = date.getUTCDay();
+  if (dayOfWeek === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } else if (dayOfWeek === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return toDateKeyFromUtcDate(date);
+}
+
+function nthWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number, occurrence: number): string {
+  const firstDay = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
+  const offset = (weekday - firstDay + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, 1 + offset + (occurrence - 1) * 7);
+}
+
+function lastWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number): string {
+  const lastDate = new Date(Date.UTC(year, monthIndex + 1, 0));
+  const offset = (lastDate.getUTCDay() - weekday + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, lastDate.getUTCDate() - offset);
+}
+
+export function getUsHolidayDateKeys(year: number): Set<string> {
+  const holidays = new Set<string>();
+  const addFixed = (monthIndex: number, day: number) => {
+    holidays.add(toDateKeyFromParts(year, monthIndex, day));
+    holidays.add(observedDateKey(year, monthIndex, day));
+  };
+
+  addFixed(0, 1); // New Year's Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 0, 1, 3)); // Martin Luther King Jr. Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 1, 1, 3)); // Presidents Day
+  holidays.add(lastWeekdayOfMonthDateKey(year, 4, 1)); // Memorial Day
+  addFixed(5, 19); // Juneteenth
+  addFixed(6, 4); // Independence Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 8, 1, 1)); // Labor Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 9, 1, 2)); // Columbus Day / Indigenous Peoples' Day
+  addFixed(10, 11); // Veterans Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 10, 4, 4)); // Thanksgiving Day
+  addFixed(11, 25); // Christmas Day
+
+  return holidays;
+}
+
+export function isUsHolidayDateKey(value: string): boolean {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  if (!Number.isInteger(year)) return false;
+  return (
+    getUsHolidayDateKeys(year).has(value) ||
+    getUsHolidayDateKeys(year - 1).has(value) ||
+    getUsHolidayDateKeys(year + 1).has(value)
+  );
+}
+
 function getTimeZoneParts(date: Date, timezone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,

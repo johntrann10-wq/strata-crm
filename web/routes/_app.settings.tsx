@@ -2661,6 +2661,7 @@ export default function SettingsPage() {
           closeTime: entry.enabled ? entry.closeTime : null,
         })),
         bookingBlackoutDates: parseBookingBlackoutDatesText(formData.bookingBlackoutDatesText),
+        bookingClosedOnUsHolidays: formData.bookingClosedOnUsHolidays,
       });
       toast.success("Settings saved successfully.");
     } catch (error: any) {
@@ -3180,19 +3181,34 @@ export default function SettingsPage() {
 	                      </p>
 	                    </div>
 
-	                    <div className="space-y-1.5">
-	                      <Label htmlFor="bookingBlackoutDatesText">Closed dates</Label>
-	                      <textarea
-	                        id="bookingBlackoutDatesText"
-	                        className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40"
-	                        value={formData.bookingBlackoutDatesText}
-	                        onChange={(e) => handleFieldChange("bookingBlackoutDatesText", e.target.value)}
-	                        placeholder={"2026-07-04\n2026-12-25"}
-	                      />
-	                      <p className="text-xs leading-5 text-muted-foreground">
-	                        Add holidays or shop closure dates as YYYY-MM-DD, one per line. These dates are blocked from requests and instant booking.
-	                      </p>
-	                    </div>
+		                    <div className="space-y-3 rounded-2xl border bg-background/85 p-3">
+		                      <div className="flex min-h-11 items-center justify-between gap-3">
+		                        <div className="min-w-0">
+		                          <p className="text-sm font-semibold">Close on U.S. holidays</p>
+		                          <p className="text-xs leading-5 text-muted-foreground">
+		                            Automatically blocks major federal and observed holidays every year.
+		                          </p>
+		                        </div>
+		                        <Switch
+		                          checked={formData.bookingClosedOnUsHolidays}
+		                          onCheckedChange={(value) => handleFieldChange("bookingClosedOnUsHolidays", value)}
+		                        />
+		                      </div>
+		                    </div>
+
+		                    <div className="space-y-1.5">
+		                      <Label htmlFor="bookingBlackoutDatesText">Additional closed dates</Label>
+		                      <textarea
+		                        id="bookingBlackoutDatesText"
+		                        className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40"
+		                        value={formData.bookingBlackoutDatesText}
+		                        onChange={(e) => handleFieldChange("bookingBlackoutDatesText", e.target.value)}
+		                        placeholder={"2026-12-24\n2026-12-31"}
+		                      />
+		                      <p className="text-xs leading-5 text-muted-foreground">
+		                        Add shop-specific closures as YYYY-MM-DD, one per line. These dates are blocked from requests and instant booking.
+		                      </p>
+		                    </div>
 	                  </div>
                 </div>
 
