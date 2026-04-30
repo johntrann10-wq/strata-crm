@@ -1770,18 +1770,27 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!twilioConnection) {
-      setTwilioSettings(DEFAULT_TWILIO_SMS_SETTINGS);
+      setTwilioSettings((current) => ({
+        ...DEFAULT_TWILIO_SMS_SETTINGS,
+        accountSid: current.accountSid,
+        authToken: current.authToken,
+        messagingServiceSid: current.messagingServiceSid,
+        enabledTemplateSlugs:
+          current.enabledTemplateSlugs.length > 0
+            ? current.enabledTemplateSlugs
+            : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
+      }));
       return;
     }
-    setTwilioSettings({
+    setTwilioSettings((current) => ({
       accountSid: twilioConnection.configSummary.twilioAccountSid ?? "",
-      authToken: "",
+      authToken: current.authToken,
       messagingServiceSid: twilioConnection.configSummary.twilioMessagingServiceSid ?? "",
       enabledTemplateSlugs:
         twilioConnection.configSummary.twilioEnabledTemplateSlugs.length > 0
           ? (twilioConnection.configSummary.twilioEnabledTemplateSlugs as TwilioSmsSettingsForm["enabledTemplateSlugs"])
           : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
-    });
+    }));
   }, [twilioConnection]);
 
   useEffect(() => {
