@@ -1433,6 +1433,7 @@ export default function SettingsPage() {
     DEFAULT_INTEGRATION_SETTINGS
   );
   const [twilioSettings, setTwilioSettings] = useState<TwilioSmsSettingsForm>(DEFAULT_TWILIO_SMS_SETTINGS);
+  const [twilioTemplatesDirty, setTwilioTemplatesDirty] = useState(false);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -1787,11 +1788,13 @@ export default function SettingsPage() {
       authToken: current.authToken,
       messagingServiceSid: twilioConnection.configSummary.twilioMessagingServiceSid ?? "",
       enabledTemplateSlugs:
-        twilioConnection.configSummary.twilioEnabledTemplateSlugs.length > 0
-          ? (twilioConnection.configSummary.twilioEnabledTemplateSlugs as TwilioSmsSettingsForm["enabledTemplateSlugs"])
-          : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
+        twilioTemplatesDirty
+          ? current.enabledTemplateSlugs
+          : twilioConnection.configSummary.twilioEnabledTemplateSlugs.length > 0
+            ? (twilioConnection.configSummary.twilioEnabledTemplateSlugs as TwilioSmsSettingsForm["enabledTemplateSlugs"])
+            : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
     }));
-  }, [twilioConnection]);
+  }, [twilioConnection, twilioTemplatesDirty]);
 
   useEffect(() => {
     if (!canLoadIntegrationData) return;
@@ -2288,6 +2291,7 @@ export default function SettingsPage() {
     templateSlug: TwilioSmsSettingsForm["enabledTemplateSlugs"][number],
     enabled: boolean
   ) => {
+    setTwilioTemplatesDirty(true);
     setTwilioSettings((current) => {
       const next = new Set(current.enabledTemplateSlugs);
       if (enabled) {
@@ -2319,6 +2323,7 @@ export default function SettingsPage() {
       });
       await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
       setTwilioSettings((current) => ({ ...current, authToken: "" }));
+      setTwilioTemplatesDirty(false);
       toast.success(twilioConnectionIsActive ? "Twilio settings saved." : "Twilio SMS connected.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save Twilio SMS settings.");
@@ -2333,6 +2338,7 @@ export default function SettingsPage() {
       await api.integration.disconnectTwilio();
       await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
       setTwilioSettings(DEFAULT_TWILIO_SMS_SETTINGS);
+      setTwilioTemplatesDirty(false);
       toast.success("Twilio SMS disconnected.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not disconnect Twilio SMS.");
