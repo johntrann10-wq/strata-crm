@@ -20,6 +20,7 @@ export interface BusinessSettingsFormData {
   bookingAvailableEndTime: string;
   bookingDailyHours: BookingDailyHoursEntry[];
   bookingBlackoutDatesText: string;
+  bookingClosedOnUsHolidays: boolean;
 }
 
 export type BookingDailyHoursEntry = {
@@ -90,6 +91,7 @@ export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
   bookingAvailableEndTime: DEFAULT_BOOKING_CLOSE_TIME,
   bookingDailyHours: normalizeBookingDailyHours([]),
   bookingBlackoutDatesText: "",
+  bookingClosedOnUsHolidays: false,
 };
 
 type BusinessSettingsSource = Partial<BusinessSettingsFormData> | null | undefined;
@@ -129,6 +131,7 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
     bookingBlackoutDatesText: Array.isArray((source as { bookingBlackoutDates?: string[] | null })?.bookingBlackoutDates)
       ? ((source as { bookingBlackoutDates?: string[] | null }).bookingBlackoutDates ?? []).join("\n")
       : "",
+    bookingClosedOnUsHolidays: Boolean((source as { bookingClosedOnUsHolidays?: boolean | null })?.bookingClosedOnUsHolidays),
   };
 
   return {

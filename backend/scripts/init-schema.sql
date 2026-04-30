@@ -266,6 +266,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   booking_available_end_time text,
   booking_daily_hours text,
   booking_blackout_dates text,
+  booking_closed_on_us_holidays boolean DEFAULT false,
   booking_slot_interval_minutes integer DEFAULT 15,
   booking_buffer_minutes integer,
   booking_capacity_per_slot integer,
@@ -367,6 +368,7 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_start_time tex
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_end_time text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_daily_hours text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_blackout_dates text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_closed_on_us_holidays boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;

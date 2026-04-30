@@ -119,6 +119,7 @@ type BookingConfig = {
     closeTime: string | null;
     dailyHours?: BookingDailyHoursEntry[];
     blackoutDates?: string[];
+    closedOnUsHolidays?: boolean;
   };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: BookingService[];
@@ -449,12 +450,78 @@ function BookingDescription({
   );
 }
 
+function toDateKeyFromParts(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function toDateKeyFromUtcDate(date: Date): string {
+  return toDateKeyFromParts(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function observedDateKey(year: number, monthIndex: number, day: number): string {
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  const dayOfWeek = date.getUTCDay();
+  if (dayOfWeek === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } else if (dayOfWeek === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return toDateKeyFromUtcDate(date);
+}
+
+function nthWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number, occurrence: number): string {
+  const firstDay = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
+  const offset = (weekday - firstDay + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, 1 + offset + (occurrence - 1) * 7);
+}
+
+function lastWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number): string {
+  const lastDate = new Date(Date.UTC(year, monthIndex + 1, 0));
+  const offset = (lastDate.getUTCDay() - weekday + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, lastDate.getUTCDate() - offset);
+}
+
+function getUsHolidayDateKeys(year: number): Set<string> {
+  const holidays = new Set<string>();
+  const addFixed = (monthIndex: number, day: number) => {
+    holidays.add(toDateKeyFromParts(year, monthIndex, day));
+    holidays.add(observedDateKey(year, monthIndex, day));
+  };
+
+  addFixed(0, 1);
+  holidays.add(nthWeekdayOfMonthDateKey(year, 0, 1, 3));
+  holidays.add(nthWeekdayOfMonthDateKey(year, 1, 1, 3));
+  holidays.add(lastWeekdayOfMonthDateKey(year, 4, 1));
+  addFixed(5, 19);
+  addFixed(6, 4);
+  holidays.add(nthWeekdayOfMonthDateKey(year, 8, 1, 1));
+  holidays.add(nthWeekdayOfMonthDateKey(year, 9, 1, 2));
+  addFixed(10, 11);
+  holidays.add(nthWeekdayOfMonthDateKey(year, 10, 4, 4));
+  addFixed(11, 25);
+
+  return holidays;
+}
+
+function isUsHolidayDateKey(value: string): boolean {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  if (!Number.isInteger(year)) return false;
+  return (
+    getUsHolidayDateKeys(year).has(value) ||
+    getUsHolidayDateKeys(year - 1).has(value) ||
+    getUsHolidayDateKeys(year + 1).has(value)
+  );
+}
+
 function buildSuggestedBookingDates(params: {
   minDate: string;
   maxDate: string;
   allowedDayIndexes: number[] | null | undefined;
   dailyHours?: BookingDailyHoursEntry[] | null;
   blackoutDates?: string[] | null;
+  closedOnUsHolidays?: boolean;
   selectedDate: string;
   limit?: number;
 }) {
@@ -477,7 +544,12 @@ function buildSuggestedBookingDates(params: {
     const dateKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
     const dayHours = dailyHoursByDay.get(cursor.getDay());
     const dailyHoursAllowsDate = dayHours ? dayHours.enabled : true;
-    if ((!allowedDays || allowedDays.has(cursor.getDay())) && dailyHoursAllowsDate && !blackoutDates.has(dateKey)) {
+    if (
+      (!allowedDays || allowedDays.has(cursor.getDay())) &&
+      dailyHoursAllowsDate &&
+      !blackoutDates.has(dateKey) &&
+      !(params.closedOnUsHolidays && isUsHolidayDateKey(dateKey))
+    ) {
       results.push(dateKey);
     }
     cursor.setDate(cursor.getDate() + 1);
@@ -491,6 +563,7 @@ function buildSuggestedBookingDates(params: {
       selected.getTime() >= start.getTime() &&
       selected.getTime() <= end.getTime() &&
       !blackoutDates.has(params.selectedDate) &&
+      !(params.closedOnUsHolidays && isUsHolidayDateKey(params.selectedDate)) &&
       (selectedDayHours ? selectedDayHours.enabled : true)
     ) {
       results.unshift(params.selectedDate);
@@ -503,6 +576,7 @@ function buildSuggestedBookingDates(params: {
 function resolveAvailabilityWindowForDate(params: {
   date: string;
   dailyHours?: BookingDailyHoursEntry[] | null;
+  closedOnUsHolidays?: boolean;
   fallbackOpenTime: string | null | undefined;
   fallbackCloseTime: string | null | undefined;
 }) {
@@ -512,6 +586,13 @@ function resolveAvailabilityWindowForDate(params: {
       openTime: params.fallbackOpenTime ?? null,
       closeTime: params.fallbackCloseTime ?? null,
       closed: false,
+    };
+  }
+  if (params.closedOnUsHolidays && isUsHolidayDateKey(params.date)) {
+    return {
+      openTime: null,
+      closeTime: null,
+      closed: true,
     };
   }
   const dayHours = (params.dailyHours ?? []).find((entry) => entry.dayIndex === date.getDay()) ?? null;
@@ -1725,16 +1806,19 @@ export default function PublicBookingPage() {
     () => config?.availabilityDefaults?.blackoutDates ?? [],
     [config?.availabilityDefaults?.blackoutDates]
   );
+  const businessClosedOnUsHolidays = config?.availabilityDefaults?.closedOnUsHolidays ?? false;
   const selectedDayAvailabilityWindow = useMemo(
     () =>
       resolveAvailabilityWindowForDate({
         date: form.bookingDate,
         dailyHours: businessDailyHours,
+        closedOnUsHolidays: businessClosedOnUsHolidays,
         fallbackOpenTime: config?.availabilityDefaults?.openTime ?? null,
         fallbackCloseTime: config?.availabilityDefaults?.closeTime ?? null,
       }),
     [
       businessDailyHours,
+      businessClosedOnUsHolidays,
       config?.availabilityDefaults?.closeTime,
       config?.availabilityDefaults?.openTime,
       form.bookingDate,
@@ -1756,10 +1840,11 @@ export default function PublicBookingPage() {
         allowedDayIndexes: effectiveAvailabilityDayIndexes,
         dailyHours: businessDailyHours,
         blackoutDates: businessBlackoutDates,
+        closedOnUsHolidays: businessClosedOnUsHolidays,
         selectedDate: form.bookingDate,
         limit: 8,
       }),
-    [businessBlackoutDates, businessDailyHours, effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
+    [businessBlackoutDates, businessClosedOnUsHolidays, businessDailyHours, effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
   );
   const defaultBookingDate = suggestedBookingDates[0] ?? minBookingDate;
   const selectedScheduleDate =

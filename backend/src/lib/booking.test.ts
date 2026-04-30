@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSlotsForDate,
+  isUsHolidayDateKey,
   normalizeBookingDefaultFlow,
   normalizeBookingDayIndexes,
   normalizeBookingFlowType,
@@ -110,5 +111,13 @@ describe("booking helpers", () => {
     expect(toBookingBufferMinutes(-10)).toBe(0);
     expect(toBookingBufferMinutes(25)).toBe(25);
     expect(toBookingBufferMinutes(999)).toBe(240);
+  });
+
+  it("recognizes U.S. holidays and observed closure dates", () => {
+    expect(isUsHolidayDateKey("2026-07-04")).toBe(true);
+    expect(isUsHolidayDateKey("2026-07-03")).toBe(true);
+    expect(isUsHolidayDateKey("2021-12-31")).toBe(true);
+    expect(isUsHolidayDateKey("2026-11-26")).toBe(true);
+    expect(isUsHolidayDateKey("2026-11-27")).toBe(false);
   });
 });

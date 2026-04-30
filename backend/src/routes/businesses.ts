@@ -53,6 +53,7 @@ import {
   addDaysInTimeZone,
   buildSlotsForDate,
   formatDateKeyInTimeZone,
+  isUsHolidayDateKey,
   normalizeBookingDayIndexes,
   normalizeBookingDailyHours,
   normalizeBookingServiceMode,
@@ -262,6 +263,7 @@ const createSchema = z.object({
   bookingAvailableEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
   bookingDailyHours: bookingDailyHoursSchema,
   bookingBlackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(90).optional(),
+  bookingClosedOnUsHolidays: z.boolean().optional(),
   bookingSlotIntervalMinutes: z.number().int().min(15).max(120).optional(),
   bookingBufferMinutes: z.number().int().min(0).max(240).nullable().optional(),
   bookingCapacityPerSlot: z.number().int().min(1).max(12).nullable().optional(),
@@ -1366,6 +1368,7 @@ function resolveBookingSchedule(business: {
   bookingAvailableEndTime?: string | null;
   bookingDailyHours?: string | null;
   bookingBlackoutDates?: string | null;
+  bookingClosedOnUsHolidays?: boolean | null;
   bookingSlotIntervalMinutes?: number | null;
   bookingBufferMinutes?: number | null;
   appointmentBufferMinutes?: number | null;
@@ -1396,7 +1399,15 @@ function resolveBookingSchedule(business: {
       Math.min(Number(business.bookingCapacityPerSlot ?? business.calendarBlockCapacityPerSlot ?? 1), 12)
     ),
     blackoutDates: normalizeBlackoutDates(business.bookingBlackoutDates),
+    closedOnUsHolidays: business.bookingClosedOnUsHolidays ?? false,
   };
+}
+
+function isBookingDateClosed(
+  bookingSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "blackoutDates" | "closedOnUsHolidays">,
+  dateKey: string
+): boolean {
+  return bookingSchedule.blackoutDates.has(dateKey) || (bookingSchedule.closedOnUsHolidays && isUsHolidayDateKey(dateKey));
 }
 
 function normalizeLeadSourceValue(source: string | null | undefined): Parameters<typeof buildLeadNotes>[0]["source"] {
@@ -1939,7 +1950,7 @@ function minutesToTimeValue(value: number): string {
 
 function resolvePublicBookingAvailabilityDefaults(business: Pick<
   BusinessRecord,
-  "operatingHours" | "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours" | "bookingBlackoutDates"
+  "operatingHours" | "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours" | "bookingBlackoutDates" | "bookingClosedOnUsHolidays"
 >) {
   const bookingSchedule = resolveBookingSchedule(business);
   const parsedOperatingHours = parseOperatingHours(business.operatingHours);
@@ -1955,6 +1966,7 @@ function resolvePublicBookingAvailabilityDefaults(business: Pick<
     closeTime: bookingSchedule.closeTime ?? minutesToTimeValue(parsedOperatingHours.closeMinutes),
     dailyHours,
     blackoutDates: Array.from(bookingSchedule.blackoutDates).sort(),
+    closedOnUsHolidays: bookingSchedule.closedOnUsHolidays,
   };
 }
 
@@ -2042,6 +2054,7 @@ type PublicBookingConfigPayload = {
     closeTime: string | null;
     dailyHours: BookingDailyHoursEntry[];
     blackoutDates: string[];
+    closedOnUsHolidays: boolean;
   };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: Array<{
@@ -2133,6 +2146,7 @@ export function buildPublicBookingConfigResponse(params: {
     | "bookingAvailableEndTime"
     | "bookingDailyHours"
     | "bookingBlackoutDates"
+    | "bookingClosedOnUsHolidays"
   > & { updatedAt?: Date | null };
   services: PublicBookingConfigPayload["services"];
   locations: PublicBookingConfigPayload["locations"];
@@ -3273,7 +3287,7 @@ async function assertBookableRequestSlot(params: {
   }
 
   const bookingSchedule = resolveBookingSchedule(params.business);
-  if (bookingSchedule.blackoutDates.has(toDateKey(selectedDate, bookingTimezone))) {
+  if (isBookingDateClosed(bookingSchedule, toDateKey(selectedDate, bookingTimezone))) {
     throw new BadRequestError("This date is unavailable for online booking.");
   }
 
@@ -3425,6 +3439,7 @@ function coerceBusinessRecord(
     bookingAvailableEndTime: record.bookingAvailableEndTime ?? null,
     bookingDailyHours: record.bookingDailyHours ?? null,
     bookingBlackoutDates: record.bookingBlackoutDates ?? null,
+    bookingClosedOnUsHolidays: record.bookingClosedOnUsHolidays ?? false,
     bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
@@ -3515,6 +3530,7 @@ export function serializeBusiness(record: BusinessRecord) {
     bookingAvailableEndTime: record.bookingAvailableEndTime ?? null,
     bookingDailyHours: parseBookingDailyHours(record.bookingDailyHours),
     bookingBlackoutDates: parseStoredStringArray(record.bookingBlackoutDates),
+    bookingClosedOnUsHolidays: record.bookingClosedOnUsHolidays ?? false,
     bookingSlotIntervalMinutes: record.bookingSlotIntervalMinutes ?? 15,
     bookingBufferMinutes: record.bookingBufferMinutes ?? null,
     bookingCapacityPerSlot: record.bookingCapacityPerSlot ?? null,
@@ -3617,6 +3633,7 @@ async function ensureBusinessAutomationColumns(): Promise<void> {
           ADD COLUMN IF NOT EXISTS booking_available_end_time text,
           ADD COLUMN IF NOT EXISTS booking_daily_hours text,
           ADD COLUMN IF NOT EXISTS booking_blackout_dates text,
+          ADD COLUMN IF NOT EXISTS booking_closed_on_us_holidays boolean DEFAULT false,
           ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15,
           ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer,
           ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer,
@@ -4300,7 +4317,7 @@ businessesRouter.get(
       throw new BadRequestError("Choose a booking date inside the available window.");
     }
     const bookingSchedule = resolveBookingSchedule(business);
-    if (bookingSchedule.blackoutDates.has(toDateKey(date, bookingTimezone))) {
+    if (isBookingDateClosed(bookingSchedule, toDateKey(date, bookingTimezone))) {
       res.json({
         effectiveFlow: selection.effectiveFlow,
         serviceMode: requestedServiceMode,
@@ -4503,7 +4520,7 @@ businessesRouter.post(
       }
       const requestedDateValue = parsePublicBookingDate(requestedDate, bookingTimezone);
       const bookingSchedule = resolveBookingSchedule(business);
-      if (bookingSchedule.blackoutDates.has(toDateKey(requestedDateValue, bookingTimezone))) {
+      if (isBookingDateClosed(bookingSchedule, toDateKey(requestedDateValue, bookingTimezone))) {
         throw new BadRequestError("This date is unavailable for online booking.");
       }
       const requestDaySlots = buildSlotsForDate({
@@ -4894,7 +4911,7 @@ businessesRouter.post(
       throw new BadRequestError("Choose a booking date inside the available window.");
     }
     const bookingSchedule = resolveBookingSchedule(business);
-    if (bookingSchedule.blackoutDates.has(toDateKey(selectedDate, bookingTimezone))) {
+    if (isBookingDateClosed(bookingSchedule, toDateKey(selectedDate, bookingTimezone))) {
       throw new BadRequestError("This date is unavailable for online booking.");
     }
 
@@ -5307,7 +5324,7 @@ businessesRouter.get(
     }
 
     const bookingSchedule = resolveBookingSchedule(business);
-    if (bookingSchedule.blackoutDates.has(toDateKey(targetDate, bookingTimezone))) {
+    if (isBookingDateClosed(bookingSchedule, toDateKey(targetDate, bookingTimezone))) {
       res.json({
         date: toDateKey(targetDate, bookingTimezone),
         timezone: bookingTimezone,
@@ -6790,6 +6807,7 @@ businessesRouter.post("/", requireAuth, wrapAsync(async (req: Request, res: Resp
           : null,
       bookingBlackoutDates:
         parsed.data.bookingBlackoutDates !== undefined ? JSON.stringify(parsed.data.bookingBlackoutDates) : null,
+      bookingClosedOnUsHolidays: parsed.data.bookingClosedOnUsHolidays ?? false,
       bookingSlotIntervalMinutes: parsed.data.bookingSlotIntervalMinutes ?? 15,
       bookingBufferMinutes: parsed.data.bookingBufferMinutes ?? null,
       bookingCapacityPerSlot: parsed.data.bookingCapacityPerSlot ?? null,
@@ -7083,6 +7101,9 @@ businessesRouter.patch("/:id", requireAuth, wrapAsync(async (req: Request, res: 
   }
   if (parsed.data.bookingBlackoutDates !== undefined) {
     updates.bookingBlackoutDates = JSON.stringify(parsed.data.bookingBlackoutDates ?? []);
+  }
+  if (parsed.data.bookingClosedOnUsHolidays !== undefined) {
+    updates.bookingClosedOnUsHolidays = parsed.data.bookingClosedOnUsHolidays ?? false;
   }
   if (parsed.data.bookingSlotIntervalMinutes !== undefined) {
     updates.bookingSlotIntervalMinutes = parsed.data.bookingSlotIntervalMinutes ?? 15;
