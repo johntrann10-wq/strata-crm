@@ -4,6 +4,7 @@ import {
   buildQuickBooksAuthorizeUrl,
   createQuickBooksIntegrationStateToken,
   exchangeQuickBooksAuthorizationCode,
+  getQuickBooksApiBase,
   getQuickBooksFrontendReturnPath,
   getQuickBooksScope,
   isQuickBooksConfigured,
@@ -13,6 +14,7 @@ describe("quickbooks helpers", () => {
   const originalEnv = {
     QUICKBOOKS_CLIENT_ID: process.env.QUICKBOOKS_CLIENT_ID,
     QUICKBOOKS_CLIENT_SECRET: process.env.QUICKBOOKS_CLIENT_SECRET,
+    QUICKBOOKS_ENVIRONMENT: process.env.QUICKBOOKS_ENVIRONMENT,
     API_BASE: process.env.API_BASE,
     JWT_SECRET: process.env.JWT_SECRET,
   };
@@ -28,6 +30,7 @@ describe("quickbooks helpers", () => {
     vi.unstubAllGlobals();
     process.env.QUICKBOOKS_CLIENT_ID = originalEnv.QUICKBOOKS_CLIENT_ID;
     process.env.QUICKBOOKS_CLIENT_SECRET = originalEnv.QUICKBOOKS_CLIENT_SECRET;
+    process.env.QUICKBOOKS_ENVIRONMENT = originalEnv.QUICKBOOKS_ENVIRONMENT;
     process.env.API_BASE = originalEnv.API_BASE;
     process.env.JWT_SECRET = originalEnv.JWT_SECRET;
   });
@@ -90,5 +93,13 @@ describe("quickbooks helpers", () => {
     expect(isQuickBooksConfigured()).toBe(true);
     expect(getQuickBooksFrontendReturnPath("connected")).toBe("/settings?tab=integrations&quickbooks=connected");
     expect(getQuickBooksFrontendReturnPath("error", "Needs attention")).toContain("quickbooksMessage=Needs+attention");
+  });
+
+  it("uses the sandbox API base when QuickBooks is configured for sandbox", () => {
+    process.env.QUICKBOOKS_ENVIRONMENT = "sandbox";
+    expect(getQuickBooksApiBase()).toBe("https://sandbox-quickbooks.api.intuit.com/v3/company");
+
+    process.env.QUICKBOOKS_ENVIRONMENT = "production";
+    expect(getQuickBooksApiBase()).toBe("https://quickbooks.api.intuit.com/v3/company");
   });
 });
