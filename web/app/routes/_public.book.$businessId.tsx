@@ -82,6 +82,7 @@ type BookingService = {
   availableDayIndexes: number[] | null;
   openTime: string | null;
   closeTime: string | null;
+  dailyHours?: BookingDailyHoursEntry[] | null;
   addons: BookingAddon[];
 };
 
@@ -1792,15 +1793,23 @@ export default function PublicBookingPage() {
     [selectedService?.bookingWindowDays, selectedService?.leadTimeHours]
   );
   const effectiveAvailabilityDayIndexes = useMemo(
-    () => selectedService?.availableDayIndexes ?? config?.availabilityDefaults?.dayIndexes ?? null,
-    [config?.availabilityDefaults?.dayIndexes, selectedService?.availableDayIndexes]
-  );
-  const businessDailyHours = useMemo(
     () =>
-      selectedService?.openTime || selectedService?.closeTime
-        ? []
-        : config?.availabilityDefaults?.dailyHours ?? [],
-    [config?.availabilityDefaults?.dailyHours, selectedService?.closeTime, selectedService?.openTime]
+      selectedService?.dailyHours && selectedService.dailyHours.length > 0
+        ? selectedService.dailyHours
+            .filter((entry) => entry.enabled)
+            .map((entry) => entry.dayIndex)
+            .sort((left, right) => left - right)
+        : selectedService?.availableDayIndexes ?? config?.availabilityDefaults?.dayIndexes ?? null,
+    [config?.availabilityDefaults?.dayIndexes, selectedService?.availableDayIndexes, selectedService?.dailyHours]
+  );
+  const effectiveDailyHours = useMemo(
+    () =>
+      selectedService?.dailyHours && selectedService.dailyHours.length > 0
+        ? selectedService.dailyHours
+        : selectedService?.openTime || selectedService?.closeTime
+          ? []
+          : config?.availabilityDefaults?.dailyHours ?? [],
+    [config?.availabilityDefaults?.dailyHours, selectedService?.closeTime, selectedService?.dailyHours, selectedService?.openTime]
   );
   const businessBlackoutDates = useMemo(
     () => config?.availabilityDefaults?.blackoutDates ?? [],
@@ -1811,13 +1820,13 @@ export default function PublicBookingPage() {
     () =>
       resolveAvailabilityWindowForDate({
         date: form.bookingDate,
-        dailyHours: businessDailyHours,
+        dailyHours: effectiveDailyHours,
         closedOnUsHolidays: businessClosedOnUsHolidays,
         fallbackOpenTime: config?.availabilityDefaults?.openTime ?? null,
         fallbackCloseTime: config?.availabilityDefaults?.closeTime ?? null,
       }),
     [
-      businessDailyHours,
+      effectiveDailyHours,
       businessClosedOnUsHolidays,
       config?.availabilityDefaults?.closeTime,
       config?.availabilityDefaults?.openTime,
@@ -1838,13 +1847,13 @@ export default function PublicBookingPage() {
         minDate: minBookingDate,
         maxDate: maxBookingDate,
         allowedDayIndexes: effectiveAvailabilityDayIndexes,
-        dailyHours: businessDailyHours,
+        dailyHours: effectiveDailyHours,
         blackoutDates: businessBlackoutDates,
         closedOnUsHolidays: businessClosedOnUsHolidays,
         selectedDate: form.bookingDate,
         limit: 8,
       }),
-    [businessBlackoutDates, businessClosedOnUsHolidays, businessDailyHours, effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
+    [businessBlackoutDates, businessClosedOnUsHolidays, effectiveDailyHours, effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
   );
   const defaultBookingDate = suggestedBookingDates[0] ?? minBookingDate;
   const selectedScheduleDate =

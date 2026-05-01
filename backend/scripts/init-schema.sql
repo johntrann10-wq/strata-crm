@@ -542,6 +542,7 @@ CREATE TABLE IF NOT EXISTS services (
   booking_available_days text,
   booking_available_start_time text,
   booking_available_end_time text,
+  booking_daily_hours text,
   booking_buffer_minutes integer,
   booking_capacity_per_slot integer,
   booking_featured boolean DEFAULT false,
@@ -591,6 +592,7 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_service_mode text DEFAULT 
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_days text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_start_time text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_end_time text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_daily_hours text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_featured boolean DEFAULT false;

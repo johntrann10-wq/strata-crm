@@ -1867,6 +1867,7 @@ type PublicBookingServiceRecord = {
   bookingAvailableDays: string | null;
   bookingAvailableStartTime: string | null;
   bookingAvailableEndTime: string | null;
+  bookingDailyHours: string | null;
   bookingBufferMinutes: number | null;
   bookingCapacityPerSlot: number | null;
   bookingFeatured: boolean | null;
@@ -1973,10 +1974,24 @@ function resolvePublicBookingAvailabilityDefaults(business: Pick<
 function sanitizeServiceScheduleOverrides(
   service: Pick<
     PublicBookingServiceRecord,
-    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime"
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
   >,
-  businessSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "availableDayIndexes" | "openTime" | "closeTime">
+  businessSchedule: Pick<
+    ReturnType<typeof resolveBookingSchedule>,
+    "availableDayIndexes" | "openTime" | "closeTime" | "dailyHours"
+  >
 ) {
+  const rawDailyHours = parseBookingDailyHours(service.bookingDailyHours);
+  if (rawDailyHours.length > 0) {
+    const enabledDays = new Set(rawDailyHours.filter((entry) => entry.enabled).map((entry) => entry.dayIndex));
+    return {
+      availableDayIndexes: bookingDaySetsMatch(enabledDays, businessSchedule.availableDayIndexes) ? null : enabledDays,
+      openTime: null,
+      closeTime: null,
+      dailyHours: rawDailyHours,
+    };
+  }
+
   const rawDayIndexes = parseStoredServiceBookingDays(service.bookingAvailableDays);
   const rawOpenTime =
     parseTimeToMinutes(service.bookingAvailableStartTime ?? "") != null
@@ -1999,6 +2014,7 @@ function sanitizeServiceScheduleOverrides(
       availableDayIndexes: null,
       openTime: null,
       closeTime: null,
+      dailyHours: null,
     };
   }
 
@@ -2006,6 +2022,7 @@ function sanitizeServiceScheduleOverrides(
     availableDayIndexes: bookingDaySetsMatch(rawDayIndexes, businessSchedule.availableDayIndexes) ? null : rawDayIndexes,
     openTime: rawOpenTime && rawOpenTime === businessSchedule.openTime ? null : rawOpenTime,
     closeTime: rawCloseTime && rawCloseTime === businessSchedule.closeTime ? null : rawCloseTime,
+    dailyHours: null,
   };
 }
 
@@ -2086,6 +2103,7 @@ type PublicBookingConfigPayload = {
     availableDayIndexes: number[] | null;
     openTime: string | null;
     closeTime: string | null;
+    dailyHours?: BookingDailyHoursEntry[] | null;
     addons: Array<{
       id: string;
       name: string;
@@ -2265,6 +2283,7 @@ async function listPublicBookingServices(businessId: string): Promise<{
       bookingAvailableDays: columns.has("booking_available_days") ? services.bookingAvailableDays : sql<string | null>`null`,
       bookingAvailableStartTime: columns.has("booking_available_start_time") ? services.bookingAvailableStartTime : sql<string | null>`null`,
       bookingAvailableEndTime: columns.has("booking_available_end_time") ? services.bookingAvailableEndTime : sql<string | null>`null`,
+      bookingDailyHours: columns.has("booking_daily_hours") ? services.bookingDailyHours : sql<string | null>`null`,
       bookingBufferMinutes: columns.has("booking_buffer_minutes") ? services.bookingBufferMinutes : sql<number | null>`null`,
       bookingCapacityPerSlot: columns.has("booking_capacity_per_slot") ? services.bookingCapacityPerSlot : sql<number | null>`null`,
       bookingFeatured: columns.has("booking_featured") ? services.bookingFeatured : sql<boolean | null>`false`,
@@ -2352,7 +2371,7 @@ function normalizeRequestServiceMode(value: string | null | undefined): "in_shop
 
 function resolveBookingServicesSelection(params: {
   businessDefaultFlow: string | null | undefined;
-  businessSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "availableDayIndexes" | "openTime" | "closeTime">;
+  businessSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "availableDayIndexes" | "openTime" | "closeTime" | "dailyHours">;
   baseServiceId: string;
   addonServiceIds: string[];
   services: PublicBookingServiceRecord[];
@@ -2418,6 +2437,7 @@ function resolveBookingServicesSelection(params: {
     availableDayIndexes: serviceScheduleOverrides.availableDayIndexes,
     openTime: serviceScheduleOverrides.openTime,
     closeTime: serviceScheduleOverrides.closeTime,
+    dailyHours: serviceScheduleOverrides.dailyHours,
     slotCapacity:
       baseService.bookingCapacityPerSlot != null
         ? Math.max(1, Math.min(Number(baseService.bookingCapacityPerSlot ?? 1), 12))
@@ -2425,6 +2445,20 @@ function resolveBookingServicesSelection(params: {
     applyTax,
     title: baseService.name,
     serviceSummary: allServices.map((service) => service.name).join(", "),
+  };
+}
+
+function resolveSelectedBookingSchedule(
+  selection: Pick<ReturnType<typeof resolveBookingServicesSelection>, "availableDayIndexes" | "openTime" | "closeTime" | "dailyHours">,
+  bookingSchedule: Pick<ReturnType<typeof resolveBookingSchedule>, "availableDayIndexes" | "openTime" | "closeTime" | "dailyHours">
+) {
+  const dailyHours = selection.dailyHours ?? bookingSchedule.dailyHours;
+  const usesDailyHours = dailyHours.length > 0;
+  return {
+    availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
+    openTime: usesDailyHours ? null : selection.openTime ?? bookingSchedule.openTime,
+    closeTime: usesDailyHours ? null : selection.closeTime ?? bookingSchedule.closeTime,
+    dailyHours,
   };
 }
 
@@ -3311,16 +3345,17 @@ async function assertBookableRequestSlot(params: {
     .orderBy(asc(appointments.startTime));
 
   const slotCapacity = bookingSchedule.slotCapacity;
+  const selectedSchedule = resolveSelectedBookingSchedule(params.selection, bookingSchedule);
   const allowedSlots = buildSlotsForDate({
     date: selectedDate,
     operatingHours: params.business.operatingHours,
     durationMinutes: params.selection.durationMinutes,
     leadTimeHours: params.selection.leadTimeHours,
     incrementMinutes: bookingSchedule.incrementMinutes,
-    availableDayIndexes: params.selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
-    openTime: params.selection.openTime ?? bookingSchedule.openTime,
-    closeTime: params.selection.closeTime ?? bookingSchedule.closeTime,
-    dailyHours: bookingSchedule.dailyHours,
+    availableDayIndexes: selectedSchedule.availableDayIndexes,
+    openTime: selectedSchedule.openTime,
+    closeTime: selectedSchedule.closeTime,
+    dailyHours: selectedSchedule.dailyHours,
     timezone: bookingTimezone,
     now: new Date(),
   }).filter((slotStart) =>
@@ -4191,6 +4226,7 @@ businessesRouter.get(
           availableDayIndexes: sortedDayIndexes(serviceScheduleOverrides.availableDayIndexes),
           openTime: serviceScheduleOverrides.openTime,
           closeTime: serviceScheduleOverrides.closeTime,
+          dailyHours: serviceScheduleOverrides.dailyHours,
           addons: addonLinks
             .filter((link) => link.parentServiceId === service.id)
             .map((link) => publicServices.find((candidate) => candidate.id === link.addonServiceId))
@@ -4370,16 +4406,17 @@ businessesRouter.get(
       .orderBy(asc(appointments.startTime));
 
     const slotCapacity = bookingSchedule.slotCapacity;
+    const selectedSchedule = resolveSelectedBookingSchedule(selection, bookingSchedule);
     const slots = buildSlotsForDate({
       date,
       operatingHours: business.operatingHours,
       durationMinutes: selection.durationMinutes,
       leadTimeHours: selection.leadTimeHours,
       incrementMinutes: bookingSchedule.incrementMinutes,
-      availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
-      openTime: selection.openTime ?? bookingSchedule.openTime,
-      closeTime: selection.closeTime ?? bookingSchedule.closeTime,
-      dailyHours: bookingSchedule.dailyHours,
+      availableDayIndexes: selectedSchedule.availableDayIndexes,
+      openTime: selectedSchedule.openTime,
+      closeTime: selectedSchedule.closeTime,
+      dailyHours: selectedSchedule.dailyHours,
       timezone: bookingTimezone,
       now: new Date(),
     }).filter((slotStart) =>
@@ -4523,16 +4560,17 @@ businessesRouter.post(
       if (isBookingDateClosed(bookingSchedule, toDateKey(requestedDateValue, bookingTimezone))) {
         throw new BadRequestError("This date is unavailable for online booking.");
       }
+      const selectedSchedule = resolveSelectedBookingSchedule(selection, bookingSchedule);
       const requestDaySlots = buildSlotsForDate({
         date: requestedDateValue,
         operatingHours: business.operatingHours,
         durationMinutes: selection.durationMinutes,
         leadTimeHours: selection.leadTimeHours,
         incrementMinutes: bookingSchedule.incrementMinutes,
-        availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
-        openTime: selection.openTime ?? bookingSchedule.openTime,
-        closeTime: selection.closeTime ?? bookingSchedule.closeTime,
-        dailyHours: bookingSchedule.dailyHours,
+        availableDayIndexes: selectedSchedule.availableDayIndexes,
+        openTime: selectedSchedule.openTime,
+        closeTime: selectedSchedule.closeTime,
+        dailyHours: selectedSchedule.dailyHours,
         timezone: bookingTimezone,
         now: new Date(),
       });
@@ -4935,16 +4973,17 @@ businessesRouter.post(
       .orderBy(asc(appointments.startTime));
 
     const slotCapacity = bookingSchedule.slotCapacity;
+    const selectedSchedule = resolveSelectedBookingSchedule(selection, bookingSchedule);
     const allowedSlots = buildSlotsForDate({
       date: selectedDate,
       operatingHours: business.operatingHours,
       durationMinutes: selection.durationMinutes,
       leadTimeHours: selection.leadTimeHours,
       incrementMinutes: bookingSchedule.incrementMinutes,
-      availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
-      openTime: selection.openTime ?? bookingSchedule.openTime,
-      closeTime: selection.closeTime ?? bookingSchedule.closeTime,
-      dailyHours: bookingSchedule.dailyHours,
+      availableDayIndexes: selectedSchedule.availableDayIndexes,
+      openTime: selectedSchedule.openTime,
+      closeTime: selectedSchedule.closeTime,
+      dailyHours: selectedSchedule.dailyHours,
       timezone: bookingTimezone,
       now: new Date(),
     }).filter((slotStart) =>
@@ -5353,16 +5392,17 @@ businessesRouter.get(
       )
       .orderBy(asc(appointments.startTime));
 
+    const selectedSchedule = resolveSelectedBookingSchedule(selection, bookingSchedule);
     const candidateSlots = buildSlotsForDate({
       date: targetDate,
       operatingHours: business.operatingHours,
       durationMinutes: selection.durationMinutes,
       leadTimeHours: selection.leadTimeHours,
       incrementMinutes: bookingSchedule.incrementMinutes,
-      availableDayIndexes: selection.availableDayIndexes ?? bookingSchedule.availableDayIndexes,
-      openTime: selection.openTime ?? bookingSchedule.openTime,
-      closeTime: selection.closeTime ?? bookingSchedule.closeTime,
-      dailyHours: bookingSchedule.dailyHours,
+      availableDayIndexes: selectedSchedule.availableDayIndexes,
+      openTime: selectedSchedule.openTime,
+      closeTime: selectedSchedule.closeTime,
+      dailyHours: selectedSchedule.dailyHours,
       timezone: bookingTimezone,
       now: new Date(),
     })

@@ -63,6 +63,7 @@ import { toast } from "sonner";
 import { formatServiceCategory } from "../lib/serviceCatalog";
 import { QuarterHourDurationGrid } from "../components/appointments/SchedulingControls";
 import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
+import type { BookingDailyHoursEntry } from "../lib/businessSettingsForm";
 
 const UNCATEGORIZED_VALUE = "__uncategorized__";
 
@@ -89,6 +90,7 @@ type ServiceRecord = {
   bookingAvailableDays: number[] | null;
   bookingAvailableStartTime: string | null;
   bookingAvailableEndTime: string | null;
+  bookingDailyHours: BookingDailyHoursEntry[] | null;
   bookingBufferMinutes: number | null;
   bookingCapacityPerSlot: number | null;
   bookingFeatured: boolean | null;
@@ -120,6 +122,7 @@ type BusinessBookingSettings = {
   bookingAvailableDays: number[];
   bookingAvailableStartTime: string;
   bookingAvailableEndTime: string;
+  bookingDailyHours: BookingDailyHoursEntry[];
   bookingBlackoutDatesText: string;
   bookingSlotIntervalMinutes: number;
   bookingBufferMinutes: string;
@@ -160,6 +163,7 @@ type ServiceFormData = {
   bookingAvailableDays: number[];
   bookingAvailableStartTime: string;
   bookingAvailableEndTime: string;
+  bookingDailyHours: BookingDailyHoursEntry[];
   bookingBufferMinutes: string;
   bookingCapacityPerSlot: string;
   bookingFeatured: boolean;
@@ -185,6 +189,7 @@ const defaultServiceFormData: ServiceFormData = {
   bookingAvailableDays: [],
   bookingAvailableStartTime: "",
   bookingAvailableEndTime: "",
+  bookingDailyHours: [],
   bookingBufferMinutes: "",
   bookingCapacityPerSlot: "",
   bookingFeatured: false,
@@ -216,6 +221,7 @@ const defaultBookingSettings: BusinessBookingSettings = {
   bookingAvailableDays: [1, 2, 3, 4, 5],
   bookingAvailableStartTime: "09:00",
   bookingAvailableEndTime: "19:00",
+  bookingDailyHours: [],
   bookingBlackoutDatesText: "",
   bookingSlotIntervalMinutes: 15,
   bookingBufferMinutes: "",
@@ -232,6 +238,66 @@ const BOOKING_DAY_OPTIONS = [
   { value: 6, label: "Sat" },
   { value: 0, label: "Sun" },
 ] as const;
+
+const DEFAULT_BOOKING_OPEN_TIME = "09:00";
+const DEFAULT_BOOKING_CLOSE_TIME = "19:00";
+
+function normalizeBookingDailyHours(
+  value: unknown,
+  fallbackDays: number[] = [1, 2, 3, 4, 5],
+  fallbackOpen = DEFAULT_BOOKING_OPEN_TIME,
+  fallbackClose = DEFAULT_BOOKING_CLOSE_TIME
+): BookingDailyHoursEntry[] {
+  const source = Array.isArray(value) ? value : [];
+  const byDay = new Map<number, BookingDailyHoursEntry>();
+  for (const item of source) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as { dayIndex?: unknown; enabled?: unknown; openTime?: unknown; closeTime?: unknown };
+    const dayIndex = Number(entry.dayIndex);
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) continue;
+    const openTime = typeof entry.openTime === "string" && entry.openTime ? entry.openTime : fallbackOpen;
+    const closeTime = typeof entry.closeTime === "string" && entry.closeTime ? entry.closeTime : fallbackClose;
+    byDay.set(dayIndex, {
+      dayIndex,
+      enabled: entry.enabled === false ? false : true,
+      openTime,
+      closeTime,
+    });
+  }
+  for (const day of BOOKING_DAY_OPTIONS) {
+    if (!byDay.has(day.value)) {
+      byDay.set(day.value, {
+        dayIndex: day.value,
+        enabled: fallbackDays.includes(day.value),
+        openTime: fallbackOpen,
+        closeTime: fallbackClose,
+      });
+    }
+  }
+  return BOOKING_DAY_OPTIONS.map((day) => byDay.get(day.value)!);
+}
+
+function bookingDailyHoursMatch(left: BookingDailyHoursEntry[], right: BookingDailyHoursEntry[]): boolean {
+  const normalizedLeft = normalizeBookingDailyHours(left);
+  const normalizedRight = normalizeBookingDailyHours(right);
+  return normalizedLeft.every((entry, index) => {
+    const other = normalizedRight[index];
+    return (
+      other &&
+      entry.dayIndex === other.dayIndex &&
+      entry.enabled === other.enabled &&
+      entry.openTime === other.openTime &&
+      entry.closeTime === other.closeTime
+    );
+  });
+}
+
+function bookingDaysFromDailyHours(value: BookingDailyHoursEntry[]): number[] {
+  return normalizeBookingDailyHours(value)
+    .filter((entry) => entry.enabled)
+    .map((entry) => entry.dayIndex)
+    .sort((left, right) => left - right);
+}
 
 function formatBookingDaySummary(days: number[] | null | undefined): string {
   const normalized = Array.isArray(days) ? [...new Set(days)] : [];
@@ -297,44 +363,80 @@ function formatDuration(minutes: number | null): string {
 }
 
 function buildServiceFormDefaults(
-  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+  bookingSettings: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >
 ): ServiceFormData {
+  const bookingDailyHours = normalizeBookingDailyHours(
+    bookingSettings.bookingDailyHours,
+    bookingSettings.bookingAvailableDays,
+    bookingSettings.bookingAvailableStartTime,
+    bookingSettings.bookingAvailableEndTime
+  );
   return {
     ...defaultServiceFormData,
     bookingAvailableDays: [...bookingSettings.bookingAvailableDays],
     bookingAvailableStartTime: bookingSettings.bookingAvailableStartTime,
     bookingAvailableEndTime: bookingSettings.bookingAvailableEndTime,
+    bookingDailyHours,
   };
 }
 
-function dayIndexesMatch(left: number[], right: number[]) {
-  if (left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
-}
-
 function buildInheritedAvailabilityPayload(
-  formData: Pick<ServiceFormData, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">,
-  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+  formData: Pick<
+    ServiceFormData,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >,
+  bookingSettings: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >
 ) {
+  const normalizedFormHours = normalizeBookingDailyHours(
+    formData.bookingDailyHours,
+    formData.bookingAvailableDays,
+    formData.bookingAvailableStartTime,
+    formData.bookingAvailableEndTime
+  );
+  const normalizedBusinessHours = normalizeBookingDailyHours(
+    bookingSettings.bookingDailyHours,
+    bookingSettings.bookingAvailableDays,
+    bookingSettings.bookingAvailableStartTime,
+    bookingSettings.bookingAvailableEndTime
+  );
+  const usesBusinessHours = bookingDailyHoursMatch(normalizedFormHours, normalizedBusinessHours);
+  const enabledDays = bookingDaysFromDailyHours(normalizedFormHours);
   return {
-    bookingAvailableDays: dayIndexesMatch(formData.bookingAvailableDays, bookingSettings.bookingAvailableDays)
-      ? []
-      : formData.bookingAvailableDays,
-    bookingAvailableStartTime:
-      formData.bookingAvailableStartTime === bookingSettings.bookingAvailableStartTime
-        ? null
-        : formData.bookingAvailableStartTime || null,
-    bookingAvailableEndTime:
-      formData.bookingAvailableEndTime === bookingSettings.bookingAvailableEndTime
-        ? null
-        : formData.bookingAvailableEndTime || null,
+    bookingAvailableDays: usesBusinessHours ? [] : enabledDays,
+    bookingAvailableStartTime: null,
+    bookingAvailableEndTime: null,
+    bookingDailyHours: usesBusinessHours ? null : normalizedFormHours,
   };
 }
 
 function serviceToFormData(
   service: ServiceRecord,
-  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+  bookingSettings: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >
 ): ServiceFormData {
+  const businessDailyHours = normalizeBookingDailyHours(
+    bookingSettings.bookingDailyHours,
+    bookingSettings.bookingAvailableDays,
+    bookingSettings.bookingAvailableStartTime,
+    bookingSettings.bookingAvailableEndTime
+  );
+  const serviceDailyHours = Array.isArray(service.bookingDailyHours) && service.bookingDailyHours.length > 0
+    ? normalizeBookingDailyHours(
+        service.bookingDailyHours,
+        service.bookingAvailableDays ?? bookingSettings.bookingAvailableDays,
+        service.bookingAvailableStartTime ?? bookingSettings.bookingAvailableStartTime,
+        service.bookingAvailableEndTime ?? bookingSettings.bookingAvailableEndTime
+      )
+    : businessDailyHours;
+  const serviceAvailableDays = bookingDaysFromDailyHours(serviceDailyHours);
   return {
     name: service.name ?? "",
     price: service.price != null ? String(service.price) : "",
@@ -353,12 +455,10 @@ function serviceToFormData(
     bookingLeadTimeHours: String(service.bookingLeadTimeHours ?? 0),
     bookingWindowDays: String(service.bookingWindowDays ?? 30),
     bookingServiceMode: service.bookingServiceMode ?? "in_shop",
-    bookingAvailableDays:
-      Array.isArray(service.bookingAvailableDays) && service.bookingAvailableDays.length > 0
-        ? service.bookingAvailableDays
-        : [...bookingSettings.bookingAvailableDays],
-    bookingAvailableStartTime: service.bookingAvailableStartTime ?? bookingSettings.bookingAvailableStartTime,
-    bookingAvailableEndTime: service.bookingAvailableEndTime ?? bookingSettings.bookingAvailableEndTime,
+    bookingAvailableDays: serviceAvailableDays,
+    bookingAvailableStartTime: serviceDailyHours.find((entry) => entry.enabled)?.openTime ?? bookingSettings.bookingAvailableStartTime,
+    bookingAvailableEndTime: serviceDailyHours.find((entry) => entry.enabled)?.closeTime ?? bookingSettings.bookingAvailableEndTime,
+    bookingDailyHours: serviceDailyHours,
     bookingBufferMinutes:
       service.bookingBufferMinutes != null && Number(service.bookingBufferMinutes) >= 0
         ? String(service.bookingBufferMinutes)
@@ -409,9 +509,18 @@ function businessToBookingSettings(record: Partial<BusinessBookingSettings> | nu
         ? [...new Set((record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays)]
         : [1, 2, 3, 4, 5],
     bookingAvailableStartTime:
-      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? "09:00",
+      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? DEFAULT_BOOKING_OPEN_TIME,
     bookingAvailableEndTime:
-      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? "19:00",
+      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? DEFAULT_BOOKING_CLOSE_TIME,
+    bookingDailyHours: normalizeBookingDailyHours(
+      (record as { bookingDailyHours?: unknown })?.bookingDailyHours,
+      Array.isArray((record as { bookingAvailableDays?: number[] | null })?.bookingAvailableDays) &&
+        (record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays!.length > 0
+        ? [...new Set((record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays)]
+        : [1, 2, 3, 4, 5],
+      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? DEFAULT_BOOKING_OPEN_TIME,
+      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? DEFAULT_BOOKING_CLOSE_TIME
+    ),
     bookingBlackoutDatesText: Array.isArray((record as { bookingBlackoutDates?: string[] | null })?.bookingBlackoutDates)
       ? ((record as { bookingBlackoutDates?: string[] | null }).bookingBlackoutDates ?? []).join("\n")
       : "",
@@ -580,12 +689,29 @@ function ServiceForm({
   formData: ServiceFormData;
   onChange: (data: ServiceFormData) => void;
   categoryOptions: Array<{ value: string; label: string }>;
-  bookingDefaults: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">;
+  bookingDefaults: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >;
 }) {
   const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
+  const normalizedBusinessHours = normalizeBookingDailyHours(
+    bookingDefaults.bookingDailyHours,
+    bookingDefaults.bookingAvailableDays,
+    bookingDefaults.bookingAvailableStartTime,
+    bookingDefaults.bookingAvailableEndTime
+  );
+  const normalizedServiceHours = normalizeBookingDailyHours(
+    formData.bookingDailyHours,
+    formData.bookingAvailableDays,
+    formData.bookingAvailableStartTime,
+    formData.bookingAvailableEndTime
+  );
+  const serviceUsesBusinessHours = bookingDailyHoursMatch(normalizedServiceHours, normalizedBusinessHours);
   const bookingDefaultsDisplayLabel = `${formatBookingDaySummary(bookingDefaults.bookingAvailableDays)} - ${
     formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableStartTime) || "Start time"
   } to ${formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableEndTime) || "End time"}`;
+  const serviceBookingDays = bookingDaysFromDailyHours(normalizedServiceHours);
   const formSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const mobileTimeInputClassName =
@@ -715,7 +841,11 @@ function ServiceForm({
             <div className="grid gap-2 sm:grid-cols-3">
               <ServiceMetaPill label="Flow" value={bookingFlowSummary} tone="neutral" />
               <ServiceMetaPill label="Mode" value={serviceModeLabel(formData.bookingServiceMode)} tone="neutral" />
-              <ServiceMetaPill label="Days" value={formatBookingDaySummary(formData.bookingAvailableDays)} tone="neutral" />
+              <ServiceMetaPill
+                label="Hours"
+                value={serviceUsesBusinessHours ? "Business schedule" : `${formatBookingDaySummary(serviceBookingDays)} custom`}
+                tone="neutral"
+              />
             </div>
             <Button
               type="button"
@@ -848,59 +978,106 @@ function ServiceForm({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
-              <Label>Booking days</Label>
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                {BOOKING_DAY_OPTIONS.map((day) => {
-                  const checked = formData.bookingAvailableDays.includes(day.value);
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label>Service booking hours</Label>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Use the business schedule or set different hours for this service by day.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={serviceUsesBusinessHours ? "secondary" : "outline"}
+                  className="h-10 rounded-xl"
+                  onClick={() =>
+                    onChange({
+                      ...formData,
+                      bookingAvailableDays: [...bookingDefaults.bookingAvailableDays],
+                      bookingAvailableStartTime: bookingDefaults.bookingAvailableStartTime,
+                      bookingAvailableEndTime: bookingDefaults.bookingAvailableEndTime,
+                      bookingDailyHours: normalizedBusinessHours,
+                    })
+                  }
+                >
+                  Use business hours
+                </Button>
+              </div>
+
+              <div className="mt-3 grid gap-2">
+                {normalizedServiceHours.map((entry) => {
+                  const dayLabel = BOOKING_DAY_OPTIONS.find((day) => day.value === entry.dayIndex)?.label ?? "Day";
                   return (
-                    <label
-                      key={day.value}
+                    <div
+                      key={entry.dayIndex}
                       className={cn(
-                        "flex cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
-                        checked ? "border-orange-300 bg-orange-50 text-orange-900" : "border-slate-200 bg-white text-slate-600"
+                        "grid gap-3 rounded-xl border bg-white p-3 sm:grid-cols-[minmax(88px,0.75fr)_1fr_1fr] sm:items-center",
+                        entry.enabled ? "border-orange-200 shadow-sm" : "border-slate-200 opacity-75"
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={checked}
-                        onChange={() =>
-                          onChange({
-                            ...formData,
-                            bookingAvailableDays: checked
-                              ? formData.bookingAvailableDays.filter((value) => value !== day.value)
-                              : [...formData.bookingAvailableDays, day.value].sort(),
-                          })
-                        }
-                      />
-                      {day.label}
-                    </label>
+                      <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 sm:justify-start">
+                        <span className="text-sm font-semibold text-slate-900">{dayLabel}</span>
+                        <Switch
+                          checked={entry.enabled}
+                          onCheckedChange={(checked) => {
+                            const next = normalizedServiceHours.map((item) =>
+                              item.dayIndex === entry.dayIndex ? { ...item, enabled: checked } : item
+                            );
+                            onChange({
+                              ...formData,
+                              bookingAvailableDays: bookingDaysFromDailyHours(next),
+                              bookingDailyHours: next,
+                            });
+                          }}
+                        />
+                      </label>
+                      <div className="grid gap-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Opens
+                        </span>
+                        <Input
+                          type="time"
+                          className={mobileTimeInputClassName}
+                          value={entry.openTime}
+                          disabled={!entry.enabled}
+                          onChange={(event) => {
+                            const next = normalizedServiceHours.map((item) =>
+                              item.dayIndex === entry.dayIndex ? { ...item, openTime: event.target.value } : item
+                            );
+                            onChange({
+                              ...formData,
+                              bookingAvailableDays: bookingDaysFromDailyHours(next),
+                              bookingAvailableStartTime: next.find((item) => item.enabled)?.openTime ?? "",
+                              bookingDailyHours: next,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Closes
+                        </span>
+                        <Input
+                          type="time"
+                          className={mobileTimeInputClassName}
+                          value={entry.closeTime}
+                          disabled={!entry.enabled}
+                          onChange={(event) => {
+                            const next = normalizedServiceHours.map((item) =>
+                              item.dayIndex === entry.dayIndex ? { ...item, closeTime: event.target.value } : item
+                            );
+                            onChange({
+                              ...formData,
+                              bookingAvailableDays: bookingDaysFromDailyHours(next),
+                              bookingAvailableEndTime: next.find((item) => item.enabled)?.closeTime ?? "",
+                              bookingDailyHours: next,
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
                   );
                 })}
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="svc-booking-start">Service window start</Label>
-                <Input
-                  id="svc-booking-start"
-                  type="time"
-                  className={mobileTimeInputClassName}
-                  value={formData.bookingAvailableStartTime}
-                  onChange={(e) => onChange({ ...formData, bookingAvailableStartTime: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="svc-booking-end">Service window end</Label>
-                <Input
-                  id="svc-booking-end"
-                  type="time"
-                  className={mobileTimeInputClassName}
-                  value={formData.bookingAvailableEndTime}
-                  onChange={(e) => onChange({ ...formData, bookingAvailableEndTime: e.target.value })}
-                />
               </div>
             </div>
 
@@ -1115,6 +1292,10 @@ function ServiceCard({
           ? "Request only"
           : "Uses default flow"
       : null;
+  const serviceCustomDays =
+    Array.isArray(service.bookingDailyHours) && service.bookingDailyHours.length > 0
+      ? bookingDaysFromDailyHours(service.bookingDailyHours)
+      : [];
 
   return (
     <div
@@ -1162,7 +1343,7 @@ function ServiceCard({
           />
           <ServiceMetaPill
             label="Availability"
-            value={service.bookingEnabled === true && (service.bookingAvailableDays?.length ?? 0) > 0 ? `${service.bookingAvailableDays?.length} booking days` : "Uses defaults"}
+            value={service.bookingEnabled === true && serviceCustomDays.length > 0 ? `${serviceCustomDays.length} custom days` : "Uses defaults"}
           />
         </div>
 
@@ -1535,6 +1716,7 @@ export default function ServicesPage() {
         bookingAvailableDays: inheritedAvailability.bookingAvailableDays,
         bookingAvailableStartTime: inheritedAvailability.bookingAvailableStartTime,
         bookingAvailableEndTime: inheritedAvailability.bookingAvailableEndTime,
+        bookingDailyHours: inheritedAvailability.bookingDailyHours,
         bookingBufferMinutes: createFormData.bookingBufferMinutes ? parseInt(createFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: createFormData.bookingCapacityPerSlot ? parseInt(createFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: createFormData.bookingFeatured,
@@ -1572,6 +1754,7 @@ export default function ServicesPage() {
         bookingAvailableDays: inheritedAvailability.bookingAvailableDays,
         bookingAvailableStartTime: inheritedAvailability.bookingAvailableStartTime,
         bookingAvailableEndTime: inheritedAvailability.bookingAvailableEndTime,
+        bookingDailyHours: inheritedAvailability.bookingDailyHours,
         bookingBufferMinutes: editFormData.bookingBufferMinutes ? parseInt(editFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: editFormData.bookingCapacityPerSlot ? parseInt(editFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: editFormData.bookingFeatured,
