@@ -508,6 +508,7 @@ export const services = pgTable("services", {
   bookingAvailableDays: text("booking_available_days"),
   bookingAvailableStartTime: text("booking_available_start_time"),
   bookingAvailableEndTime: text("booking_available_end_time"),
+  bookingDailyHours: text("booking_daily_hours"),
   bookingBufferMinutes: integer("booking_buffer_minutes"),
   bookingCapacityPerSlot: integer("booking_capacity_per_slot"),
   bookingFeatured: boolean("booking_featured").default(false),
