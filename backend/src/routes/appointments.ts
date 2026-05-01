@@ -3656,8 +3656,8 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
   res.status(204).send();
 }
 
-appointmentsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), deleteAppointmentRecord);
-appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, requirePermission("appointments.write"), deleteAppointmentRecord);
+appointmentsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(deleteAppointmentRecord));
+appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(deleteAppointmentRecord));
 
 appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
