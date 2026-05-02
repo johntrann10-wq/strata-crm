@@ -2338,6 +2338,44 @@ function bookingServiceDeposit(service: Pick<PublicBookingServiceRecord, "bookin
   return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
 }
 
+type BookingRevenueService = Pick<PublicBookingServiceRecord, "id" | "name" | "price" | "durationMinutes">;
+
+export function buildBookingRevenueAddonMetadata(params: {
+  baseService: BookingRevenueService;
+  addonServices: BookingRevenueService[];
+  subtotal: number;
+  durationMinutes: number;
+  depositAmount: number;
+}) {
+  const addonRevenue = params.addonServices.reduce((sum, service) => sum + bookingServicePrice(service), 0);
+  const addonDurationMinutes = params.addonServices.reduce(
+    (sum, service) => sum + toBookingDurationMinutes(service.durationMinutes),
+    0
+  );
+  const selectedAddons = params.addonServices.map((service) => ({
+    id: service.id,
+    name: service.name,
+    price: bookingServicePrice(service),
+    durationMinutes: toBookingDurationMinutes(service.durationMinutes),
+  }));
+
+  return {
+    baseServiceId: params.baseService.id,
+    baseServiceName: params.baseService.name,
+    baseServiceRevenue: bookingServicePrice(params.baseService),
+    hasAddons: selectedAddons.length > 0,
+    addonCount: selectedAddons.length,
+    addonIds: selectedAddons.map((service) => service.id),
+    addonNames: selectedAddons.map((service) => service.name),
+    selectedAddons,
+    addonRevenue: Number(addonRevenue.toFixed(2)),
+    addonDurationMinutes,
+    totalServiceRevenue: Number(params.subtotal.toFixed(2)),
+    totalServiceDurationMinutes: params.durationMinutes,
+    depositAmount: Number(params.depositAmount.toFixed(2)),
+  };
+}
+
 function parseStoredServiceBookingDays(raw: string | null | undefined): Set<number> | null {
   return normalizeBookingDayIndexes(parseStoredNumberArray(raw));
 }
@@ -2445,6 +2483,13 @@ function resolveBookingServicesSelection(params: {
     applyTax,
     title: baseService.name,
     serviceSummary: allServices.map((service) => service.name).join(", "),
+    revenueAddonMetadata: buildBookingRevenueAddonMetadata({
+      baseService,
+      addonServices,
+      subtotal,
+      durationMinutes,
+      depositAmount,
+    }),
   };
 }
 
@@ -2859,6 +2904,7 @@ async function createPublicBookingAppointment(params: {
     bookingRequestId: params.sourceBookingRequestId ?? null,
     metadata: {
       serviceSummary: params.selection.serviceSummary,
+      revenueAddons: params.selection.revenueAddonMetadata,
       requestedServiceMode: params.requestedServiceMode,
       requestedTiming: formatBookingDateTime(params.startTime, params.business.timezone),
       sourceDetail: params.sourceDetail,
@@ -2894,6 +2940,7 @@ async function createPublicBookingAppointment(params: {
       metadata: {
         appointmentId: createdAppointment.id,
         bookingRequestId: params.sourceBookingRequestId ?? null,
+        revenueAddons: params.selection.revenueAddonMetadata,
       },
       userId: params.createdByUserId ?? null,
     });
@@ -2929,6 +2976,7 @@ async function createPublicBookingAppointment(params: {
       source: params.normalizedSource,
       campaign: params.campaign,
       serviceSummary: params.selection.serviceSummary,
+      revenueAddons: params.selection.revenueAddonMetadata,
       locationId: params.locationId ?? null,
       ...params.activityMetadata,
     },
@@ -2944,6 +2992,7 @@ async function createPublicBookingAppointment(params: {
       sourceType: "booking_request",
       leadClientId: params.sourceLeadClientId ?? params.client.id,
       bookingRequestId: params.sourceBookingRequestId ?? null,
+      revenueAddons: params.selection.revenueAddonMetadata,
     },
     userId: params.createdByUserId ?? null,
   });
@@ -4793,6 +4842,7 @@ businessesRouter.post(
           bookingFlow: "request",
           serviceMode: requestedServiceMode,
           serviceSummary: selection.serviceSummary,
+          revenueAddons: selection.revenueAddonMetadata,
           requestedTiming: requestedTimingSummary,
           leadId: createdLead.id,
         },
@@ -4808,6 +4858,7 @@ businessesRouter.post(
           source: normalizedSource,
           campaign,
           serviceSummary: selection.serviceSummary,
+          revenueAddons: selection.revenueAddonMetadata,
           existingLead: existingLeadRecord.isLead,
         },
       });
@@ -5131,6 +5182,7 @@ businessesRouter.post(
         source: normalizedSource,
         campaign,
         serviceSummary: selection.serviceSummary,
+        revenueAddons: selection.revenueAddonMetadata,
         locationId: locationId ?? null,
       },
     });
@@ -5152,6 +5204,7 @@ businessesRouter.post(
           bookingFlow: "self_book",
           leadClientId: client.id,
           serviceSummary: selection.serviceSummary,
+          revenueAddons: selection.revenueAddonMetadata,
           path: `/appointments/${encodeURIComponent(createdAppointment.id)}`,
         },
       },
