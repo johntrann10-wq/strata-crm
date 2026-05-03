@@ -3477,23 +3477,63 @@ export default function PublicBookingPage() {
         {selectedService?.addons.length ? (
           <div className="space-y-3">
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Frequently added</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Frequently added</h3>
+                {selectedService.addons.some((addon) => addon.featured) ? (
+                  <Badge className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-amber-700 hover:bg-amber-50">
+                    Recommended
+                  </Badge>
+                ) : null}
+              </div>
               <p className="text-sm text-slate-600">
-                {form.vehicleMake || form.vehicleModel ? `Frequently added with ${selectedService.name} for your ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ")}.` : `Frequently added with ${selectedService.name}.`}
+                {form.vehicleMake || form.vehicleModel
+                  ? `Useful upgrades often added with ${selectedService.name} for your ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ")}.`
+                  : `Useful upgrades often added with ${selectedService.name}.`}
               </p>
             </div>
             <div className="grid gap-3">
-              {selectedService.addons.map((addon) => {
+              {[...selectedService.addons].sort((left, right) => Number(right.featured) - Number(left.featured)).map((addon) => {
                 const active = form.addonServiceIds.includes(addon.id);
                 return (
-                  <button key={addon.id} type="button" onClick={() => toggleAddon(addon.id)} className={cn("flex items-start justify-between gap-4 rounded-[1.25rem] border p-4 text-left transition-all motion-reduce:transition-none", active ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
-                    <div className="space-y-1">
-                      <p className="font-medium text-slate-950">{addon.name}</p>
+                  <button
+                    key={addon.id}
+                    type="button"
+                    onClick={() => toggleAddon(addon.id)}
+                    aria-pressed={active}
+                    className={cn(
+                      "group flex min-h-[5.75rem] items-start justify-between gap-4 rounded-[1.35rem] border p-4 text-left shadow-[0_14px_30px_rgba(15,23,42,0.05)] transition-all motion-reduce:transition-none",
+                      active
+                        ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] ring-2 ring-[color:var(--booking-primary-soft-border)]"
+                        : addon.featured
+                          ? "border-amber-200 bg-amber-50/40 hover:bg-amber-50/70"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    )}
+                  >
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="min-w-0 break-words text-base font-semibold leading-5 tracking-[-0.02em] text-slate-950">{addon.name}</p>
+                        {addon.featured ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/85 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                            <Sparkles className="h-3 w-3" />
+                            Recommended
+                          </span>
+                        ) : null}
+                      </div>
                       {addon.description ? <BookingDescription description={addon.description} /> : null}
                     </div>
-                    <div className="text-right text-sm">
-                      {config.showPrices && addon.showPrice ? <p className="font-semibold text-slate-950">{formatPrice(addon.price)}</p> : null}
-                      {config.showDurations && addon.showDuration ? <p className="mt-1 text-slate-500">{formatDuration(addon.durationMinutes)}</p> : null}
+                    <div className="flex shrink-0 flex-col items-end gap-2 text-right text-sm">
+                      <span
+                        className={cn(
+                          "inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors",
+                          active ? "border-transparent bg-[var(--booking-primary)] text-white" : "border-slate-300 bg-white text-transparent group-hover:text-slate-300"
+                        )}
+                      >
+                        <Check className="h-4 w-4" />
+                      </span>
+                      <div>
+                        {config.showPrices && addon.showPrice ? <p className="font-semibold text-slate-950">{formatPrice(addon.price)}</p> : null}
+                        {config.showDurations && addon.showDuration ? <p className="mt-1 text-slate-500">{formatDuration(addon.durationMinutes)}</p> : null}
+                      </div>
                     </div>
                   </button>
                 );

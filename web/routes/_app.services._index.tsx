@@ -1103,9 +1103,9 @@ function ServiceForm({
                 />
                 <div className="space-y-1">
                   <Label htmlFor="svc-booking-featured" className="cursor-pointer text-sm font-medium">
-                    Feature first
+                    Feature / recommend
                   </Label>
-                  <p className="text-xs leading-5 text-muted-foreground">Push this service to the top of the public booking page.</p>
+                  <p className="text-xs leading-5 text-muted-foreground">Feature primary services first and mark linked add-ons as recommended.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
