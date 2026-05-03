@@ -560,6 +560,18 @@ export const api = {
           method: "POST",
           body: JSON.stringify(params),
         }),
+      reviewAddonRequest: (params: Record<string, unknown>) =>
+        request<unknown>(
+          "/appointments/" +
+            encodeURIComponent(String(params?.id ?? "")) +
+            "/add-on-requests/" +
+            encodeURIComponent(String(params?.addonServiceId ?? "")) +
+            "/review",
+          {
+            method: "POST",
+            body: JSON.stringify(params),
+          }
+        ),
     complete: (params: Record<string, unknown>) =>
       request<unknown>("/appointments/" + (params?.id ?? "") + "/complete", {
         method: "POST",

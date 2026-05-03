@@ -289,6 +289,24 @@ function parseCustomerAddonRequests(
     });
 }
 
+function getResolvedCustomerAddonRequestIds(
+  records: Array<{ type?: string | null; action?: string | null; metadata?: string | null }>
+): Set<string> {
+  const resolved = new Set<string>();
+  for (const record of records) {
+    const action = record.type ?? record.action;
+    if (action !== "appointment.public_addon_approved" && action !== "appointment.public_addon_declined") continue;
+    try {
+      const parsed = record.metadata ? (JSON.parse(record.metadata) as Record<string, unknown>) : {};
+      const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
+      if (addonServiceId) resolved.add(addonServiceId);
+    } catch {
+      // Ignore malformed activity metadata; it should not block live appointment work.
+    }
+  }
+  return resolved;
+}
+
 function safeDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -659,6 +677,7 @@ export default function AppointmentDetail() {
   const [editVehicleId, setEditVehicleId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
   const [addingRequestedAddonId, setAddingRequestedAddonId] = useState<string | null>(null);
+  const [decliningRequestedAddonId, setDecliningRequestedAddonId] = useState<string | null>(null);
   const [depositPaymentAmount, setDepositPaymentAmount] = useState("");
   const [depositPaymentMethod, setDepositPaymentMethod] = useState("cash");
   const [depositPaymentDate, setDepositPaymentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -846,6 +865,7 @@ export default function AppointmentDetail() {
   );
   const [{ fetching: reversingDeposit }, runReverseDepositPayment] = useAction(api.appointment.reverseDepositPayment);
   const [{ fetching: addingService }, runAddAppointmentService] = useAction(api.appointmentService.create);
+  const [{ fetching: reviewingAddonRequest }, runReviewAddonRequest] = useAction(api.appointment.reviewAddonRequest);
   const [{ fetching: removingService }, runRemoveAppointmentService] = useAction(
     (params: Record<string, unknown>) => api.appointmentService.delete(params)
   );
@@ -975,14 +995,18 @@ export default function AppointmentDetail() {
       ),
     [existingServiceIds, serviceAddonLinks, serviceCatalogRecords]
   );
-  const customerAddonRequests = parseCustomerAddonRequests(
-    (activityLogs ?? []) as Array<{
+  const customerAddonActivityRecords = (activityLogs ?? []) as Array<{
       id?: string | null;
       type?: string | null;
       action?: string | null;
       metadata?: string | null;
       createdAt?: string | Date | null;
-    }>
+    }>;
+  const resolvedCustomerAddonRequestIds = getResolvedCustomerAddonRequestIds(customerAddonActivityRecords);
+  const customerAddonRequests = parseCustomerAddonRequests(customerAddonActivityRecords).filter(
+    (request) =>
+      !existingServiceIds.has(request.addonServiceId) &&
+      !resolvedCustomerAddonRequestIds.has(request.addonServiceId)
   );
   const completedServiceIds = new Map(
     (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
@@ -1273,9 +1297,37 @@ export default function AppointmentDetail() {
       void triggerNotificationFeedback("error");
       return;
     }
+    const reviewResult = await runReviewAddonRequest({
+      id: appointment.id,
+      addonServiceId: serviceId,
+      action: "approved",
+    });
+    if (reviewResult.error) {
+      toast.warning("Add-on was added, but the request still needs to be cleared.");
+    }
     toast.success("Requested add-on added to appointment");
     void triggerNotificationFeedback("success");
     void refetchAppointment();
+    void refetchActivity();
+  };
+
+  const handleDeclineRequestedService = async (request: CustomerAddonRequest) => {
+    if (!appointment?.id || !request.addonServiceId) return;
+    setDecliningRequestedAddonId(request.addonServiceId);
+    await triggerImpactFeedback("light");
+    const result = await runReviewAddonRequest({
+      id: appointment.id,
+      addonServiceId: request.addonServiceId,
+      addonName: request.addonName,
+      action: "declined",
+    }).finally(() => setDecliningRequestedAddonId(null));
+    if (result.error) {
+      toast.error(`Failed to dismiss add-on request: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
+      return;
+    }
+    toast.success("Add-on request dismissed");
+    void triggerNotificationFeedback("success");
     void refetchActivity();
   };
 
@@ -2840,6 +2892,7 @@ export default function AppointmentDetail() {
                             : null;
                       const displayDuration = request.addonDurationMinutes ?? catalogService?.durationMinutes ?? null;
                       const isAddingThisRequest = addingRequestedAddonId === request.addonServiceId;
+                      const isDecliningThisRequest = decliningRequestedAddonId === request.addonServiceId;
                       return (
                         <div
                           key={request.activityId}
@@ -2887,7 +2940,7 @@ export default function AppointmentDetail() {
                                 className="min-h-10 w-full sm:w-auto"
                                 variant={alreadyAdded ? "outline" : "default"}
                                 onClick={() => void handleAddRequestedService(request.addonServiceId)}
-                                disabled={addingService || alreadyAdded || !catalogService}
+                                disabled={addingService || reviewingAddonRequest || alreadyAdded || !catalogService}
                               >
                                 {isAddingThisRequest ? (
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -2897,6 +2950,21 @@ export default function AppointmentDetail() {
                                   <Plus className="mr-2 h-4 w-4" />
                                 )}
                                 {alreadyAdded ? "Already added" : catalogService ? "Add to appointment" : "Unavailable"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="min-h-10 w-full text-muted-foreground hover:text-foreground sm:w-auto"
+                                onClick={() => void handleDeclineRequestedService(request)}
+                                disabled={reviewingAddonRequest || addingService}
+                              >
+                                {isDecliningThisRequest ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <X className="mr-2 h-4 w-4" />
+                                )}
+                                Dismiss request
                               </Button>
                             </div>
                           </div>
