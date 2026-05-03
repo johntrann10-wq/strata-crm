@@ -1606,6 +1606,25 @@ export function HomeBookingsOverviewCard({
                   </p>
                 </div>
               </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[0.95rem] border border-orange-200/80 bg-orange-50/70 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-orange-700/80">Customer asks</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-orange-900">{addOnInsights.customerRequestCount}</p>
+                  <p className="text-xs text-orange-800/75">{formatDashboardCompactCurrency(addOnInsights.customerRequestValue)} requested this month</p>
+                </div>
+                <div className="rounded-[0.95rem] border border-emerald-200/80 bg-emerald-50/70 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-emerald-700/80">Approved</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-emerald-900">{addOnInsights.customerApprovedCount}</p>
+                  <p className="text-xs text-emerald-800/75">
+                    {addOnInsights.customerRequestApprovalRate == null ? "No reviewed requests yet" : `${addOnInsights.customerRequestApprovalRate}% approval rate`}
+                  </p>
+                </div>
+                <div className="rounded-[0.95rem] border border-slate-200/80 bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Pending</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{addOnInsights.pendingCustomerRequestCount}</p>
+                  <p className="text-xs text-slate-500">{formatDashboardCompactCurrency(addOnInsights.pendingCustomerRequestValue)} waiting in needs attention</p>
+                </div>
+              </div>
               {addOnInsights.topAddOns.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {addOnInsights.topAddOns.map((addon) => (

@@ -284,6 +284,13 @@ export type HomeDashboardSnapshot = {
       addOnRevenue: number;
       addOnCount: number;
       averageAddOnRevenuePerBooking: number;
+      customerRequestCount: number;
+      customerRequestValue: number;
+      customerApprovedCount: number;
+      customerDeclinedCount: number;
+      customerRequestApprovalRate: number | null;
+      pendingCustomerRequestCount: number;
+      pendingCustomerRequestValue: number;
       topAddOns: Array<{
         id: string;
         name: string;

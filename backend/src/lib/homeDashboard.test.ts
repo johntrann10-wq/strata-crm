@@ -673,6 +673,13 @@ describe("home dashboard domain logic", () => {
         addOnRevenue: 45,
         addOnCount: 1,
         averageAddOnRevenuePerBooking: 22.5,
+        customerRequestCount: 0,
+        customerRequestValue: 0,
+        customerApprovedCount: 0,
+        customerDeclinedCount: 0,
+        customerRequestApprovalRate: null,
+        pendingCustomerRequestCount: 0,
+        pendingCustomerRequestValue: 0,
         topAddOns: [{ id: "addon-1", name: "Engine Bay", count: 1, revenue: 45 }],
       },
       links: {
@@ -705,10 +712,68 @@ describe("home dashboard domain logic", () => {
       addOnRevenue: 195,
       addOnCount: 4,
       averageAddOnRevenuePerBooking: 48.75,
+      customerRequestCount: 0,
+      customerRequestValue: 0,
+      customerApprovedCount: 0,
+      customerDeclinedCount: 0,
+      customerRequestApprovalRate: null,
+      pendingCustomerRequestCount: 0,
+      pendingCustomerRequestValue: 0,
       topAddOns: [
         { id: "addon-1", name: "Engine Bay", count: 3, revenue: 135 },
         { id: "addon-2", name: "Pet Hair", count: 1, revenue: 60 },
       ],
+    });
+  });
+
+  it("summarizes customer add-on request demand for dashboard booking insight", () => {
+    const insights = buildAddOnInsights({
+      appointmentCount: 2,
+      rows: [],
+      requestActivityRows: [
+        {
+          action: "appointment.public_addon_requested",
+          appointmentId: "apt-1",
+          metadata: JSON.stringify({ addonServiceId: "addon-1", addonPrice: 125 }),
+        },
+        {
+          action: "appointment.public_addon_requested",
+          appointmentId: "apt-1",
+          metadata: JSON.stringify({ addonServiceId: "addon-1", addonPrice: 125 }),
+        },
+        {
+          action: "appointment.public_addon_requested",
+          appointmentId: "apt-2",
+          metadata: JSON.stringify({ addonServiceId: "addon-2", addonPrice: 75 }),
+        },
+        {
+          action: "appointment.public_addon_approved",
+          appointmentId: "apt-1",
+          metadata: JSON.stringify({ addonServiceId: "addon-1" }),
+        },
+        {
+          action: "appointment.public_addon_declined",
+          appointmentId: "apt-2",
+          metadata: JSON.stringify({ addonServiceId: "addon-2" }),
+        },
+      ],
+      pendingRequestRows: [
+        {
+          id: "activity-3",
+          appointmentId: "apt-3",
+          metadata: JSON.stringify({ addonServiceId: "addon-3", addonPrice: 50 }),
+        },
+      ],
+    });
+
+    expect(insights).toMatchObject({
+      customerRequestCount: 2,
+      customerRequestValue: 200,
+      customerApprovedCount: 1,
+      customerDeclinedCount: 1,
+      customerRequestApprovalRate: 50,
+      pendingCustomerRequestCount: 1,
+      pendingCustomerRequestValue: 50,
     });
   });
 
