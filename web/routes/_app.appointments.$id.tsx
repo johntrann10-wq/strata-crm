@@ -569,6 +569,7 @@ export default function AppointmentDetail() {
   const [editClientId, setEditClientId] = useState("");
   const [editVehicleId, setEditVehicleId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
+  const [addingRequestedAddonId, setAddingRequestedAddonId] = useState<string | null>(null);
   const [depositPaymentAmount, setDepositPaymentAmount] = useState("");
   const [depositPaymentMethod, setDepositPaymentMethod] = useState("cash");
   const [depositPaymentDate, setDepositPaymentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -867,6 +868,7 @@ export default function AppointmentDetail() {
     name?: string | null;
     category?: string | null;
     price?: number | string | null;
+    durationMinutes?: number | null;
   }>).filter((service) => service.id && !existingServiceIds.has(service.id));
   const completedServiceIds = new Map(
     (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
@@ -1105,10 +1107,11 @@ export default function AppointmentDetail() {
 
   const handleAddRequestedService = async (serviceId: string) => {
     if (!appointment?.id || !serviceId) return;
+    setAddingRequestedAddonId(serviceId);
     const result = await runAddAppointmentService({
       appointmentId: appointment.id,
       serviceId,
-    });
+    }).finally(() => setAddingRequestedAddonId(null));
     if (result.error) {
       toast.error(`Failed to add requested add-on: ${result.error.message}`);
       return;
@@ -2434,40 +2437,81 @@ export default function AppointmentDetail() {
                   <CardContent className="space-y-3">
                     {customerAddonRequests.map((request) => {
                       const alreadyAdded = existingServiceIds.has(request.addonServiceId);
-                      const catalogService = ((serviceCatalog ?? []) as Array<{ id: string }>).find(
+                      const catalogService = ((serviceCatalog ?? []) as Array<{
+                        id: string;
+                        price?: number | string | null;
+                        durationMinutes?: number | null;
+                      }>).find(
                         (service) => service.id === request.addonServiceId
                       );
+                      const displayPrice =
+                        request.addonPrice != null
+                          ? request.addonPrice
+                          : catalogService?.price != null
+                            ? Number(catalogService.price)
+                            : null;
+                      const displayDuration = request.addonDurationMinutes ?? catalogService?.durationMinutes ?? null;
+                      const isAddingThisRequest = addingRequestedAddonId === request.addonServiceId;
                       return (
                         <div
                           key={request.activityId}
-                          className="flex flex-col gap-3 rounded-xl border border-orange-200 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                          className="rounded-2xl border border-orange-200 bg-background p-4 shadow-sm"
                         >
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="break-words text-sm font-semibold text-foreground">{request.addonName}</p>
-                              {alreadyAdded ? <StatusBadge status="added" type="job" /> : null}
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0 space-y-3">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="break-words text-base font-semibold text-foreground">{request.addonName}</p>
+                                  {alreadyAdded ? <StatusBadge status="added" type="job" /> : null}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {request.clientName ? `${request.clientName} requested this` : "Customer requested this"}
+                                  {request.parentServiceName ? ` with ${request.parentServiceName}` : ""}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground">
+                                  {displayPrice != null && Number.isFinite(displayPrice)
+                                    ? `Adds ${formatCurrency(displayPrice)}`
+                                    : "Price from catalog"}
+                                </span>
+                                {displayDuration ? (
+                                  <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground">
+                                    Adds {displayDuration} min
+                                  </span>
+                                ) : null}
+                                {request.createdAt ? (
+                                  <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                                    Requested {formatDateTime(request.createdAt)}
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              {request.clientName ? `${request.clientName} requested this` : "Customer requested this"}
-                              {request.parentServiceName ? ` with ${request.parentServiceName}` : ""}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {request.addonPrice != null ? formatCurrency(request.addonPrice) : "Price from catalog"}
-                              {request.addonDurationMinutes ? ` · ${request.addonDurationMinutes} min` : ""}
-                              {request.createdAt ? ` · ${formatDateTime(request.createdAt)}` : ""}
-                            </p>
+                            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                              {!catalogService && !alreadyAdded ? (
+                                <p className="max-w-56 text-sm text-muted-foreground">
+                                  This add-on is no longer active in the service catalog.
+                                </p>
+                              ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="min-h-10 w-full sm:w-auto"
+                                variant={alreadyAdded ? "outline" : "default"}
+                                onClick={() => void handleAddRequestedService(request.addonServiceId)}
+                                disabled={addingService || alreadyAdded || !catalogService}
+                              >
+                                {isAddingThisRequest ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : alreadyAdded ? (
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                ) : (
+                                  <Plus className="mr-2 h-4 w-4" />
+                                )}
+                                {alreadyAdded ? "Already added" : catalogService ? "Add to appointment" : "Unavailable"}
+                              </Button>
+                            </div>
                           </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="shrink-0"
-                            variant={alreadyAdded ? "outline" : "default"}
-                            onClick={() => void handleAddRequestedService(request.addonServiceId)}
-                            disabled={addingService || alreadyAdded || !catalogService}
-                          >
-                            {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                            {alreadyAdded ? "Already added" : catalogService ? "Add to appointment" : "Unavailable"}
-                          </Button>
                         </div>
                       );
                     })}
