@@ -1101,7 +1101,10 @@ describe("home dashboard domain logic", () => {
       label: "Review add-on request: Interior ceramic protection",
       reason: "Alex Driver asked to add this to Full correction.",
       amountAtRisk: 225,
-      ctaUrl: "/appointments/appointment-1",
+      ctaLabel: "Review request",
+      ctaUrl: "/appointments/appointment-1#customer-addon-requests",
+      supportsSnooze: false,
+      supportsDismiss: false,
     });
   });
 
