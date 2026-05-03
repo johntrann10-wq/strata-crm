@@ -3110,6 +3110,7 @@ export async function serializeOwnerBookingRequest(
       alternateSlotLimit: number;
       alternateOfferExpiryHours: number | null;
     };
+    services?: PublicBookingServiceRecord[];
   }
 ) {
   const publicAccess = buildBookingRequestPublicAccess(request);
@@ -3137,6 +3138,21 @@ export async function serializeOwnerBookingRequest(
   }
 
   const alternateSlotOptions = parseBookingRequestAlternateSlotOptions(request.alternateSlotOptions);
+  const addonServiceIds = parseStoredStringArray(request.addonServiceIds);
+  const serviceById = new Map((options?.services ?? []).map((service) => [service.id, service]));
+  const selectedServiceRecords = [request.serviceId, ...addonServiceIds]
+    .filter((serviceId): serviceId is string => Boolean(serviceId))
+    .map((serviceId) => serviceById.get(serviceId))
+    .filter((service): service is PublicBookingServiceRecord => Boolean(service));
+  const selectedServices = selectedServiceRecords.map((service) => ({
+    id: service.id,
+    name: service.name,
+    price: Number(service.price ?? 0),
+    durationMinutes: service.durationMinutes ?? 0,
+    isAddon: service.id !== request.serviceId,
+  }));
+  const selectedServiceTotal = selectedServices.reduce((sum, service) => sum + service.price, 0);
+  const selectedServiceDurationMinutes = selectedServices.reduce((sum, service) => sum + service.durationMinutes, 0);
   const defaultRequireExactTime = normalizeBookingRequestRequireExactTime(business.bookingRequestRequireExactTime);
   const requestPolicy = options?.requestPolicy ?? {
     requireExactTime: defaultRequireExactTime,
@@ -3164,8 +3180,11 @@ export async function serializeOwnerBookingRequest(
     ownerReviewStatus: normalizeBookingRequestOwnerReviewStatus(request.ownerReviewStatus),
     customerResponseStatus: normalizeBookingRequestCustomerResponseStatus(request.customerResponseStatus),
     serviceMode: normalizeBookingServiceMode(request.serviceMode),
-    addonServiceIds: parseStoredStringArray(request.addonServiceIds),
+    addonServiceIds,
     serviceSummary: request.serviceSummary ?? "",
+    selectedServices,
+    selectedServiceTotal,
+    selectedServiceDurationMinutes,
     requestedDate: request.requestedDate ?? null,
     requestedTimeStart: request.requestedTimeStart?.toISOString() ?? null,
     requestedTimeEnd: request.requestedTimeEnd?.toISOString() ?? null,
@@ -5298,6 +5317,7 @@ businessesRouter.get(
             request: syncedRow,
             services: publicServices,
           }),
+          services: publicServices,
         });
       })
     );
@@ -5363,6 +5383,7 @@ businessesRouter.get(
           request: bookingRequest,
           services: publicServices,
         }),
+        services: publicServices,
       }),
     });
   })
@@ -5618,6 +5639,7 @@ businessesRouter.post(
           business,
           service: selection.baseService,
         }),
+        services: publicServices,
       }),
       appointmentId: appointment.appointmentId,
       confirmationUrl: appointment.confirmationUrl,
@@ -5794,6 +5816,7 @@ businessesRouter.post(
       ok: true,
       record: await serializeOwnerBookingRequest(effectiveRequest, business, {
         requestPolicy,
+        services: publicServices,
       }),
     });
   })
@@ -5918,6 +5941,7 @@ businessesRouter.post(
           request: effectiveRequest,
           services: publicServices,
         }),
+        services: publicServices,
       }),
     });
   })
@@ -6031,6 +6055,7 @@ businessesRouter.post(
           request: effectiveRequest,
           services: publicServices,
         }),
+        services: publicServices,
       }),
     });
   })
