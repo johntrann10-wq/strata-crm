@@ -2035,7 +2035,7 @@ export default function ServicesPage() {
         {packageTemplatesOpen ? (
         <CardContent className="p-4 sm:p-5">
           {packageSummaries.length === 0 ? (
-            <EmptyState icon={Package} title="No package templates yet" description="Create or categorize a service as a package or bundle, then link add-ons to make it reusable here." />
+            <EmptyState icon={Package} title="No package templates yet" description="Move a base service into a Package or Bundle category, then link add-ons to make it reusable here." />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {packageSummaries.map((summary) => (
