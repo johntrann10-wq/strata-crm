@@ -71,6 +71,10 @@ type PortalSummary = {
         name: string;
         price: number;
         durationMinutes: number | null;
+        description: string | null;
+        featured: boolean;
+        showPrice: boolean;
+        showDuration: boolean;
         parentServiceId: string;
         parentServiceName: string;
         requestStatus?: "available" | "requested";
@@ -472,17 +476,29 @@ export default function PortalTokenRoute() {
                                   return (
                                     <div
                                       key={addon.id}
-                                      className="rounded-xl border border-orange-200 bg-white p-3 text-sm shadow-sm"
+                                      className={
+                                        addon.featured
+                                          ? "rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm shadow-sm"
+                                          : "rounded-xl border border-orange-200 bg-white p-3 text-sm shadow-sm"
+                                      }
                                     >
                                       <div className="flex min-w-0 items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                          <p className="break-words font-semibold text-slate-950">{addon.name}</p>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="break-words font-semibold text-slate-950">{addon.name}</p>
+                                            {addon.featured ? (
+                                              <Badge className="rounded-full border border-amber-200 bg-white/85 px-2 py-0.5 text-[0.66rem] font-semibold uppercase tracking-[0.12em] text-amber-700 hover:bg-white">
+                                                Recommended
+                                              </Badge>
+                                            ) : null}
+                                          </div>
                                           <p className="mt-0.5 text-xs text-slate-500">
                                             Suggested with {addon.parentServiceName}
-                                            {addon.durationMinutes ? ` • ${addon.durationMinutes} min` : ""}
+                                            {addon.showDuration && addon.durationMinutes ? ` • ${addon.durationMinutes} min` : ""}
                                           </p>
+                                          {addon.description ? <p className="mt-2 text-xs leading-5 text-slate-600">{addon.description}</p> : null}
                                         </div>
-                                        <p className="shrink-0 font-semibold text-slate-950">{formatCurrency(addon.price)}</p>
+                                        {addon.showPrice ? <p className="shrink-0 font-semibold text-slate-950">{formatCurrency(addon.price)}</p> : null}
                                       </div>
                                       <div className="mt-3 flex flex-wrap items-center gap-2">
                                         <Button
