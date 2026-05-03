@@ -113,6 +113,7 @@ export type HomeDashboardActionQueueItem = {
     | "overdue_invoice"
     | "completed_missing_invoice"
     | "review_request"
+    | "customer_addon_request"
     | "reactivation"
     | "system_issue";
   label: string;
@@ -1031,7 +1032,7 @@ function getRoleRelevanceScore(
     return 2;
   }
   if (role === "manager" || role === "service_advisor") {
-    if (type === "deposit_due" || type === "completed_missing_invoice" || type === "quote_follow_up") return 3;
+    if (type === "deposit_due" || type === "completed_missing_invoice" || type === "quote_follow_up" || type === "customer_addon_request") return 3;
     if (type === "overdue_invoice" || type === "uncontacted_lead") return 2;
     return 1;
   }
@@ -1047,7 +1048,7 @@ function getTimeOfDayScore(
     if (type === "quote_follow_up") return 1;
   }
   if (timeOfDay === "midday") {
-    if (type === "completed_missing_invoice" || type === "deposit_due") return 2;
+    if (type === "completed_missing_invoice" || type === "deposit_due" || type === "customer_addon_request") return 2;
     if (type === "overdue_invoice") return 1;
   }
   if (timeOfDay === "evening") {
@@ -2187,6 +2188,13 @@ function mapActivityAction(
       return { type: "appointment_cancelled", label: "Appointment cancelled", detail: null, url: appointmentUrl };
     case "appointment.completed":
       return { type: "appointment_completed", label: "Appointment completed", detail: null, url: appointmentUrl };
+    case "appointment.public_addon_requested":
+      return {
+        type: "appointment_updated",
+        label: "Customer requested add-on",
+        detail: typeof metadata.addonName === "string" && metadata.addonName.trim() ? metadata.addonName.trim() : null,
+        url: appointmentUrl,
+      };
     case "quote.sent":
       return { type: "quote_sent", label: "Quote sent", detail: null, url: quoteUrl };
     case "quote.accepted":
@@ -3069,6 +3077,40 @@ async function loadRecentActivityRows(
     .limit(40);
 }
 
+async function loadOpenCustomerAddonRequestRows(businessId: string, tx: DbExecutor) {
+  return tx
+    .select({
+      id: activityLogs.id,
+      appointmentId: activityLogs.entityId,
+      metadata: activityLogs.metadata,
+      createdAt: activityLogs.createdAt,
+      appointmentTitle: appointments.title,
+      clientFirstName: clients.firstName,
+      clientLastName: clients.lastName,
+    })
+    .from(activityLogs)
+    .innerJoin(
+      appointments,
+      and(eq(activityLogs.entityId, appointments.id), eq(appointments.businessId, businessId))
+    )
+    .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, businessId)))
+    .where(
+      and(
+        eq(activityLogs.businessId, businessId),
+        eq(activityLogs.entityType, "appointment"),
+        eq(activityLogs.action, "appointment.public_addon_requested"),
+        sql`not exists (
+          select 1
+          from ${appointmentServices}
+          where ${appointmentServices.appointmentId} = ${activityLogs.entityId}
+            and ${appointmentServices.serviceId}::text = coalesce(${activityLogs.metadata}::json->>'addonServiceId', '')
+        )`
+      )
+    )
+    .orderBy(desc(activityLogs.createdAt))
+    .limit(12);
+}
+
 async function loadInviteActivityRows(businessId: string, tx: DbExecutor) {
   return tx
     .select({
@@ -3377,6 +3419,7 @@ export function buildActionQueue(params: {
     >
   >;
   reviewRequestReadyRows: Array<{ id: string; title: string | null; completedAt: Date | null; clientFirstName: string | null; clientLastName: string | null; clientId: string | null }>;
+  customerAddonRequestRows: Awaited<ReturnType<typeof loadOpenCustomerAddonRequestRows>>;
   reactivationRows: Array<{ id: string; firstName: string | null; lastName: string | null; lastVisit: Date | null }>;
   systemIssueCounts: { notificationFailures: number; integrationFailures: number };
 }) {
@@ -3506,6 +3549,47 @@ export function buildActionQueue(params: {
         supportsSnooze: true,
         supportsDismiss: true,
         occurredAt: row.completedAt?.toISOString() ?? null,
+        priority: 0,
+        priorityReasons: [],
+      });
+    }
+  }
+
+  if (params.context.permissions.todaySchedule) {
+    const seenAddonRequestKeys = new Set<string>();
+    for (const row of params.customerAddonRequestRows) {
+      if (!row.appointmentId) continue;
+      let addonName = "Requested add-on";
+      let addonPrice: number | null = null;
+      let addonServiceId = "";
+      try {
+        const metadata = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
+        if (typeof metadata.addonName === "string" && metadata.addonName.trim()) {
+          addonName = metadata.addonName.trim();
+        }
+        if (typeof metadata.addonServiceId === "string" && metadata.addonServiceId.trim()) {
+          addonServiceId = metadata.addonServiceId.trim();
+        }
+        const parsedPrice = Number(metadata.addonPrice);
+        addonPrice = Number.isFinite(parsedPrice) ? parsedPrice : null;
+      } catch {
+        addonName = "Requested add-on";
+      }
+      const requestKey = `${row.appointmentId}:${addonServiceId || row.id}`;
+      if (seenAddonRequestKeys.has(requestKey)) continue;
+      seenAddonRequestKeys.add(requestKey);
+      items.push({
+        id: `addon-request:${row.id}`,
+        type: "customer_addon_request",
+        label: `Review add-on request: ${addonName}`,
+        reason: `${formatPersonName(row.clientFirstName, row.clientLastName)} asked to add this to ${row.appointmentTitle ?? "an appointment"}.`,
+        urgency: "medium",
+        amountAtRisk: addonPrice,
+        ctaLabel: "Open appointment",
+        ctaUrl: `/appointments/${row.appointmentId}`,
+        supportsSnooze: true,
+        supportsDismiss: true,
+        occurredAt: row.createdAt.toISOString(),
         priority: 0,
         priorityReasons: [],
       });
@@ -3703,6 +3787,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     systemIssueCounts,
     upcomingDepositRows,
     reviewRequestReadyRows,
+    customerAddonRequestRows,
     reactivationRows,
   ] = await Promise.all([
     loadOrFallback(
@@ -3795,6 +3880,12 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       [] as AppointmentDashboardRow[],
       ["action_queue", "automations"],
       () => loadReviewRequestReadyRows(business, reviewCutoff, tx)
+    ),
+    loadOrFallback(
+      "customerAddonRequestRows",
+      [] as Awaited<ReturnType<typeof loadOpenCustomerAddonRequestRows>>,
+      ["action_queue"],
+      () => loadOpenCustomerAddonRequestRows(params.businessId, tx)
     ),
     loadOrFallback(
       "reactivationRows",
@@ -3992,6 +4083,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     overdueInvoices,
     completedMissingInvoiceRows,
     reviewRequestReadyRows,
+    customerAddonRequestRows,
     reactivationRows,
     systemIssueCounts,
   });
@@ -4224,6 +4316,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       overdue_invoice: 0,
       completed_missing_invoice: 0,
       review_request: 0,
+      customer_addon_request: 0,
       reactivation: 0,
       system_issue: 0,
     }

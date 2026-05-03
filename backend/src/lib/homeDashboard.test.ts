@@ -891,6 +891,7 @@ describe("home dashboard domain logic", () => {
         },
       ],
       reviewRequestReadyRows: [],
+      customerAddonRequestRows: [],
       reactivationRows: [],
       systemIssueCounts: { notificationFailures: 0, integrationFailures: 0 },
     });
@@ -898,6 +899,109 @@ describe("home dashboard domain logic", () => {
     expect(items.filter((item) => item.type === "completed_missing_invoice")).toHaveLength(1);
     expect(items.find((item) => item.type === "completed_missing_invoice")?.id).toBe("completed:customer-job");
     expect(items.find((item) => item.type === "completed_missing_invoice")?.amountAtRisk).toBe(440);
+  });
+
+  it("surfaces customer add-on requests as actionable queue items", () => {
+    const items = buildActionQueue({
+      context: {
+        now: new Date("2026-04-10T18:00:00.000Z"),
+        business: {
+          id: "biz-1",
+          name: "Strata Test",
+          timezone: "America/Los_Angeles",
+          automationUncontactedLeadHours: 1,
+          automationAbandonedQuoteHours: 24,
+          automationReviewRequestDelayHours: 24,
+          automationLapsedClientMonths: 6,
+          stripeConnectAccountId: null,
+          stripeConnectChargesEnabled: false,
+          stripeConnectPayoutsEnabled: false,
+          automationAppointmentRemindersEnabled: false,
+          automationReviewRequestsEnabled: false,
+          automationLapsedClientsEnabled: false,
+          reviewRequestUrl: null,
+          bookingRequestUrl: null,
+          staffCount: 1,
+          monthlyRevenueGoal: null,
+          monthlyJobsGoal: null,
+        },
+        timezone: "America/Los_Angeles",
+        role: "owner",
+        timeOfDay: "midday",
+        next48Hours: new Date("2026-04-12T18:00:00.000Z"),
+        permissions: {
+          today: true,
+          cash: true,
+          conversion: true,
+          todaySchedule: true,
+          actionQueue: true,
+          pipeline: true,
+          revenueCollections: true,
+          recentActivity: true,
+          automations: true,
+          businessHealth: true,
+          goals: true,
+          teamVisibility: true,
+          clientVisibility: true,
+          vehicleVisibility: true,
+          quoteVisibility: true,
+          invoiceVisibility: true,
+          paymentVisibility: true,
+          settingsVisibility: true,
+        },
+        uncontactedCutoff: new Date("2026-04-10T17:45:00.000Z"),
+        quoteFollowUpCutoff: new Date("2026-04-09T18:00:00.000Z"),
+        reviewCutoff: new Date("2026-04-09T18:00:00.000Z"),
+        lapsedCutoff: new Date("2025-10-10T18:00:00.000Z"),
+      },
+      leadRows: [],
+      quoteRows: [],
+      upcomingDepositRows: [],
+      upcomingDepositFinance: new Map(),
+      overdueInvoices: [],
+      completedMissingInvoiceRows: [],
+      reviewRequestReadyRows: [],
+      customerAddonRequestRows: [
+        {
+          id: "activity-1",
+          appointmentId: "appointment-1",
+          metadata: JSON.stringify({
+            addonServiceId: "service-addon-1",
+            addonName: "Interior ceramic protection",
+            addonPrice: 225,
+          }),
+          createdAt: new Date("2026-04-10T17:30:00.000Z"),
+          appointmentTitle: "Full correction",
+          clientFirstName: "Alex",
+          clientLastName: "Driver",
+        },
+        {
+          id: "activity-duplicate",
+          appointmentId: "appointment-1",
+          metadata: JSON.stringify({
+            addonServiceId: "service-addon-1",
+            addonName: "Interior ceramic protection",
+            addonPrice: 225,
+          }),
+          createdAt: new Date("2026-04-10T17:29:00.000Z"),
+          appointmentTitle: "Full correction",
+          clientFirstName: "Alex",
+          clientLastName: "Driver",
+        },
+      ],
+      reactivationRows: [],
+      systemIssueCounts: { notificationFailures: 0, integrationFailures: 0 },
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "addon-request:activity-1",
+      type: "customer_addon_request",
+      label: "Review add-on request: Interior ceramic protection",
+      reason: "Alex Driver asked to add this to Full correction.",
+      amountAtRisk: 225,
+      ctaUrl: "/appointments/appointment-1",
+    });
   });
 
   it("computes transparent health scores from only the permitted factors", () => {

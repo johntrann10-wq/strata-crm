@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
-import { CalendarDays, CarFront, ExternalLink, FileText, Receipt, ShieldCheck } from "lucide-react";
+import { CalendarDays, CarFront, CheckCircle2, ExternalLink, FileText, Loader2, Plus, Receipt, ShieldCheck, Sparkles } from "lucide-react";
 import { API_BASE } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,22 @@ type PortalSummary = {
       paidInFull?: boolean | null;
       depositSatisfied?: boolean | null;
       vehicleLabel: string | null;
+      serviceLines?: Array<{
+        id: string;
+        serviceId: string;
+        name: string;
+        quantity: number;
+        unitPrice: number;
+        durationMinutes: number | null;
+      }>;
+      availableAddons?: Array<{
+        id: string;
+        name: string;
+        price: number;
+        durationMinutes: number | null;
+        parentServiceId: string;
+        parentServiceName: string;
+      }>;
       url: string;
       payUrl: string | null;
     }>;
@@ -145,6 +161,8 @@ export default function PortalTokenRoute() {
   const [data, setData] = useState<PortalSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [addonRequestState, setAddonRequestState] = useState<Record<string, "sending" | "sent" | "error">>({});
+  const [addonRequestErrors, setAddonRequestErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!token) {
@@ -186,6 +204,42 @@ export default function PortalTokenRoute() {
     if (!data) return "Customer";
     return [data.client.firstName, data.client.lastName].filter(Boolean).join(" ") || "Customer";
   }, [data]);
+
+  const handleRequestAddon = async (appointmentId: string, addonServiceId: string) => {
+    if (!token) return;
+    const requestKey = `${appointmentId}:${addonServiceId}`;
+    setAddonRequestState((prev) => ({ ...prev, [requestKey]: "sending" }));
+    setAddonRequestErrors((prev) => {
+      const next = { ...prev };
+      delete next[requestKey];
+      return next;
+    });
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/portal/${encodeURIComponent(token)}/appointments/${encodeURIComponent(appointmentId)}/add-on-request`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ addonServiceId }),
+        }
+      );
+      const payload = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) {
+        throw new Error(payload.message || "The shop could not receive this add-on request right now.");
+      }
+      setAddonRequestState((prev) => ({ ...prev, [requestKey]: "sent" }));
+    } catch (requestError) {
+      setAddonRequestState((prev) => ({ ...prev, [requestKey]: "error" }));
+      setAddonRequestErrors((prev) => ({
+        ...prev,
+        [requestKey]:
+          requestError instanceof Error
+            ? requestError.message
+            : "The shop could not receive this add-on request right now.",
+      }));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)]">
@@ -379,6 +433,86 @@ export default function PortalTokenRoute() {
                               )}
                             </div>
                           </div>
+                          {appointment.serviceLines?.length ? (
+                            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                Booked services
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                {appointment.serviceLines.map((service) => (
+                                  <div key={service.id} className="flex min-w-0 items-start justify-between gap-3 text-sm">
+                                    <div className="min-w-0">
+                                      <p className="break-words font-medium text-slate-900">{service.name}</p>
+                                      <p className="text-xs text-slate-500">
+                                        Qty {service.quantity || 1}
+                                        {service.durationMinutes ? ` • ${service.durationMinutes} min` : ""}
+                                      </p>
+                                    </div>
+                                    <p className="shrink-0 font-semibold text-slate-900">{formatCurrency(service.unitPrice)}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {appointment.availableAddons?.length ? (
+                            <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50/70 p-3">
+                              <div className="flex items-center gap-2">
+                                <Sparkles className="h-4 w-4 text-orange-600" />
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-900">
+                                  Optional add-ons
+                                </p>
+                              </div>
+                              <div className="mt-3 space-y-2">
+                                {appointment.availableAddons.map((addon) => {
+                                  const requestKey = `${appointment.id}:${addon.id}`;
+                                  const state = addonRequestState[requestKey];
+                                  const isSent = state === "sent";
+                                  const isSending = state === "sending";
+                                  return (
+                                    <div
+                                      key={addon.id}
+                                      className="rounded-xl border border-orange-200 bg-white p-3 text-sm shadow-sm"
+                                    >
+                                      <div className="flex min-w-0 items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="break-words font-semibold text-slate-950">{addon.name}</p>
+                                          <p className="mt-0.5 text-xs text-slate-500">
+                                            Suggested with {addon.parentServiceName}
+                                            {addon.durationMinutes ? ` • ${addon.durationMinutes} min` : ""}
+                                          </p>
+                                        </div>
+                                        <p className="shrink-0 font-semibold text-slate-950">{formatCurrency(addon.price)}</p>
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={isSent ? "outline" : "default"}
+                                          className="rounded-full"
+                                          onClick={() => void handleRequestAddon(appointment.id, addon.id)}
+                                          disabled={isSending || isSent}
+                                        >
+                                          {isSending ? (
+                                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                          ) : isSent ? (
+                                            <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                                          ) : (
+                                            <Plus className="mr-1.5 h-4 w-4" />
+                                          )}
+                                          {isSent ? "Requested" : "Ask shop to add"}
+                                        </Button>
+                                        {addonRequestErrors[requestKey] ? (
+                                          <p className="text-xs text-rose-700">{addonRequestErrors[requestKey]}</p>
+                                        ) : (
+                                          <p className="text-xs text-slate-500">The shop will review before changing the appointment.</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Button asChild variant="outline" size="sm" className="rounded-full">
                               <a href={appointment.url}>View appointment</a>
