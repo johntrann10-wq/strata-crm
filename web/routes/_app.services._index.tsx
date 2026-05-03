@@ -61,7 +61,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatServiceCategory } from "../lib/serviceCatalog";
-import { isPackageTemplateService } from "../lib/servicePackages";
+import { PACKAGE_CATEGORY_LABEL, isPackageCategoryText, isPackageTemplateService } from "../lib/servicePackages";
 import { QuarterHourDurationGrid } from "../components/appointments/SchedulingControls";
 import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
 import type { BookingDailyHoursEntry } from "../lib/businessSettingsForm";
@@ -309,6 +309,7 @@ function formatBookingDaySummary(days: number[] | null | undefined): string {
 }
 
 type ServiceTab = "active" | "inactive";
+type CreateServiceMode = "service" | "package";
 
 function MobileFilterSelect({
   value,
@@ -1445,6 +1446,7 @@ export default function ServicesPage() {
   }, []);
 
   const [createServiceOpen, setCreateServiceOpen] = useState(false);
+  const [createServiceMode, setCreateServiceMode] = useState<CreateServiceMode>("service");
   const [editService, setEditService] = useState<ServiceRecord | null>(null);
   const [deleteService, setDeleteService] = useState<ServiceRecord | null>(null);
   const [createFormData, setCreateFormData] = useState<ServiceFormData>(defaultServiceFormData);
@@ -1554,6 +1556,10 @@ export default function ServicesPage() {
     () => [{ value: UNCATEGORIZED_VALUE, label: "Uncategorized" }, ...managedCategories.map((category) => ({ value: category.id, label: category.name }))],
     [managedCategories]
   );
+  const packageCategoryId = useMemo(
+    () => managedCategories.find((category) => isPackageCategoryText(category.name) || isPackageCategoryText(category.key))?.id ?? null,
+    [managedCategories]
+  );
 
   const visibleServices = useMemo(
     () => filterServices(services, { search, categoryFilter, serviceTab }),
@@ -1596,9 +1602,8 @@ export default function ServicesPage() {
             totalPrice:
               Number(service.price ?? 0) +
               linkedAddons.reduce((sum, addon) => sum + Number(addon.price ?? 0), 0),
-          };
+            };
         })
-        .filter((summary) => summary.linkedAddons.length > 0)
         .sort((left, right) => left.service.name.localeCompare(right.service.name)),
     [linkedAddonsByParent, services]
   );
@@ -1655,11 +1660,40 @@ export default function ServicesPage() {
 
   const openCreateService = (categoryId?: string | null) => {
     if (!canEditServices) return;
+    setCreateServiceMode("service");
     setCreateFormData({
       ...buildServiceFormDefaults(bookingSettings),
       categoryId: categoryId ?? UNCATEGORIZED_VALUE,
     });
     setCreateServiceOpen(true);
+  };
+
+  const openCreatePackage = async () => {
+    if (!canEditServices) return;
+    let resolvedPackageCategoryId = packageCategoryId;
+    if (!resolvedPackageCategoryId) {
+      if (!supportsCategoryManagement) {
+        return toast.error("Create a Packages category before building package templates.");
+      }
+      const result = await runCreateCategory({ name: PACKAGE_CATEGORY_LABEL });
+      if (result.error) return toast.error(result.error.message);
+      const createdCategory = result.data as Partial<CategoryRecord> | null;
+      resolvedPackageCategoryId = typeof createdCategory?.id === "string" ? createdCategory.id : null;
+      void refetchCategories();
+    }
+    if (!resolvedPackageCategoryId) {
+      return toast.error("Could not prepare the Packages category. Refresh and try again.");
+    }
+    setCreateServiceMode("package");
+    setCreateFormData({
+      ...buildServiceFormDefaults(bookingSettings),
+      categoryId: resolvedPackageCategoryId,
+      isAddon: false,
+      bookingEnabled: false,
+      bookingDescription: "Bundled service package with a clear scope and optional upgrade path.",
+    });
+    setCreateServiceOpen(true);
+    setPackageTemplatesOpen(true);
   };
 
   const handleCreateCategory = async (e: React.FormEvent) => {
@@ -1754,9 +1788,17 @@ export default function ServicesPage() {
         business: businessId ? { _link: businessId } : undefined,
     });
     if (result.error) return toast.error(result.error.message);
-    toast.success("Service created.");
+    const createdService = result.data as ServiceRecord | null;
+    toast.success(createServiceMode === "package" ? "Package created. Add included services next." : "Service created.");
     setCreateServiceOpen(false);
     setCreateFormData(buildServiceFormDefaults(bookingSettings));
+    if (createServiceMode === "package" && createdService?.id) {
+      setEditService(createdService);
+      setEditFormData(serviceToFormData(createdService, bookingSettings));
+      setNewAddonServiceId("");
+      setPackageTemplatesOpen(true);
+    }
+    setCreateServiceMode("service");
     void refetchServices();
   };
 
@@ -1852,6 +1894,15 @@ export default function ServicesPage() {
     () => addonLinks.filter((link) => link.parentServiceId === editService?.id),
     [addonLinks, editService]
   );
+  const editServiceIsPackageTemplate = editService
+    ? isPackageTemplateService({
+        ...editService,
+        categoryLabel:
+          editFormData.categoryId === UNCATEGORIZED_VALUE
+            ? editService.categoryLabel
+            : categoryById.get(editFormData.categoryId)?.name ?? editService.categoryLabel,
+      })
+    : false;
 
   const showCategoryManagementUnavailable = () => {
     toast.error("Category management will work after the latest database update is applied.");
@@ -1907,6 +1958,16 @@ export default function ServicesPage() {
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               View live
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl"
+              onClick={() => void openCreatePackage()}
+              disabled={!canEditServices || createCategoryFetching}
+            >
+              <Package className="mr-2 h-4 w-4" />
+              Package
             </Button>
             <Button
               variant="outline"
@@ -2057,7 +2118,7 @@ export default function ServicesPage() {
             <div className="min-w-0">
               <CardTitle className="text-base font-semibold">Packages</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
-                {packageSummaries.length} configured template{packageSummaries.length === 1 ? "" : "s"} from Package or Bundle categories
+                {packageSummaries.length} package template{packageSummaries.length === 1 ? "" : "s"} ready to build, price, and reuse
               </p>
             </div>
           </div>
@@ -2066,7 +2127,17 @@ export default function ServicesPage() {
         {packageTemplatesOpen ? (
         <CardContent className="p-4 sm:p-5">
           {packageSummaries.length === 0 ? (
-            <EmptyState icon={Package} title="No package templates yet" description="Move a base service into a Package or Bundle category, then link add-ons to make it reusable here." />
+            <EmptyState
+              icon={Package}
+              title="No package templates yet"
+              description="Create a package here, then link the services or add-ons that make up the bundle."
+              action={
+                <Button type="button" onClick={() => void openCreatePackage()} disabled={!canEditServices || createCategoryFetching}>
+                  <Package className="mr-2 h-4 w-4" />
+                  Create package
+                </Button>
+              }
+            />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {packageSummaries.map((summary) => (
@@ -2077,15 +2148,23 @@ export default function ServicesPage() {
                         <h3 className="text-base font-semibold">{summary.service.name}</h3>
                         <Badge variant="secondary">{summary.service.categoryLabel ?? formatServiceCategory(summary.service.category)}</Badge>
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{summary.linkedAddons.length} linked add-on{summary.linkedAddons.length === 1 ? "" : "s"}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {summary.linkedAddons.length > 0
+                          ? `${summary.linkedAddons.length} included item${summary.linkedAddons.length === 1 ? "" : "s"}`
+                          : "Open to add included services"}
+                      </p>
                     </div>
                     <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </div>
                   <Separator className="my-4" />
                   <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Includes</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Included services</p>
                     <div className="flex flex-wrap gap-2">
-                      {summary.linkedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)}
+                      {summary.linkedAddons.length > 0 ? (
+                        summary.linkedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)
+                      ) : (
+                        <Badge variant="outline">No included items yet</Badge>
+                      )}
                     </div>
                     <p className="pt-2 text-sm font-medium">{formatPrice(summary.totalPrice)}</p>
                   </div>
@@ -2229,12 +2308,22 @@ export default function ServicesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={createServiceOpen} onOpenChange={setCreateServiceOpen}>
+      <Dialog
+        open={createServiceOpen}
+        onOpenChange={(open) => {
+          setCreateServiceOpen(open);
+          if (!open) setCreateServiceMode("service");
+        }}
+      >
         <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-x-hidden overflow-y-auto p-0 sm:max-w-[760px]">
           <div className="p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Add Service</DialogTitle>
-              <DialogDescription>Build the catalog item, then turn on public booking only when it needs to be bookable online.</DialogDescription>
+              <DialogTitle>{createServiceMode === "package" ? "Add Package" : "Add Service"}</DialogTitle>
+              <DialogDescription>
+                {createServiceMode === "package"
+                  ? "Create the bundle first, then add the included services from the package editor."
+                  : "Build the catalog item, then turn on public booking only when it needs to be bookable online."}
+              </DialogDescription>
             </DialogHeader>
             <form className="mt-4" onSubmit={handleCreateService}>
               <ServiceForm
@@ -2248,7 +2337,7 @@ export default function ServicesPage() {
                   Cancel
                 </Button>
                 <Button type="submit" className="sm:min-w-36" disabled={createServiceFetching}>
-                  {createServiceFetching ? "Creating..." : "Create Service"}
+                  {createServiceFetching ? "Creating..." : createServiceMode === "package" ? "Create Package" : "Create Service"}
                 </Button>
               </DialogFooter>
             </form>
@@ -2273,9 +2362,13 @@ export default function ServicesPage() {
               <Separator className="my-4" />
               <div className="space-y-3 rounded-[1.35rem] border border-border/70 bg-white/95 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
                 <div>
-                  <p className="text-sm font-medium">Optional add-ons for this service</p>
+                  <p className="text-sm font-medium">
+                    {editServiceIsPackageTemplate ? "Included services for this package" : "Optional add-ons for this service"}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    These links create service-specific add-on suggestions. They only become package templates when the base service is in a Package or Bundle category.
+                    {editServiceIsPackageTemplate
+                      ? "Link the services and add-ons that make up this package so teams can reuse the bundle during booking, quotes, invoices, and appointments."
+                      : "These links create service-specific add-on suggestions. Use the Package button when you want to build a reusable bundle."}
                   </p>
                 </div>
               {linkedAddonRecords.length > 0 ? (
@@ -2293,13 +2386,15 @@ export default function ServicesPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No add-ons linked yet.</p>
+                <p className="text-xs text-muted-foreground">
+                  {editServiceIsPackageTemplate ? "No included services linked yet." : "No add-ons linked yet."}
+                </p>
               )}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <ResponsiveSelect
                   value={newAddonServiceId}
                   onValueChange={setNewAddonServiceId}
-                  placeholder="Select a service to link as an add-on"
+                  placeholder={editServiceIsPackageTemplate ? "Select an included service" : "Select a service to link as an add-on"}
                   options={services
                     .filter(
                       (service) =>
@@ -2316,7 +2411,7 @@ export default function ServicesPage() {
                 />
                 <Button type="button" variant="outline" onClick={() => void handleAddAddonLink()} disabled={!newAddonServiceId || createAddonLinkFetching}>
                   <Plus className="mr-1 h-3.5 w-3.5" />
-                  Add
+                  {editServiceIsPackageTemplate ? "Include" : "Add"}
                 </Button>
               </div>
             </div>

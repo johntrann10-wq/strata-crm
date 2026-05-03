@@ -4,6 +4,8 @@ type PackageCandidateService = {
   categoryLabel?: string | null;
 };
 
+export const PACKAGE_CATEGORY_LABEL = "Packages";
+
 const PACKAGE_CATEGORIES = new Set(["package", "packages", "bundle", "bundles"]);
 
 function normalizePackageText(value: string | null | undefined) {
@@ -14,7 +16,9 @@ function normalizePackageText(value: string | null | undefined) {
 }
 
 export function isPackageTemplateService(service: PackageCandidateService) {
-  const categoryLabel = normalizePackageText(service.categoryLabel);
-  const category = normalizePackageText(service.category);
-  return PACKAGE_CATEGORIES.has(categoryLabel) || PACKAGE_CATEGORIES.has(category);
+  return isPackageCategoryText(service.categoryLabel) || isPackageCategoryText(service.category);
+}
+
+export function isPackageCategoryText(value: string | null | undefined) {
+  return PACKAGE_CATEGORIES.has(normalizePackageText(value));
 }
