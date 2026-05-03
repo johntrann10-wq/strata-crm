@@ -575,30 +575,10 @@ function parseBookingBlackoutDatesText(value: string): string[] {
     .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
 }
 
-function bookingModeLabel(
-  service: Pick<ServiceRecord, "bookingFlowType">,
-  defaultFlow: BusinessBookingSettings["bookingDefaultFlow"],
-) {
-  const effective = service.bookingFlowType === "self_book" || service.bookingFlowType === "request"
-    ? service.bookingFlowType
-    : defaultFlow;
-  return effective === "self_book" ? "Book now" : "Request service";
-}
-
 function serviceModeLabel(mode: ServiceRecord["bookingServiceMode"] | ServiceFormData["bookingServiceMode"]) {
   if (mode === "mobile") return "Mobile / on-site";
   if (mode === "both") return "Mobile or in-shop";
   return "In-shop";
-}
-
-function buildPublicBookingHref(bookingUrl: string, service: Pick<ServiceRecord, "id" | "categoryId">, options?: { step?: "service" }) {
-  const params = new URLSearchParams({
-    service: service.id,
-    source: "services-page",
-  });
-  if (service.categoryId) params.set("category", service.categoryId);
-  if (options?.step) params.set("step", options.step);
-  return `${bookingUrl}?${params.toString()}`;
 }
 
 function groupServicesByCategory(
@@ -1257,8 +1237,6 @@ function ActiveToggle({
 function ServiceCard({
   service,
   linkedAddons,
-  bookingUrl,
-  defaultBookingFlow,
   canEdit,
   onEdit,
   onToggle,
@@ -1270,8 +1248,6 @@ function ServiceCard({
 }: {
   service: ServiceRecord;
   linkedAddons: ServiceRecord[];
-  bookingUrl: string | null;
-  defaultBookingFlow: BusinessBookingSettings["bookingDefaultFlow"];
   canEdit: boolean;
   onEdit: (service: ServiceRecord) => void;
   onToggle: (service: ServiceRecord) => void;
@@ -1282,12 +1258,6 @@ function ServiceCard({
   moveDisabledDown: boolean;
 }) {
   const durationStr = formatDuration(service.durationMinutes);
-  const effectiveBookingCta = bookingModeLabel(service, defaultBookingFlow);
-  const primaryBookingHref = service.bookingEnabled === true && bookingUrl ? buildPublicBookingHref(bookingUrl, service) : null;
-  const detailBookingHref =
-    service.bookingEnabled === true && bookingUrl
-      ? buildPublicBookingHref(bookingUrl, service, { step: "service" })
-      : null;
   const bookingModeBadge =
     service.bookingEnabled === true
       ? service.bookingFlowType === "self_book"
@@ -1377,20 +1347,6 @@ function ServiceCard({
 
       <div className="flex w-full flex-col gap-3 lg:ml-4 lg:w-auto lg:min-w-[220px] lg:items-end">
         <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
-          {primaryBookingHref ? (
-            <Button size="sm" className="rounded-xl shadow-sm" asChild onClick={(e) => e.stopPropagation()}>
-              <Link to={primaryBookingHref}>
-                {effectiveBookingCta}
-              </Link>
-            </Button>
-          ) : null}
-          {detailBookingHref ? (
-            <Button size="sm" variant="outline" className="rounded-xl" asChild onClick={(e) => e.stopPropagation()}>
-              <Link to={detailBookingHref}>
-                Learn more
-              </Link>
-            </Button>
-          ) : null}
           <Button size="sm" variant="outline" className="rounded-xl" onClick={(e) => { e.stopPropagation(); onEdit(service); }} disabled={!canEdit}>
             <Pencil className="mr-1.5 h-3.5 w-3.5" />
             Edit
@@ -2087,8 +2043,6 @@ export default function ServicesPage() {
                       key={service.id}
                       service={service}
                       linkedAddons={linkedAddonsByParent.get(service.id) ?? []}
-                      bookingUrl={bookingUrl}
-                      defaultBookingFlow={bookingSettings.bookingDefaultFlow}
                       canEdit={canEditServices}
                       onEdit={(record) => { setEditService(record); setEditFormData(serviceToFormData(record, bookingSettings)); setNewAddonServiceId(""); }}
                       onToggle={handleToggleActive}
