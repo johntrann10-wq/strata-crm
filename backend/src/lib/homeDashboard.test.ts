@@ -681,6 +681,7 @@ describe("home dashboard domain logic", () => {
         pendingCustomerRequestCount: 0,
         pendingCustomerRequestValue: 0,
         topAddOns: [{ id: "addon-1", name: "Engine Bay", count: 1, revenue: 45 }],
+        topAddOnDrivers: [],
       },
       links: {
         bookingsThisWeek: "/calendar?view=week&date=2026-04-06",
@@ -723,7 +724,42 @@ describe("home dashboard domain logic", () => {
         { id: "addon-1", name: "Engine Bay", count: 3, revenue: 135 },
         { id: "addon-2", name: "Pet Hair", count: 1, revenue: 60 },
       ],
+      topAddOnDrivers: [],
     });
+  });
+
+  it("summarizes which base services drive booked add-on lift", () => {
+    const insights = buildAddOnInsights({
+      appointmentCount: 3,
+      rows: [
+        { appointmentId: "apt-1", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 1, unitPrice: "45" },
+        { appointmentId: "apt-1", serviceId: "addon-2", serviceName: "Pet Hair", quantity: 1, unitPrice: "60" },
+        { appointmentId: "apt-2", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 2, unitPrice: "45" },
+        { appointmentId: "apt-3", serviceId: "addon-3", serviceName: "Unlinked Extra", quantity: 1, unitPrice: "20" },
+      ],
+      baseServiceRows: [
+        { appointmentId: "apt-1", serviceId: "base-1", serviceName: "Full Detail" },
+        { appointmentId: "apt-2", serviceId: "base-1", serviceName: "Full Detail" },
+        { appointmentId: "apt-3", serviceId: "base-2", serviceName: "Maintenance Wash" },
+      ],
+      addonLinkRows: [
+        { parentServiceId: "base-1", addonServiceId: "addon-1" },
+        { parentServiceId: "base-1", addonServiceId: "addon-2" },
+      ],
+    });
+
+    expect(insights.topAddOnDrivers).toEqual([
+      {
+        id: "base-1",
+        name: "Full Detail",
+        count: 4,
+        revenue: 195,
+        topAddOns: [
+          { id: "addon-1", name: "Engine Bay", count: 3, revenue: 135 },
+          { id: "addon-2", name: "Pet Hair", count: 1, revenue: 60 },
+        ],
+      },
+    ]);
   });
 
   it("summarizes customer add-on request demand for dashboard booking insight", () => {

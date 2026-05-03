@@ -1454,7 +1454,15 @@ export function HomeBookingsOverviewCard({
     addOnRevenue: 0,
     addOnCount: 0,
     averageAddOnRevenuePerBooking: 0,
+    customerRequestCount: 0,
+    customerRequestValue: 0,
+    customerApprovedCount: 0,
+    customerDeclinedCount: 0,
+    customerRequestApprovalRate: null,
+    pendingCustomerRequestCount: 0,
+    pendingCustomerRequestValue: 0,
     topAddOns: [],
+    topAddOnDrivers: [],
   };
   const stats = [
     {
@@ -1636,6 +1644,31 @@ export function HomeBookingsOverviewCard({
               ) : (
                 <p className="mt-3 text-sm text-slate-500">Add-ons selected on appointments this month will show up here.</p>
               )}
+              {addOnInsights.topAddOnDrivers.length > 0 ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Best base-service drivers</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {addOnInsights.topAddOnDrivers.map((driver) => (
+                      <div key={driver.id} className="rounded-[0.95rem] border border-slate-200/80 bg-white/80 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="min-w-0 text-sm font-semibold leading-5 text-slate-950">{driver.name}</p>
+                          <span className="shrink-0 text-sm font-semibold text-emerald-700">{formatDashboardCompactCurrency(driver.revenue)}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {driver.count} add-on{driver.count === 1 ? "" : "s"} booked from this service
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {driver.topAddOns.map((addon) => (
+                            <Badge key={addon.id} variant="outline" className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                              {addon.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </>
         )}

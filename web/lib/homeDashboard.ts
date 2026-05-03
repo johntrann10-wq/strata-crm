@@ -297,6 +297,18 @@ export type HomeDashboardSnapshot = {
         count: number;
         revenue: number;
       }>;
+      topAddOnDrivers: Array<{
+        id: string;
+        name: string;
+        count: number;
+        revenue: number;
+        topAddOns: Array<{
+          id: string;
+          name: string;
+          count: number;
+          revenue: number;
+        }>;
+      }>;
     };
     links: {
       bookingsThisWeek: string;
