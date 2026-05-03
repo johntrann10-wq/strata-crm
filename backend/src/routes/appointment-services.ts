@@ -40,6 +40,16 @@ function isServiceSchemaDriftError(error: unknown): boolean {
   return code === "42P01" || code === "42703" || message.includes("does not exist");
 }
 
+export function resolveAppointmentServiceUnitPrice(
+  unitPrice: string | number | null | undefined,
+  catalogPrice: string | number | null | undefined
+) {
+  const explicitPrice = unitPrice != null && unitPrice !== "" ? Number(unitPrice) : Number.NaN;
+  if (Number.isFinite(explicitPrice) && explicitPrice >= 0) return explicitPrice.toFixed(2);
+  const fallbackPrice = catalogPrice != null && catalogPrice !== "" ? Number(catalogPrice) : Number.NaN;
+  return Number.isFinite(fallbackPrice) && fallbackPrice >= 0 ? fallbackPrice.toFixed(2) : null;
+}
+
 async function getTableColumns(tableName: string): Promise<Set<string>> {
   const result = await db.execute(sql`
     select column_name
@@ -77,6 +87,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission
     serviceCategory: string | null;
     serviceCategoryLabel?: string | null;
     serviceDurationMinutes: number | null;
+    servicePrice: string | null;
   }>;
 
   try {
@@ -93,6 +104,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission
         serviceCategory: hasLegacyCategory ? services.category : sql<string | null>`null`,
         serviceCategoryLabel: hasCategoryId && hasServiceCategoriesTable ? serviceCategories.name : sql<string | null>`null`,
         serviceDurationMinutes: services.durationMinutes,
+        servicePrice: services.price,
       })
       .from(appointmentServices)
       .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
@@ -119,6 +131,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission
         serviceName: services.name,
         serviceCategory: hasLegacyCategory ? services.category : sql<string | null>`null`,
         serviceDurationMinutes: services.durationMinutes,
+        servicePrice: services.price,
       })
       .from(appointmentServices)
       .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
@@ -134,7 +147,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission
       appointmentId: row.appointmentId,
       serviceId: row.serviceId,
       quantity: row.quantity ?? 1,
-      unitPrice: row.unitPrice,
+      unitPrice: resolveAppointmentServiceUnitPrice(row.unitPrice, row.servicePrice),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       service: row.serviceName
@@ -143,6 +156,7 @@ appointmentServicesRouter.get("/", requireAuth, requireTenant, requirePermission
             name: row.serviceName,
             category: row.serviceCategoryLabel ?? formatLegacyServiceCategory(row.serviceCategory),
             durationMinutes: row.serviceDurationMinutes,
+            price: row.servicePrice,
           }
         : null,
     })),
@@ -175,16 +189,22 @@ appointmentServicesRouter.post("/", requireAuth, requireTenant, requirePermissio
   if (!parsed.success) throw new BadRequestError(parsed.error.message ?? "Invalid input");
 
   const { appointmentId, serviceId } = parsed.data;
-  const appointment = await db
+  const [appointment] = await db
     .select({ id: appointments.id })
     .from(appointments)
     .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
     .limit(1);
 
-  if (!appointment[0]) throw new NotFoundError("Appointment not found.");
+  if (!appointment) throw new NotFoundError("Appointment not found.");
+  const [service] = await db
+    .select({ id: services.id, price: services.price })
+    .from(services)
+    .where(and(eq(services.id, serviceId), eq(services.businessId, bid)))
+    .limit(1);
+  if (!service) throw new NotFoundError("Service not found.");
 
   const quantity = parsed.data.quantity ?? 1;
-  const unitPrice = parsed.data.unitPrice != null ? String(parsed.data.unitPrice) : null;
+  const unitPrice = resolveAppointmentServiceUnitPrice(parsed.data.unitPrice, service.price) ?? "0.00";
 
   const created = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -210,6 +230,7 @@ appointmentServicesRouter.post("/", requireAuth, requireTenant, requirePermissio
       appointmentServiceId: created.id,
       serviceId,
       quantity: created.quantity,
+      unitPrice: created.unitPrice,
     },
   });
 

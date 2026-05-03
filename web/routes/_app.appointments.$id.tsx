@@ -771,7 +771,7 @@ export default function AppointmentDetail() {
     }
   );
 
-  const [{ data: appointmentServices }] = useFindMany(api.appointmentService, {
+  const [{ data: appointmentServices }, refetchAppointmentServices] = useFindMany(api.appointmentService, {
     filter: { appointmentId: { equals: id } },
     first: 50,
     live: true,
@@ -785,6 +785,7 @@ export default function AppointmentDetail() {
         name: true,
         category: true,
         durationMinutes: true,
+        price: true,
       },
     },
   });
@@ -1276,6 +1277,7 @@ export default function AppointmentDetail() {
     toast.success("Service added to appointment");
     setSelectedServiceId("__none__");
     void refetchAppointment();
+    void refetchAppointmentServices();
   };
 
   const handleAddSuggestedService = async (service: AppointmentServiceCatalogRecord) => {
@@ -1293,6 +1295,7 @@ export default function AppointmentDetail() {
     toast.success(`${service.name ?? "Add-on"} added to appointment`);
     void triggerNotificationFeedback("success");
     void refetchAppointment();
+    void refetchAppointmentServices();
     void refetchActivity();
   };
 
@@ -1320,6 +1323,7 @@ export default function AppointmentDetail() {
     toast.success("Requested add-on added to appointment");
     void triggerNotificationFeedback("success");
     void refetchAppointment();
+    void refetchAppointmentServices();
     void refetchActivity();
   };
 
@@ -1351,6 +1355,7 @@ export default function AppointmentDetail() {
     }
     toast.success("Service removed from appointment");
     void refetchAppointment();
+    void refetchAppointmentServices();
   };
 
   const handleCompleteService = async (appointmentServiceId: string) => {
@@ -3072,6 +3077,7 @@ export default function AppointmentDetail() {
                     <div className="space-y-3">
                       {((appointmentServices as any[]) ?? []).map((item: any) => {
                         const isCompleted = completedServiceIds.get(item.id) === true;
+                        const serviceUnitPrice = Number(item.unitPrice ?? item.service?.price ?? 0);
                         return (
                           <div key={item.id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
@@ -3088,7 +3094,7 @@ export default function AppointmentDetail() {
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="text-sm font-medium text-foreground">
-                                {formatCurrency(Number(item.unitPrice ?? 0))}
+                                {formatCurrency(serviceUnitPrice)}
                               </div>
                               <Button
                                 variant="outline"
