@@ -171,6 +171,7 @@ export type HomeDashboardSnapshot = {
         | "overdue_invoice"
         | "completed_missing_invoice"
         | "review_request"
+        | "customer_addon_request"
         | "reactivation"
         | "system_issue";
       label: string;
