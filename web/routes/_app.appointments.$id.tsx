@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
@@ -302,6 +302,44 @@ type AppointmentDetailRecord = {
     metadata?: Record<string, unknown>;
   } | null;
 };
+
+type AppointmentServiceCatalogRecord = {
+  id: string;
+  name?: string | null;
+  category?: string | null;
+  categoryLabel?: string | null;
+  price?: number | string | null;
+  durationMinutes?: number | null;
+  active?: boolean | null;
+};
+
+type AppointmentAddonLinkRecord = {
+  parentServiceId?: string | null;
+  addonServiceId?: string | null;
+};
+
+function buildAppointmentAddonSuggestions(
+  services: AppointmentServiceCatalogRecord[],
+  addonLinks: AppointmentAddonLinkRecord[],
+  selectedServiceIds: Set<string>
+) {
+  const serviceById = new Map(services.filter((service) => service.id).map((service) => [service.id, service]));
+
+  return Array.from(selectedServiceIds)
+    .flatMap((parentServiceId) => {
+      const baseService = serviceById.get(parentServiceId);
+      if (!baseService) return [];
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === parentServiceId)
+        .map((link) => (link.addonServiceId ? serviceById.get(link.addonServiceId) : null))
+        .filter(
+          (addon): addon is AppointmentServiceCatalogRecord =>
+            Boolean(addon?.id) && addon?.active !== false && !selectedServiceIds.has(addon.id)
+        );
+      return linkedAddons.length > 0 ? [{ baseService, linkedAddons }] : [];
+    })
+    .slice(0, 4);
+}
 
 function getAppointmentDetailClientName(appointment: AppointmentDetailRecord) {
   if (!appointment.client) return "Internal block";
@@ -737,6 +775,10 @@ export default function AppointmentDetail() {
     sort: { createdAt: "Descending" },
     pause: !appointment?.business?.id,
   } as any);
+  const [{ data: serviceAddonLinks }] = useFindMany(api.serviceAddonLink, {
+    first: 500,
+    pause: !appointment?.business?.id,
+  } as any);
 
   const [{ fetching: updatingStatus }, runUpdateStatus] = useAction(api.appointment.updateStatus);
   const [{ fetching: sendingConfirmation }, runSendConfirmation] = useAction(api.appointment.sendConfirmation);
@@ -855,15 +897,32 @@ export default function AppointmentDetail() {
     };
   }, [appointment, invoice, setPageContext]);
 
-  const existingServiceIds = new Set(
-    ((appointmentServices ?? []) as Array<{ serviceId?: string | null }>).map((service) => service.serviceId).filter(Boolean)
+  const existingServiceIds = useMemo(
+    () =>
+      new Set(
+        ((appointmentServices ?? []) as Array<{ serviceId?: string | null }>)
+          .map((service) => service.serviceId)
+          .filter((serviceId): serviceId is string => Boolean(serviceId))
+      ),
+    [appointmentServices]
   );
-  const availableServices = ((serviceCatalog ?? []) as Array<{
-    id: string;
-    name?: string | null;
-    category?: string | null;
-    price?: number | string | null;
-  }>).filter((service) => service.id && !existingServiceIds.has(service.id));
+  const serviceCatalogRecords = useMemo(
+    () => (serviceCatalog ?? []) as AppointmentServiceCatalogRecord[],
+    [serviceCatalog]
+  );
+  const availableServices = useMemo(
+    () => serviceCatalogRecords.filter((service) => service.id && !existingServiceIds.has(service.id)),
+    [existingServiceIds, serviceCatalogRecords]
+  );
+  const appointmentAddonSuggestions = useMemo(
+    () =>
+      buildAppointmentAddonSuggestions(
+        serviceCatalogRecords,
+        (serviceAddonLinks ?? []) as AppointmentAddonLinkRecord[],
+        existingServiceIds
+      ),
+    [existingServiceIds, serviceAddonLinks, serviceCatalogRecords]
+  );
   const completedServiceIds = new Map(
     (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
       (acc, record) => {
@@ -1120,6 +1179,24 @@ export default function AppointmentDetail() {
     toast.success("Service added to appointment");
     setSelectedServiceId("__none__");
     void refetchAppointment();
+  };
+
+  const handleAddSuggestedService = async (service: AppointmentServiceCatalogRecord) => {
+    if (!appointment?.id || !service.id) return;
+    await triggerImpactFeedback("light");
+    const result = await runAddAppointmentService({
+      appointmentId: appointment.id,
+      serviceId: service.id,
+    });
+    if (result.error) {
+      toast.error(`Failed to add ${service.name ?? "add-on"}: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
+      return;
+    }
+    toast.success(`${service.name ?? "Add-on"} added to appointment`);
+    void triggerNotificationFeedback("success");
+    void refetchAppointment();
+    void refetchActivity();
   };
 
   const handleRemoveService = async (appointmentServiceId: string) => {
@@ -2690,11 +2767,50 @@ export default function AppointmentDetail() {
                         </option>
                       ))}
                     </FormSelect>
-                    <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
-                      {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                      Add service
-                    </Button>
-                  </div>
+                  <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
+                    {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    Add service
+                  </Button>
+                </div>
+
+                  {appointmentAddonSuggestions.length > 0 ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-950">Suggested add-ons</p>
+                          <p className="text-xs text-amber-800">
+                            Quick add linked upgrades already configured for the booked services.
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-900">
+                          Revenue lift
+                        </Badge>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {appointmentAddonSuggestions.map((suggestion) => (
+                          <div key={suggestion.baseService.id} className="space-y-2">
+                            <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-800">
+                              For {suggestion.baseService.name ?? "selected service"}
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {suggestion.linkedAddons.map((addon) => (
+                                <button
+                                  key={addon.id}
+                                  type="button"
+                                  className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={() => void handleAddSuggestedService(addon)}
+                                  disabled={addingService}
+                                >
+                                  <span className="min-w-0 break-words font-medium text-slate-950">{addon.name ?? "Add-on"}</span>
+                                  <span className="shrink-0 text-slate-600">{formatCurrency(Number(addon.price ?? 0))}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {(appointmentServices as any[])?.length ? (
                     <div className="space-y-3">
