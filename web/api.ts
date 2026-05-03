@@ -573,6 +573,19 @@ export const api = {
   },
   appointmentService: {
     ...resource("appointment-services"),
+    delete: (params: string | Record<string, unknown>) => {
+      const id =
+        typeof params === "string"
+          ? params
+          : typeof params?.id === "string"
+            ? params.id
+            : null;
+      if (!id) throw new Error("delete requires id (string or { id })");
+      return request<unknown>("/appointment-services/" + encodeURIComponent(id) + "/delete", {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      });
+    },
     complete: (params: Record<string, unknown>) =>
       request<unknown>("/appointment-services/" + (params?.id ?? "") + "/complete", {
         method: "POST",
