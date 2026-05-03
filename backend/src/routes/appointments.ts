@@ -71,6 +71,16 @@ const publicAppointmentChangeRequestLimiter = createRateLimiter({
   key: ({ ip, path }) => `public:appointment-change:${ip}:${path}`,
 });
 
+const addonRequestReviewParamsSchema = z.object({
+  id: z.string().uuid(),
+  addonServiceId: z.string().uuid(),
+});
+
+const addonRequestReviewSchema = z.object({
+  action: z.enum(["approved", "declined"]),
+  addonName: z.string().trim().max(160).optional(),
+});
+
 export function canDeleteAppointmentWithInvoiceStatuses(
   statuses: Array<string | null | undefined>
 ): boolean {
@@ -2648,6 +2658,77 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("
   }
   res.json(updated);
 });
+
+appointmentsRouter.post(
+  "/:id/add-on-requests/:addonServiceId/review",
+  requireAuth,
+  requireTenant,
+  requirePermission("appointments.write"),
+  wrapAsync(async (req: Request, res: Response) => {
+    const params = addonRequestReviewParamsSchema.safeParse(req.params);
+    if (!params.success) throw new BadRequestError("Invalid appointment add-on request.");
+    const parsed = addonRequestReviewSchema.safeParse(req.body);
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid add-on request review.");
+
+    const bid = businessId(req);
+    const { id, addonServiceId } = params.data;
+    const [appointment] = await db
+      .select({ id: appointments.id, title: appointments.title })
+      .from(appointments)
+      .where(and(eq(appointments.id, id), eq(appointments.businessId, bid)))
+      .limit(1);
+    if (!appointment) throw new NotFoundError("Appointment not found.");
+
+    const [requestLog] = await db
+      .select({ id: activityLogs.id, metadata: activityLogs.metadata })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.businessId, bid),
+          eq(activityLogs.entityType, "appointment"),
+          eq(activityLogs.entityId, id),
+          eq(activityLogs.action, "appointment.public_addon_requested"),
+          sql`coalesce(${activityLogs.metadata}::json->>'addonServiceId', '') = ${addonServiceId}`
+        )
+      )
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(1);
+    if (!requestLog) throw new NotFoundError("Add-on request not found.");
+
+    let requestMetadata: Record<string, unknown> = {};
+    try {
+      requestMetadata = requestLog.metadata ? (JSON.parse(requestLog.metadata) as Record<string, unknown>) : {};
+    } catch {
+      requestMetadata = {};
+    }
+
+    const action =
+      parsed.data.action === "approved"
+        ? "appointment.public_addon_approved"
+        : "appointment.public_addon_declined";
+    const addonName =
+      parsed.data.addonName ||
+      (typeof requestMetadata.addonName === "string" && requestMetadata.addonName.trim()
+        ? requestMetadata.addonName.trim()
+        : "Requested add-on");
+
+    await createRequestActivityLog(req, {
+      businessId: bid,
+      action,
+      entityType: "appointment",
+      entityId: id,
+      metadata: {
+        source: "strata_app",
+        addonServiceId,
+        addonName,
+        requestActivityId: requestLog.id,
+        appointmentTitle: appointment.title ?? null,
+      },
+    });
+
+    res.json({ ok: true, action: parsed.data.action });
+  })
+);
 
 appointmentsRouter.post("/:id/recordDepositPayment", requireAuth, requireTenant, requirePermission("payments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);

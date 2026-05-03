@@ -3104,6 +3104,15 @@ async function loadOpenCustomerAddonRequestRows(businessId: string, tx: DbExecut
           from ${appointmentServices}
           where ${appointmentServices.appointmentId} = ${activityLogs.entityId}
             and ${appointmentServices.serviceId}::text = coalesce(${activityLogs.metadata}::json->>'addonServiceId', '')
+        )`,
+        sql`not exists (
+          select 1
+          from activity_logs addon_request_reviews
+          where addon_request_reviews.business_id = ${businessId}
+            and addon_request_reviews.entity_type = 'appointment'
+            and addon_request_reviews.entity_id = ${activityLogs.entityId}
+            and addon_request_reviews.action in ('appointment.public_addon_approved', 'appointment.public_addon_declined')
+            and coalesce(addon_request_reviews.metadata::json->>'addonServiceId', '') = coalesce(${activityLogs.metadata}::json->>'addonServiceId', '')
         )`
       )
     )
