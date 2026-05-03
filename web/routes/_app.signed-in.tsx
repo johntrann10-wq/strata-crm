@@ -325,7 +325,7 @@ export default function DashboardHomeRoute() {
             </Link>
           </Button>
         }
-        secondaryAction={featureEnabled ? null : <Badge variant="outline" className="rounded-full bg-slate-50 px-3 py-2 text-xs text-slate-600">Stable dashboard mode</Badge>}
+        secondaryAction={stableDashboardModePill}
         nativeIOS={nativeIOSDashboard}
       />
 
