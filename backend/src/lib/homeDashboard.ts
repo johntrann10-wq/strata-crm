@@ -295,6 +295,7 @@ export type HomeDashboardBookingsOverview = {
   depositsCollectedAmount: number;
   depositsDueAmount: number;
   depositsDueCount: number;
+  addOnInsights: HomeDashboardAddOnInsights;
   links: {
     bookingsThisWeek: string;
     bookingsThisMonth: string;
@@ -306,6 +307,21 @@ export type HomeDashboardBookingsOverview = {
     depositsDue: string;
   };
   funnel: HomeDashboardPipelineStage[];
+};
+
+export type HomeDashboardAddOnInsights = {
+  appointmentCount: number;
+  appointmentsWithAddOns: number;
+  attachmentRate: number;
+  addOnRevenue: number;
+  addOnCount: number;
+  averageAddOnRevenuePerBooking: number;
+  topAddOns: Array<{
+    id: string;
+    name: string;
+    count: number;
+    revenue: number;
+  }>;
 };
 
 export type HomeDashboardPreferences = {
@@ -2030,6 +2046,7 @@ export function buildBookingsOverview(params: {
   depositsCollectedAmount: number;
   depositsDueAmount: number;
   depositsDueCount: number;
+  addOnInsights: HomeDashboardAddOnInsights;
 }) {
   const bookingsToday = params.monthAppointments.filter((row) => row.createdAt >= params.todayStart && row.createdAt <= params.todayEnd).length;
   const bookingsThisWeek = params.monthAppointments.filter((row) => row.createdAt >= params.weekStart && row.createdAt <= params.weekEnd).length;
@@ -2063,6 +2080,7 @@ export function buildBookingsOverview(params: {
     depositsCollectedAmount: Number(params.depositsCollectedAmount.toFixed(2)),
     depositsDueAmount: Number(params.depositsDueAmount.toFixed(2)),
     depositsDueCount: params.depositsDueCount,
+    addOnInsights: params.addOnInsights,
     links: {
       bookingsThisWeek: buildAppPath(`/calendar?view=week&date=${encodeURIComponent(weekDateKey)}`),
       bookingsThisMonth: buildAppPath(`/calendar?view=month&date=${encodeURIComponent(monthDateKey)}`),
@@ -2866,6 +2884,90 @@ async function loadMonthAppointmentsForRevenue(
     .from(appointments)
     .where(and(eq(appointments.businessId, businessId), gte(bookedAt, monthStart), lte(bookedAt, monthEnd)))
     .orderBy(asc(bookedAt));
+}
+
+export function buildAddOnInsights(params: {
+  appointmentCount: number;
+  rows: Array<{
+    appointmentId: string;
+    serviceId: string;
+    serviceName: string;
+    quantity: MoneyLike;
+    unitPrice: MoneyLike;
+  }>;
+}): HomeDashboardAddOnInsights {
+  const appointmentIds = new Set<string>();
+  const topAddOnMap = new Map<string, { id: string; name: string; count: number; revenue: number }>();
+  let addOnRevenue = 0;
+  let addOnCount = 0;
+
+  for (const row of params.rows) {
+    appointmentIds.add(row.appointmentId);
+    const quantity = Math.max(1, toMoneyNumber(row.quantity));
+    const unitPrice = toMoneyNumber(row.unitPrice);
+    const revenue = Number((quantity * unitPrice).toFixed(2));
+    addOnRevenue += revenue;
+    addOnCount += quantity;
+
+    const current = topAddOnMap.get(row.serviceId) ?? {
+      id: row.serviceId,
+      name: row.serviceName,
+      count: 0,
+      revenue: 0,
+    };
+    current.count += quantity;
+    current.revenue = Number((current.revenue + revenue).toFixed(2));
+    topAddOnMap.set(row.serviceId, current);
+  }
+
+  const appointmentsWithAddOns = appointmentIds.size;
+  const appointmentCount = Math.max(0, params.appointmentCount);
+  const attachmentRate = appointmentCount > 0 ? Math.round((appointmentsWithAddOns / appointmentCount) * 100) : 0;
+
+  return {
+    appointmentCount,
+    appointmentsWithAddOns,
+    attachmentRate,
+    addOnRevenue: Number(addOnRevenue.toFixed(2)),
+    addOnCount,
+    averageAddOnRevenuePerBooking:
+      appointmentCount > 0 ? Number((addOnRevenue / Math.max(appointmentCount, 1)).toFixed(2)) : 0,
+    topAddOns: Array.from(topAddOnMap.values())
+      .sort((left, right) => right.revenue - left.revenue || right.count - left.count || left.name.localeCompare(right.name))
+      .slice(0, 4),
+  };
+}
+
+async function loadMonthAddOnInsights(
+  businessId: string,
+  monthStart: Date,
+  monthEnd: Date,
+  appointmentCount: number,
+  tx: DbExecutor
+): Promise<HomeDashboardAddOnInsights> {
+  const rows = await tx
+    .select({
+      appointmentId: appointments.id,
+      serviceId: services.id,
+      serviceName: services.name,
+      quantity: appointmentServices.quantity,
+      unitPrice: sql<MoneyLike>`coalesce(${appointmentServices.unitPrice}, ${services.price}, 0)`.as("unit_price"),
+    })
+    .from(appointmentServices)
+    .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+    .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+    .where(
+      and(
+        eq(appointments.businessId, businessId),
+        eq(services.businessId, businessId),
+        eq(services.isAddon, true),
+        gte(appointments.createdAt, monthStart),
+        lte(appointments.createdAt, monthEnd),
+        sql`${appointments.status} not in ('cancelled', 'no-show')`
+      )
+    );
+
+  return buildAddOnInsights({ appointmentCount, rows });
 }
 
 async function loadReviewRequestReadyRows(
@@ -3702,6 +3804,14 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
   ]);
 
+  const emptyAddOnInsights = buildAddOnInsights({ appointmentCount: monthAppointments.length, rows: [] });
+  const addOnInsights = await loadOrFallback(
+    "monthAddOnInsights",
+    emptyAddOnInsights,
+    ["summary_conversion", "pipeline", "revenue_collections"],
+    () => loadMonthAddOnInsights(params.businessId, monthStart, monthEnd, monthAppointments.length, tx)
+  );
+
   const appointmentIds = todayAppointments.map((row) => row.id);
   const serviceNamesByAppointmentId = await loadOrFallback(
     "appointmentServiceNames",
@@ -4016,6 +4126,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       depositsCollectedAmount: 0,
       depositsDueAmount: 0,
       depositsDueCount: 0,
+      addOnInsights: buildAddOnInsights({ appointmentCount: 0, rows: [] }),
       links: {
         bookingsThisWeek: "/calendar",
         bookingsThisMonth: "/calendar",
@@ -4044,6 +4155,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           depositsCollectedAmount: depositsCoveredAmount,
           depositsDueAmount,
           depositsDueCount: depositsDueRows.length,
+          addOnInsights,
         }),
         allowed: modulePermissions.today || modulePermissions.pipeline || modulePermissions.revenueCollections || modulePermissions.conversion,
       }) as HomeDashboardBookingsOverview

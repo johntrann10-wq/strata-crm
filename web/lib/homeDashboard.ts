@@ -276,6 +276,20 @@ export type HomeDashboardSnapshot = {
     depositsCollectedAmount: number;
     depositsDueAmount: number;
     depositsDueCount: number;
+    addOnInsights: {
+      appointmentCount: number;
+      appointmentsWithAddOns: number;
+      attachmentRate: number;
+      addOnRevenue: number;
+      addOnCount: number;
+      averageAddOnRevenuePerBooking: number;
+      topAddOns: Array<{
+        id: string;
+        name: string;
+        count: number;
+        revenue: number;
+      }>;
+    };
     links: {
       bookingsThisWeek: string;
       bookingsThisMonth: string;
