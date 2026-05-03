@@ -115,6 +115,10 @@ type PortalAppointmentAddonSuggestion = {
   name: string;
   price: number;
   durationMinutes: number | null;
+  description: string | null;
+  featured: boolean;
+  showPrice: boolean;
+  showDuration: boolean;
   parentServiceId: string;
   parentServiceName: string;
   requestStatus: "available" | "requested";
@@ -127,6 +131,11 @@ export type PortalAddonRequestActivityRow = {
   action: string;
   metadata: string | null;
 };
+
+function cleanPortalText(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  return normalized.length > 0 ? normalized : null;
+}
 
 export function buildPortalAddonRequestStatusMap(rows: PortalAddonRequestActivityRow[]) {
   const requestStatusByAppointment = new Map<string, Map<string, PortalAddonRequestStatus>>();
@@ -259,6 +268,10 @@ async function buildPortalAppointmentServiceContext(
       name: services.name,
       price: services.price,
       durationMinutes: services.durationMinutes,
+      description: services.bookingDescription,
+      featured: services.bookingFeatured,
+      hidePrice: services.bookingHidePrice,
+      hideDuration: services.bookingHideDuration,
     })
     .from(services)
     .where(and(eq(services.businessId, businessId), eq(services.active, true), inArray(services.id, addonServiceIds)));
@@ -308,6 +321,10 @@ async function buildPortalAppointmentServiceContext(
           name: addon.name,
           price: toMoneyNumber(addon.price),
           durationMinutes: addon.durationMinutes ?? null,
+          description: cleanPortalText(addon.description),
+          featured: addon.featured === true,
+          showPrice: addon.hidePrice !== true,
+          showDuration: addon.hideDuration !== true,
           parentServiceId: link.parentServiceId,
           parentServiceName: serviceNameById.get(link.parentServiceId) ?? "Booked service",
           requestStatus: requestStatus === "requested" ? "requested" : "available",
@@ -315,7 +332,10 @@ async function buildPortalAppointmentServiceContext(
       }
     }
 
-    addonSuggestionsByAppointment.set(appointmentId, suggestions);
+    addonSuggestionsByAppointment.set(
+      appointmentId,
+      suggestions.sort((left, right) => Number(right.featured) - Number(left.featured) || left.name.localeCompare(right.name))
+    );
   }
 
   return { serviceLinesByAppointment, addonSuggestionsByAppointment };
