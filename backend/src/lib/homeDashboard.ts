@@ -317,6 +317,13 @@ export type HomeDashboardAddOnInsights = {
   addOnRevenue: number;
   addOnCount: number;
   averageAddOnRevenuePerBooking: number;
+  customerRequestCount: number;
+  customerRequestValue: number;
+  customerApprovedCount: number;
+  customerDeclinedCount: number;
+  customerRequestApprovalRate: number | null;
+  pendingCustomerRequestCount: number;
+  pendingCustomerRequestValue: number;
   topAddOns: Array<{
     id: string;
     name: string;
@@ -2903,6 +2910,16 @@ export function buildAddOnInsights(params: {
     quantity: MoneyLike;
     unitPrice: MoneyLike;
   }>;
+  requestActivityRows?: Array<{
+    action: string;
+    appointmentId: string | null;
+    metadata: string | null;
+  }>;
+  pendingRequestRows?: Array<{
+    id: string;
+    appointmentId: string | null;
+    metadata: string | null;
+  }>;
 }): HomeDashboardAddOnInsights {
   const appointmentIds = new Set<string>();
   const topAddOnMap = new Map<string, { id: string; name: string; count: number; revenue: number }>();
@@ -2931,6 +2948,44 @@ export function buildAddOnInsights(params: {
   const appointmentsWithAddOns = appointmentIds.size;
   const appointmentCount = Math.max(0, params.appointmentCount);
   const attachmentRate = appointmentCount > 0 ? Math.round((appointmentsWithAddOns / appointmentCount) * 100) : 0;
+  const requestedKeys = new Set<string>();
+  const approvedKeys = new Set<string>();
+  const declinedKeys = new Set<string>();
+  let customerRequestValue = 0;
+
+  for (const row of params.requestActivityRows ?? []) {
+    const metadata = safeParseMetadata(row.metadata);
+    const addonServiceId = typeof metadata.addonServiceId === "string" && metadata.addonServiceId.trim() ? metadata.addonServiceId.trim() : row.action;
+    const requestKey = `${row.appointmentId ?? "appointment"}:${addonServiceId}`;
+    if (row.action === "appointment.public_addon_requested") {
+      if (requestedKeys.has(requestKey)) continue;
+      requestedKeys.add(requestKey);
+      const parsedPrice = Number(metadata.addonPrice);
+      if (Number.isFinite(parsedPrice) && parsedPrice > 0) {
+        customerRequestValue += parsedPrice;
+      }
+    } else if (row.action === "appointment.public_addon_approved") {
+      approvedKeys.add(requestKey);
+    } else if (row.action === "appointment.public_addon_declined") {
+      declinedKeys.add(requestKey);
+    }
+  }
+
+  const pendingRequestKeys = new Set<string>();
+  let pendingCustomerRequestValue = 0;
+  for (const row of params.pendingRequestRows ?? []) {
+    const metadata = safeParseMetadata(row.metadata);
+    const addonServiceId = typeof metadata.addonServiceId === "string" && metadata.addonServiceId.trim() ? metadata.addonServiceId.trim() : row.id;
+    const requestKey = `${row.appointmentId ?? "appointment"}:${addonServiceId}`;
+    if (pendingRequestKeys.has(requestKey)) continue;
+    pendingRequestKeys.add(requestKey);
+    const parsedPrice = Number(metadata.addonPrice);
+    if (Number.isFinite(parsedPrice) && parsedPrice > 0) {
+      pendingCustomerRequestValue += parsedPrice;
+    }
+  }
+
+  const reviewedCount = approvedKeys.size + declinedKeys.size;
 
   return {
     appointmentCount,
@@ -2940,6 +2995,13 @@ export function buildAddOnInsights(params: {
     addOnCount,
     averageAddOnRevenuePerBooking:
       appointmentCount > 0 ? Number((addOnRevenue / Math.max(appointmentCount, 1)).toFixed(2)) : 0,
+    customerRequestCount: requestedKeys.size,
+    customerRequestValue: Number(customerRequestValue.toFixed(2)),
+    customerApprovedCount: approvedKeys.size,
+    customerDeclinedCount: declinedKeys.size,
+    customerRequestApprovalRate: reviewedCount > 0 ? Math.round((approvedKeys.size / reviewedCount) * 100) : null,
+    pendingCustomerRequestCount: pendingRequestKeys.size,
+    pendingCustomerRequestValue: Number(pendingCustomerRequestValue.toFixed(2)),
     topAddOns: Array.from(topAddOnMap.values())
       .sort((left, right) => right.revenue - left.revenue || right.count - left.count || left.name.localeCompare(right.name))
       .slice(0, 4),
@@ -2951,6 +3013,8 @@ async function loadMonthAddOnInsights(
   monthStart: Date,
   monthEnd: Date,
   appointmentCount: number,
+  requestActivityRows: Awaited<ReturnType<typeof loadMonthCustomerAddonRequestActivityRows>>,
+  pendingRequestRows: Awaited<ReturnType<typeof loadOpenCustomerAddonRequestRows>>,
   tx: DbExecutor
 ): Promise<HomeDashboardAddOnInsights> {
   const rows = await tx
@@ -2975,7 +3039,39 @@ async function loadMonthAddOnInsights(
       )
     );
 
-  return buildAddOnInsights({ appointmentCount, rows });
+  return buildAddOnInsights({ appointmentCount, rows, requestActivityRows, pendingRequestRows });
+}
+
+async function loadMonthCustomerAddonRequestActivityRows(
+  businessId: string,
+  monthStart: Date,
+  monthEnd: Date,
+  tx: DbExecutor
+) {
+  return tx
+    .select({
+      id: activityLogs.id,
+      action: activityLogs.action,
+      appointmentId: activityLogs.entityId,
+      metadata: activityLogs.metadata,
+      createdAt: activityLogs.createdAt,
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, businessId),
+        eq(activityLogs.entityType, "appointment"),
+        sql`${activityLogs.action} in (
+          'appointment.public_addon_requested',
+          'appointment.public_addon_approved',
+          'appointment.public_addon_declined'
+        )`,
+        gte(activityLogs.createdAt, monthStart),
+        lte(activityLogs.createdAt, monthEnd)
+      )
+    )
+    .orderBy(desc(activityLogs.createdAt))
+    .limit(250);
 }
 
 async function loadReviewRequestReadyRows(
@@ -3797,6 +3893,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     upcomingDepositRows,
     reviewRequestReadyRows,
     customerAddonRequestRows,
+    monthCustomerAddonRequestActivityRows,
     reactivationRows,
   ] = await Promise.all([
     loadOrFallback(
@@ -3897,6 +3994,12 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       () => loadOpenCustomerAddonRequestRows(params.businessId, tx)
     ),
     loadOrFallback(
+      "monthCustomerAddonRequestActivityRows",
+      [] as Awaited<ReturnType<typeof loadMonthCustomerAddonRequestActivityRows>>,
+      ["summary_conversion", "pipeline", "revenue_collections"],
+      () => loadMonthCustomerAddonRequestActivityRows(params.businessId, monthStart, monthEnd, tx)
+    ),
+    loadOrFallback(
       "reactivationRows",
       [] as Awaited<ReturnType<typeof loadReactivationRows>>,
       ["action_queue", "automations"],
@@ -3909,7 +4012,16 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     "monthAddOnInsights",
     emptyAddOnInsights,
     ["summary_conversion", "pipeline", "revenue_collections"],
-    () => loadMonthAddOnInsights(params.businessId, monthStart, monthEnd, monthAppointments.length, tx)
+    () =>
+      loadMonthAddOnInsights(
+        params.businessId,
+        monthStart,
+        monthEnd,
+        monthAppointments.length,
+        monthCustomerAddonRequestActivityRows,
+        customerAddonRequestRows,
+        tx
+      )
   );
 
   const appointmentIds = todayAppointments.map((row) => row.id);
