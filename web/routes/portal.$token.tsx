@@ -73,6 +73,7 @@ type PortalSummary = {
         durationMinutes: number | null;
         parentServiceId: string;
         parentServiceName: string;
+        requestStatus?: "available" | "requested";
       }>;
       url: string;
       payUrl: string | null;
@@ -466,7 +467,7 @@ export default function PortalTokenRoute() {
                                 {appointment.availableAddons.map((addon) => {
                                   const requestKey = `${appointment.id}:${addon.id}`;
                                   const state = addonRequestState[requestKey];
-                                  const isSent = state === "sent";
+                                  const isSent = state === "sent" || addon.requestStatus === "requested";
                                   const isSending = state === "sending";
                                   return (
                                     <div
@@ -501,7 +502,9 @@ export default function PortalTokenRoute() {
                                           )}
                                           {isSent ? "Requested" : "Ask shop to add"}
                                         </Button>
-                                        {addonRequestErrors[requestKey] ? (
+                                        {addon.requestStatus === "requested" && state !== "sent" ? (
+                                          <p className="text-xs text-slate-500">Request received. The shop will review it before changing the appointment.</p>
+                                        ) : addonRequestErrors[requestKey] ? (
                                           <p className="text-xs text-rose-700">{addonRequestErrors[requestKey]}</p>
                                         ) : (
                                           <p className="text-xs text-slate-500">The shop will review before changing the appointment.</p>
