@@ -1447,6 +1447,15 @@ export function HomeBookingsOverviewCard({
   const depositCoverageBase = bookings.depositsCollectedAmount + bookings.depositsDueAmount;
   const depositCoveragePercent =
     depositCoverageBase > 0 ? Math.max(0, Math.min(100, Math.round((bookings.depositsCollectedAmount / depositCoverageBase) * 100))) : null;
+  const addOnInsights = bookings.addOnInsights ?? {
+    appointmentCount: 0,
+    appointmentsWithAddOns: 0,
+    attachmentRate: 0,
+    addOnRevenue: 0,
+    addOnCount: 0,
+    averageAddOnRevenuePerBooking: 0,
+    topAddOns: [],
+  };
   const stats = [
     {
       label: "Bookings this week",
@@ -1568,6 +1577,46 @@ export function HomeBookingsOverviewCard({
                   <p className="text-lg font-semibold tracking-tight text-orange-800">{formatDashboardCurrency(bookings.depositsDueAmount)}</p>
                 </Link>
               </div>
+            </div>
+            <div className={cn(dashboardInsetClassName, "p-4")}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Add-on lift</p>
+                  <p className="mt-1 text-sm text-slate-500">Monthly add-on attachment and booked add-on revenue.</p>
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {addOnInsights.attachmentRate}% attach
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[0.95rem] bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Revenue</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(addOnInsights.addOnRevenue)}</p>
+                </div>
+                <div className="rounded-[0.95rem] bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Bookings</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
+                    {addOnInsights.appointmentsWithAddOns}/{Math.max(addOnInsights.appointmentCount, 0)}
+                  </p>
+                </div>
+                <div className="rounded-[0.95rem] bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Avg lift</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
+                    {formatDashboardCompactCurrency(addOnInsights.averageAddOnRevenuePerBooking)}
+                  </p>
+                </div>
+              </div>
+              {addOnInsights.topAddOns.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {addOnInsights.topAddOns.map((addon) => (
+                    <Badge key={addon.id} variant="outline" className="rounded-full bg-white px-3 py-1 text-slate-700">
+                      {addon.name} · {addon.count} · {formatDashboardCompactCurrency(addon.revenue)}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">Add-ons selected on appointments this month will show up here.</p>
+              )}
             </div>
           </>
         )}

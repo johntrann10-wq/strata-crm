@@ -3,6 +3,7 @@ import type { PermissionKey } from "./permissions.js";
 import {
   applyActionQueuePriority,
   buildActionQueue,
+  buildAddOnInsights,
   buildBookingsOverview,
   buildMonthlyRevenueChart,
   buildPipelineStages,
@@ -646,6 +647,12 @@ describe("home dashboard domain logic", () => {
       depositsCollectedAmount: 300,
       depositsDueAmount: 150,
       depositsDueCount: 1,
+      addOnInsights: buildAddOnInsights({
+        appointmentCount: 2,
+        rows: [
+          { appointmentId: "1", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 1, unitPrice: "45" },
+        ],
+      }),
     });
 
     expect(overview).toMatchObject({
@@ -659,6 +666,15 @@ describe("home dashboard domain logic", () => {
       depositsCollectedAmount: 300,
       depositsDueAmount: 150,
       depositsDueCount: 1,
+      addOnInsights: {
+        appointmentCount: 2,
+        appointmentsWithAddOns: 1,
+        attachmentRate: 50,
+        addOnRevenue: 45,
+        addOnCount: 1,
+        averageAddOnRevenuePerBooking: 22.5,
+        topAddOns: [{ id: "addon-1", name: "Engine Bay", count: 1, revenue: 45 }],
+      },
       links: {
         bookingsThisWeek: "/calendar?view=week&date=2026-04-06",
         bookingsThisMonth: "/calendar?view=month&date=2026-04-01",
@@ -669,6 +685,30 @@ describe("home dashboard domain logic", () => {
         depositsCollected: "/finances",
         depositsDue: "/calendar?view=week&date=2026-04-06",
       },
+    });
+  });
+
+  it("summarizes add-on attachment and top add-ons for dashboard booking insight", () => {
+    const insights = buildAddOnInsights({
+      appointmentCount: 4,
+      rows: [
+        { appointmentId: "apt-1", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 1, unitPrice: "45" },
+        { appointmentId: "apt-1", serviceId: "addon-2", serviceName: "Pet Hair", quantity: 1, unitPrice: "60" },
+        { appointmentId: "apt-2", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 2, unitPrice: "45" },
+      ],
+    });
+
+    expect(insights).toEqual({
+      appointmentCount: 4,
+      appointmentsWithAddOns: 2,
+      attachmentRate: 50,
+      addOnRevenue: 195,
+      addOnCount: 4,
+      averageAddOnRevenuePerBooking: 48.75,
+      topAddOns: [
+        { id: "addon-1", name: "Engine Bay", count: 3, revenue: 135 },
+        { id: "addon-2", name: "Pet Hair", count: 1, revenue: 60 },
+      ],
     });
   });
 
@@ -752,6 +792,7 @@ describe("home dashboard domain logic", () => {
       depositsCollectedAmount: 0,
       depositsDueAmount: 0,
       depositsDueCount: 0,
+      addOnInsights: buildAddOnInsights({ appointmentCount: 2, rows: [] }),
     });
 
     expect(overview.averageTicketValue).toBe(170.5);
