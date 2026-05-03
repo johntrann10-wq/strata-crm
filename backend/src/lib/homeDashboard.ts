@@ -17,6 +17,7 @@ import {
   notificationLogs,
   payments,
   quotes,
+  serviceAddonLinks,
   services,
   staff,
   vehicles,
@@ -329,6 +330,18 @@ export type HomeDashboardAddOnInsights = {
     name: string;
     count: number;
     revenue: number;
+  }>;
+  topAddOnDrivers: Array<{
+    id: string;
+    name: string;
+    count: number;
+    revenue: number;
+    topAddOns: Array<{
+      id: string;
+      name: string;
+      count: number;
+      revenue: number;
+    }>;
   }>;
 };
 
@@ -2910,6 +2923,15 @@ export function buildAddOnInsights(params: {
     quantity: MoneyLike;
     unitPrice: MoneyLike;
   }>;
+  baseServiceRows?: Array<{
+    appointmentId: string;
+    serviceId: string;
+    serviceName: string;
+  }>;
+  addonLinkRows?: Array<{
+    parentServiceId: string;
+    addonServiceId: string;
+  }>;
   requestActivityRows?: Array<{
     action: string;
     appointmentId: string | null;
@@ -2923,8 +2945,32 @@ export function buildAddOnInsights(params: {
 }): HomeDashboardAddOnInsights {
   const appointmentIds = new Set<string>();
   const topAddOnMap = new Map<string, { id: string; name: string; count: number; revenue: number }>();
+  const baseServicesByAppointment = new Map<string, Array<{ serviceId: string; serviceName: string }>>();
+  const addonParentLinks = new Map<string, Set<string>>();
+  const topDriverMap = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      count: number;
+      revenue: number;
+      topAddOns: Map<string, { id: string; name: string; count: number; revenue: number }>;
+    }
+  >();
   let addOnRevenue = 0;
   let addOnCount = 0;
+
+  for (const row of params.baseServiceRows ?? []) {
+    const current = baseServicesByAppointment.get(row.appointmentId) ?? [];
+    current.push({ serviceId: row.serviceId, serviceName: row.serviceName });
+    baseServicesByAppointment.set(row.appointmentId, current);
+  }
+
+  for (const row of params.addonLinkRows ?? []) {
+    const current = addonParentLinks.get(row.addonServiceId) ?? new Set<string>();
+    current.add(row.parentServiceId);
+    addonParentLinks.set(row.addonServiceId, current);
+  }
 
   for (const row of params.rows) {
     appointmentIds.add(row.appointmentId);
@@ -2943,6 +2989,32 @@ export function buildAddOnInsights(params: {
     current.count += quantity;
     current.revenue = Number((current.revenue + revenue).toFixed(2));
     topAddOnMap.set(row.serviceId, current);
+
+    const eligibleParents = addonParentLinks.get(row.serviceId);
+    const parentService = eligibleParents
+      ? (baseServicesByAppointment.get(row.appointmentId) ?? []).find((candidate) => eligibleParents.has(candidate.serviceId))
+      : null;
+    if (parentService) {
+      const driver = topDriverMap.get(parentService.serviceId) ?? {
+        id: parentService.serviceId,
+        name: parentService.serviceName,
+        count: 0,
+        revenue: 0,
+        topAddOns: new Map<string, { id: string; name: string; count: number; revenue: number }>(),
+      };
+      driver.count += quantity;
+      driver.revenue = Number((driver.revenue + revenue).toFixed(2));
+      const driverAddon = driver.topAddOns.get(row.serviceId) ?? {
+        id: row.serviceId,
+        name: row.serviceName,
+        count: 0,
+        revenue: 0,
+      };
+      driverAddon.count += quantity;
+      driverAddon.revenue = Number((driverAddon.revenue + revenue).toFixed(2));
+      driver.topAddOns.set(row.serviceId, driverAddon);
+      topDriverMap.set(parentService.serviceId, driver);
+    }
   }
 
   const appointmentsWithAddOns = appointmentIds.size;
@@ -3005,6 +3077,15 @@ export function buildAddOnInsights(params: {
     topAddOns: Array.from(topAddOnMap.values())
       .sort((left, right) => right.revenue - left.revenue || right.count - left.count || left.name.localeCompare(right.name))
       .slice(0, 4),
+    topAddOnDrivers: Array.from(topDriverMap.values())
+      .map((driver) => ({
+        ...driver,
+        topAddOns: Array.from(driver.topAddOns.values())
+          .sort((left, right) => right.revenue - left.revenue || right.count - left.count || left.name.localeCompare(right.name))
+          .slice(0, 2),
+      }))
+      .sort((left, right) => right.revenue - left.revenue || right.count - left.count || left.name.localeCompare(right.name))
+      .slice(0, 3),
   };
 }
 
@@ -3017,11 +3098,12 @@ async function loadMonthAddOnInsights(
   pendingRequestRows: Awaited<ReturnType<typeof loadOpenCustomerAddonRequestRows>>,
   tx: DbExecutor
 ): Promise<HomeDashboardAddOnInsights> {
-  const rows = await tx
+  const serviceRows = await tx
     .select({
       appointmentId: appointments.id,
       serviceId: services.id,
       serviceName: services.name,
+      serviceIsAddon: services.isAddon,
       quantity: appointmentServices.quantity,
       unitPrice: sql<MoneyLike>`coalesce(${appointmentServices.unitPrice}, ${services.price}, 0)`.as("unit_price"),
     })
@@ -3038,8 +3120,17 @@ async function loadMonthAddOnInsights(
         sql`${appointments.status} not in ('cancelled', 'no-show')`
       )
     );
+  const addonLinkRows = await tx
+    .select({
+      parentServiceId: serviceAddonLinks.parentServiceId,
+      addonServiceId: serviceAddonLinks.addonServiceId,
+    })
+    .from(serviceAddonLinks)
+    .where(eq(serviceAddonLinks.businessId, businessId));
+  const rows = serviceRows.filter((row) => row.serviceIsAddon === true);
+  const baseServiceRows = serviceRows.filter((row) => row.serviceIsAddon !== true);
 
-  return buildAddOnInsights({ appointmentCount, rows, requestActivityRows, pendingRequestRows });
+  return buildAddOnInsights({ appointmentCount, rows, baseServiceRows, addonLinkRows, requestActivityRows, pendingRequestRows });
 }
 
 async function loadMonthCustomerAddonRequestActivityRows(
