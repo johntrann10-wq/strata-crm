@@ -117,6 +117,7 @@ type PortalAppointmentAddonSuggestion = {
   durationMinutes: number | null;
   parentServiceId: string;
   parentServiceName: string;
+  requestStatus: "available" | "requested";
 };
 
 function formatDocumentTitle(kind: PublicDocumentKind, source: Record<string, unknown>): string {
@@ -231,6 +232,46 @@ async function buildPortalAppointmentServiceContext(
     .from(services)
     .where(and(eq(services.businessId, businessId), eq(services.active, true), inArray(services.id, addonServiceIds)));
   const addonById = new Map(addonRows.map((addon) => [addon.id, addon]));
+  const requestStatusByAppointment = new Map<string, Map<string, "requested" | "resolved">>();
+  const addonRequestActivityRows = await db
+    .select({
+      appointmentId: activityLogs.entityId,
+      action: activityLogs.action,
+      metadata: activityLogs.metadata,
+      createdAt: activityLogs.createdAt,
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, businessId),
+        eq(activityLogs.entityType, "appointment"),
+        inArray(activityLogs.entityId, appointmentIds),
+        sql`${activityLogs.action} in (
+          'appointment.public_addon_requested',
+          'appointment.public_addon_approved',
+          'appointment.public_addon_declined'
+        )`
+      )
+    )
+    .orderBy(asc(activityLogs.createdAt));
+
+  for (const row of addonRequestActivityRows) {
+    if (!row.appointmentId) continue;
+    let addonServiceId = "";
+    try {
+      const parsed = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
+      addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
+    } catch {
+      addonServiceId = "";
+    }
+    if (!addonServiceId) continue;
+    if (!requestStatusByAppointment.has(row.appointmentId)) {
+      requestStatusByAppointment.set(row.appointmentId, new Map<string, "requested" | "resolved">());
+    }
+    const status = row.action === "appointment.public_addon_requested" ? "requested" : "resolved";
+    requestStatusByAppointment.get(row.appointmentId)?.set(addonServiceId, status);
+  }
+
   const linksByParentService = addonLinks.reduce((acc, link) => {
     acc.set(link.parentServiceId, [...(acc.get(link.parentServiceId) ?? []), link]);
     return acc;
@@ -245,6 +286,8 @@ async function buildPortalAppointmentServiceContext(
       for (const link of linksByParentService.get(line.serviceId) ?? []) {
         const addon = addonById.get(link.addonServiceId);
         if (!addon || existingIds.has(addon.id) || seenSuggestions.has(addon.id)) continue;
+        const requestStatus = requestStatusByAppointment.get(appointmentId)?.get(addon.id);
+        if (requestStatus === "resolved") continue;
         seenSuggestions.add(addon.id);
         suggestions.push({
           id: addon.id,
@@ -253,6 +296,7 @@ async function buildPortalAppointmentServiceContext(
           durationMinutes: addon.durationMinutes ?? null,
           parentServiceId: link.parentServiceId,
           parentServiceName: serviceNameById.get(link.parentServiceId) ?? "Booked service",
+          requestStatus: requestStatus === "requested" ? "requested" : "available",
         });
       }
     }
@@ -442,19 +486,27 @@ portalRouter.post(
       [appointment.clientFirstName, appointment.clientLastName].filter(Boolean).join(" ").trim() || "Customer";
 
     const [existingRequest] = await db
-      .select({ id: activityLogs.id })
+      .select({ id: activityLogs.id, action: activityLogs.action })
       .from(activityLogs)
       .where(
         and(
           eq(activityLogs.businessId, access.businessId),
           eq(activityLogs.entityType, "appointment"),
           eq(activityLogs.entityId, appointment.id),
-          eq(activityLogs.action, "appointment.public_addon_requested"),
+          sql`${activityLogs.action} in (
+            'appointment.public_addon_requested',
+            'appointment.public_addon_approved',
+            'appointment.public_addon_declined'
+          )`,
           sql`coalesce(${activityLogs.metadata}::json->>'addonServiceId', '') = ${addon.id}`
         )
       )
+      .orderBy(desc(activityLogs.createdAt))
       .limit(1);
     if (existingRequest) {
+      if (existingRequest.action !== "appointment.public_addon_requested") {
+        throw new BadRequestError("The shop has already reviewed this add-on request.");
+      }
       res.status(200).json({ ok: true, message: "Add-on request already sent." });
       return;
     }
