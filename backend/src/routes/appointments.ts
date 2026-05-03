@@ -2712,6 +2712,27 @@ appointmentsRouter.post(
         ? requestMetadata.addonName.trim()
         : "Requested add-on");
 
+    let deliveryStatus: AppointmentDeliveryStatus | null = null;
+    let deliveryError: string | null = null;
+    let deliveryRecipient: string | null = null;
+    if (parsed.data.action === "approved") {
+      const [addedService] = await db
+        .select({ id: appointmentServices.id })
+        .from(appointmentServices)
+        .where(and(eq(appointmentServices.appointmentId, id), eq(appointmentServices.serviceId, addonServiceId)))
+        .limit(1);
+      if (!addedService) {
+        throw new BadRequestError("Add the requested service to the appointment before approving the request.");
+      }
+
+      const delivery = await sendAppointmentConfirmationForRecord(id, bid, {
+        message: `${addonName} has been added to your appointment. You can review the updated services and appointment details from your appointment page.`,
+      });
+      deliveryStatus = delivery.deliveryStatus;
+      deliveryError = delivery.deliveryError;
+      deliveryRecipient = delivery.recipient;
+    }
+
     await createRequestActivityLog(req, {
       businessId: bid,
       action,
@@ -2723,10 +2744,13 @@ appointmentsRouter.post(
         addonName,
         requestActivityId: requestLog.id,
         appointmentTitle: appointment.title ?? null,
+        deliveryStatus,
+        deliveryError,
+        deliveryRecipient,
       },
     });
 
-    res.json({ ok: true, action: parsed.data.action });
+    res.json({ ok: true, action: parsed.data.action, deliveryStatus, deliveryError, deliveryRecipient });
   })
 );
 
