@@ -22,3 +22,10 @@ export function isPackageTemplateService(service: PackageCandidateService) {
 export function isPackageCategoryText(value: string | null | undefined) {
   return PACKAGE_CATEGORIES.has(normalizePackageText(value));
 }
+
+export function formatPackageIncludedItems(names: Array<string | null | undefined>) {
+  const cleanNames = names.map((name) => String(name ?? "").trim()).filter(Boolean);
+  return cleanNames.length > 0
+    ? `Includes ${cleanNames.join(", ")}.`
+    : "Standalone package. Add included services later if needed.";
+}

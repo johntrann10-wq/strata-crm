@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import { formatServiceCategory } from "../lib/serviceCatalog";
-import { isPackageTemplateService } from "../lib/servicePackages";
+import { formatPackageIncludedItems, isPackageTemplateService } from "../lib/servicePackages";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { Button } from "@/components/ui/button";
@@ -254,8 +254,7 @@ function buildPackageTemplates(
           Number(service.durationMinutes ?? 0) +
           linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0),
       };
-    })
-    .filter((entry) => entry.linkedAddons.length > 0);
+    });
 }
 
 function buildGroupedServices(
@@ -1878,7 +1877,7 @@ export default function NewAppointmentPage() {
                                       <span>${pkg.totalPackagePrice.toFixed(2)}</span>
                                     </div>
                                     <p className="mt-3 text-xs text-muted-foreground">
-                                      Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
+                                      {formatPackageIncludedItems(pkg.linkedAddons.map((addon) => addon?.name))}
                                     </p>
                                   </button>
                                 ))}
@@ -1917,7 +1916,7 @@ export default function NewAppointmentPage() {
                                       <span>${pkg.totalPackagePrice.toFixed(2)}</span>
                                     </div>
                                     <p className="mt-3 text-xs text-muted-foreground">
-                                      Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
+                                      {formatPackageIncludedItems(pkg.linkedAddons.map((addon) => addon?.name))}
                                     </p>
                                   </button>
                                 ))}
