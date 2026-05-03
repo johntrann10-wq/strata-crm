@@ -583,7 +583,7 @@ portalRouter.post(
           addonPrice: toMoneyNumber(addon.price),
           parentServiceId: link.parentServiceId,
           parentServiceName,
-          path: `/appointments/${encodeURIComponent(appointment.id)}`,
+          path: `/appointments/${encodeURIComponent(appointment.id)}#customer-addon-requests`,
         },
       },
       { source: "portal.addon-request" }

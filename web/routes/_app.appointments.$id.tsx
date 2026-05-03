@@ -1008,6 +1008,18 @@ export default function AppointmentDetail() {
       !existingServiceIds.has(request.addonServiceId) &&
       !resolvedCustomerAddonRequestIds.has(request.addonServiceId)
   );
+
+  useEffect(() => {
+    if (customerAddonRequests.length === 0 || window.location.hash !== "#customer-addon-requests") return;
+    const timeout = window.setTimeout(() => {
+      document.getElementById("customer-addon-requests")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+    return () => window.clearTimeout(timeout);
+  }, [customerAddonRequests.length]);
+
   const completedServiceIds = new Map(
     (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
       (acc, record) => {
@@ -2864,13 +2876,13 @@ export default function AppointmentDetail() {
               </Card>
 
               {customerAddonRequests.length > 0 ? (
-                <Card className="border-orange-200 bg-orange-50/70">
+                <Card id="customer-addon-requests" className="scroll-mt-24 border-orange-200 bg-orange-50/70 shadow-sm">
                   <CardHeader>
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <CardTitle className="text-base">Customer add-on requests</CardTitle>
                         <p className="mt-1 text-sm text-orange-900/75">
-                          Requested from the customer hub. Review before changing the appointment.
+                          Customer-approved revenue waiting for review. Approving adds the service and sends the updated appointment confirmation.
                         </p>
                       </div>
                       <Badge variant="secondary" className="rounded-full bg-white text-orange-900">
@@ -2949,7 +2961,7 @@ export default function AppointmentDetail() {
                                 ) : (
                                   <Plus className="mr-2 h-4 w-4" />
                                 )}
-                                {alreadyAdded ? "Already added" : catalogService ? "Add to appointment" : "Unavailable"}
+                                {alreadyAdded ? "Already added" : catalogService ? "Approve & add" : "Unavailable"}
                               </Button>
                               <Button
                                 type="button"
@@ -2964,7 +2976,7 @@ export default function AppointmentDetail() {
                                 ) : (
                                   <X className="mr-2 h-4 w-4" />
                                 )}
-                                Dismiss request
+                                Decline request
                               </Button>
                             </div>
                           </div>
