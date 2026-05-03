@@ -19,6 +19,7 @@ import { BadRequestError, NotFoundError } from "../lib/errors.js";
 import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { getActiveInvoicePaymentTotal } from "../lib/invoicePayments.js";
 import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
+import { safeCreateNotification } from "../lib/notifications.js";
 import { createRateLimiter } from "../middleware/security.js";
 import {
   buildPublicAppUrl,
@@ -459,6 +460,29 @@ portalRouter.post(
         clientPhone: appointment.clientPhone ?? null,
       },
     });
+
+    await safeCreateNotification(
+      {
+        businessId: access.businessId,
+        type: "customer_addon_request",
+        title: "Customer requested an add-on",
+        message: `${clientName} asked to add ${addon.name} to ${formatDocumentTitle("appointment", appointment)}.`,
+        entityType: "appointment",
+        entityId: appointment.id,
+        bucket: "calendar",
+        dedupeKey: `customer-addon-request:${appointment.id}:${addon.id}`,
+        metadata: {
+          source: "customer_hub",
+          addonServiceId: addon.id,
+          addonName: addon.name,
+          addonPrice: toMoneyNumber(addon.price),
+          parentServiceId: link.parentServiceId,
+          parentServiceName,
+          path: `/appointments/${encodeURIComponent(appointment.id)}`,
+        },
+      },
+      { source: "portal.addon-request" }
+    );
 
     res.status(201).json({ ok: true, message: "Add-on request sent." });
   })
