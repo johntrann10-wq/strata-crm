@@ -4,7 +4,7 @@ type PackageCandidateService = {
   categoryLabel?: string | null;
 };
 
-const PACKAGE_KEYWORDS = ["package", "packages", "bundle", "bundles"];
+const PACKAGE_CATEGORIES = new Set(["package", "packages", "bundle", "bundles"]);
 
 function normalizePackageText(value: string | null | undefined) {
   return String(value ?? "")
@@ -14,8 +14,7 @@ function normalizePackageText(value: string | null | undefined) {
 }
 
 export function isPackageTemplateService(service: PackageCandidateService) {
-  const haystack = normalizePackageText([service.name, service.categoryLabel, service.category].filter(Boolean).join(" "));
-  if (!haystack) return false;
-  const tokens = new Set(haystack.split(" ").filter(Boolean));
-  return PACKAGE_KEYWORDS.some((keyword) => tokens.has(keyword));
+  const categoryLabel = normalizePackageText(service.categoryLabel);
+  const category = normalizePackageText(service.category);
+  return PACKAGE_CATEGORIES.has(categoryLabel) || PACKAGE_CATEGORIES.has(category);
 }
