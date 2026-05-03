@@ -1255,6 +1255,7 @@ function ActiveToggle({
 
 function ServiceCard({
   service,
+  linkedAddons,
   bookingUrl,
   defaultBookingFlow,
   canEdit,
@@ -1267,6 +1268,7 @@ function ServiceCard({
   moveDisabledDown,
 }: {
   service: ServiceRecord;
+  linkedAddons: ServiceRecord[];
   bookingUrl: string | null;
   defaultBookingFlow: BusinessBookingSettings["bookingDefaultFlow"];
   canEdit: boolean;
@@ -1297,6 +1299,8 @@ function ServiceCard({
     Array.isArray(service.bookingDailyHours) && service.bookingDailyHours.length > 0
       ? bookingDaysFromDailyHours(service.bookingDailyHours)
       : [];
+  const visibleLinkedAddons = linkedAddons.slice(0, 3);
+  const hiddenLinkedAddonCount = Math.max(0, linkedAddons.length - visibleLinkedAddons.length);
 
   return (
     <div
@@ -1311,6 +1315,7 @@ function ServiceCard({
                 {service.bookingEnabled === true ? "Public booking" : "Internal only"}
               </Badge>
               {service.isAddon ? <Badge variant="secondary">Add-on</Badge> : null}
+              {!service.isAddon && linkedAddons.length > 0 ? <Badge variant="outline">{linkedAddons.length} optional add-on{linkedAddons.length === 1 ? "" : "s"}</Badge> : null}
               <Badge variant="outline">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
               {service.bookingEnabled === true ? <Badge variant="outline">{serviceModeLabel(service.bookingServiceMode)}</Badge> : null}
             </div>
@@ -1354,6 +1359,19 @@ function ServiceCard({
           {service.bookingEnabled === true && service.bookingBufferMinutes ? <span>{service.bookingBufferMinutes}m buffer</span> : null}
           {service.bookingEnabled === true && service.bookingWindowDays ? <span>{service.bookingWindowDays} day window</span> : null}
         </div>
+        {!service.isAddon && visibleLinkedAddons.length > 0 ? (
+          <div className="rounded-[1.1rem] border border-orange-100 bg-orange-50/55 px-3 py-2.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700/80">Optional add-ons</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {visibleLinkedAddons.map((addon) => (
+                <Badge key={addon.id} variant="outline" className="bg-white/85 text-slate-700">
+                  {addon.name}
+                </Badge>
+              ))}
+              {hiddenLinkedAddonCount > 0 ? <Badge variant="outline" className="bg-white/85 text-slate-700">+{hiddenLinkedAddonCount} more</Badge> : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex w-full flex-col gap-3 lg:ml-4 lg:w-auto lg:min-w-[220px] lg:items-end">
@@ -1553,15 +1571,25 @@ export default function ServicesPage() {
     [categoryById, visibleServices]
   );
 
+  const linkedAddonsByParent = useMemo(() => {
+    const serviceById = new Map(services.map((service) => [service.id, service]));
+    const grouped = new Map<string, ServiceRecord[]>();
+    for (const link of addonLinks) {
+      const addon = serviceById.get(link.addonServiceId);
+      if (!addon) continue;
+      const current = grouped.get(link.parentServiceId) ?? [];
+      current.push(addon);
+      grouped.set(link.parentServiceId, current);
+    }
+    return grouped;
+  }, [addonLinks, services]);
+
   const packageSummaries = useMemo(
     () =>
       services
         .filter((service) => !service.isAddon && isPackageTemplateService(service))
         .map((service) => {
-          const linkedAddons = addonLinks
-            .filter((link) => link.parentServiceId === service.id)
-            .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
-            .filter(Boolean) as ServiceRecord[];
+          const linkedAddons = linkedAddonsByParent.get(service.id) ?? [];
           return {
             service,
             linkedAddons,
@@ -1572,7 +1600,7 @@ export default function ServicesPage() {
         })
         .filter((summary) => summary.linkedAddons.length > 0)
         .sort((left, right) => left.service.name.localeCompare(right.service.name)),
-    [addonLinks, services]
+    [linkedAddonsByParent, services]
   );
 
   const { activeServicesCount, activeAddonCount, canMoveCategoryDelete } = useMemo(
@@ -1997,6 +2025,7 @@ export default function ServicesPage() {
                     <ServiceCard
                       key={service.id}
                       service={service}
+                      linkedAddons={linkedAddonsByParent.get(service.id) ?? []}
                       bookingUrl={bookingUrl}
                       defaultBookingFlow={bookingSettings.bookingDefaultFlow}
                       canEdit={canEditServices}
@@ -2027,7 +2056,9 @@ export default function ServicesPage() {
             </span>
             <div className="min-w-0">
               <CardTitle className="text-base font-semibold">Packages</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">{packageSummaries.length} configured template{packageSummaries.length === 1 ? "" : "s"}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {packageSummaries.length} configured template{packageSummaries.length === 1 ? "" : "s"} from Package or Bundle categories
+              </p>
             </div>
           </div>
           <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", packageTemplatesOpen && "rotate-180")} />
@@ -2242,8 +2273,10 @@ export default function ServicesPage() {
               <Separator className="my-4" />
               <div className="space-y-3 rounded-[1.35rem] border border-border/70 bg-white/95 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
                 <div>
-                  <p className="text-sm font-medium">Frequently added services</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Link related services so the booking flow can recommend clean, relevant upsells.</p>
+                  <p className="text-sm font-medium">Optional add-ons for this service</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    These links create service-specific add-on suggestions. They only become package templates when the base service is in a Package or Bundle category.
+                  </p>
                 </div>
               {linkedAddonRecords.length > 0 ? (
                 <div className="space-y-2">
