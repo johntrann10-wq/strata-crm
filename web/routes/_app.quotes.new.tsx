@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { formatServiceCategory } from "../lib/serviceCatalog";
-import { isPackageTemplateService } from "../lib/servicePackages";
+import { formatPackageIncludedItems, isPackageTemplateService } from "../lib/servicePackages";
 import { formatVehicleLabel } from "../lib/vehicles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -161,8 +161,7 @@ function buildPackageTemplates(
           Number(service.durationMinutes ?? 0) +
           linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0),
       };
-    })
-    .filter((entry) => entry.linkedAddons.length > 0);
+    });
 }
 
 function buildSelectedAddonSuggestions(
@@ -968,7 +967,7 @@ export default function NewQuotePage() {
                                         <span>{formatCurrency(pkg.totalPrice)}</span>
                                       </div>
                                       <p className="mt-3 text-xs text-muted-foreground">
-                                        Includes {pkg.linkedAddons.map((addon) => addon.name).join(", ")}.
+                                        {formatPackageIncludedItems(pkg.linkedAddons.map((addon) => addon.name))}
                                       </p>
                                     </button>
                                   ))}
@@ -1002,7 +1001,7 @@ export default function NewQuotePage() {
                                         <span>{formatCurrency(pkg.totalPrice)}</span>
                                       </div>
                                       <p className="mt-3 text-xs text-muted-foreground">
-                                        Includes {pkg.linkedAddons.map((addon) => addon.name).join(", ")}.
+                                        {formatPackageIncludedItems(pkg.linkedAddons.map((addon) => addon.name))}
                                       </p>
                                     </button>
                                   ))}

@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { formatServiceCategory } from "../lib/serviceCatalog";
-import { isPackageTemplateService } from "../lib/servicePackages";
+import { formatPackageIncludedItems, isPackageTemplateService } from "../lib/servicePackages";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
@@ -181,8 +181,7 @@ function buildInvoicePackageTemplates(
           Number(service.durationMinutes ?? 0) +
           linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0),
       };
-    })
-    .filter((entry) => entry.linkedAddons.length > 0);
+    });
 }
 
 function buildSelectedAddonSuggestions(
@@ -1394,7 +1393,7 @@ export default function NewInvoicePage() {
                                         <span>${pkg.totalPrice.toFixed(2)}</span>
                                       </div>
                                       <p className="mt-3 text-xs text-muted-foreground">
-                                        Includes {pkg.linkedAddons.map((addon) => addon.name).join(", ")}.
+                                        {formatPackageIncludedItems(pkg.linkedAddons.map((addon) => addon.name))}
                                       </p>
                                     </button>
                                   ))}
@@ -1428,7 +1427,7 @@ export default function NewInvoicePage() {
                                         <span>${pkg.totalPrice.toFixed(2)}</span>
                                       </div>
                                       <p className="mt-3 text-xs text-muted-foreground">
-                                        Includes {pkg.linkedAddons.map((addon) => addon.name).join(", ")}.
+                                        {formatPackageIncludedItems(pkg.linkedAddons.map((addon) => addon.name))}
                                       </p>
                                     </button>
                                   ))}
