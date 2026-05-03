@@ -109,6 +109,15 @@ type OwnerBookingRequestRecord = {
   serviceMode: "in_shop" | "mobile";
   addonServiceIds: string[];
   serviceSummary: string;
+  selectedServices: Array<{
+    id: string;
+    name: string;
+    price: number;
+    durationMinutes: number;
+    isAddon: boolean;
+  }>;
+  selectedServiceTotal: number;
+  selectedServiceDurationMinutes: number;
   requestedDate: string | null;
   requestedTimeStart: string | null;
   requestedTimeEnd: string | null;
@@ -272,6 +281,25 @@ function formatDateLabel(value: string | null | undefined, timeZone?: string | n
     year: "numeric",
     timeZone: timeZone || undefined,
   }).format(parsed);
+}
+
+function formatMoney(value: number | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDurationLabel(minutes: number | null | undefined): string {
+  const value = Math.max(0, Math.round(Number(minutes ?? 0)));
+  if (value <= 0) return "No duration";
+  const hours = Math.floor(value / 60);
+  const remainingMinutes = value % 60;
+  if (hours && remainingMinutes) return `${hours} hr ${remainingMinutes} min`;
+  if (hours) return `${hours} hr`;
+  return `${remainingMinutes} min`;
 }
 
 function trimContactValue(value: string | null | undefined): string | null {
@@ -883,6 +911,10 @@ function AppointmentRequestsContent() {
     selectedRecord?.serviceZip ?? null,
   ]);
   const selectedCustomerPortalHref = selectedRecord?.portalUrl || selectedRecord?.publicResponseUrl || selectedRecord?.confirmationUrl || null;
+  const selectedServices = selectedRecord?.selectedServices ?? [];
+  const selectedAddOnCount = selectedServices.filter((service) => service.isAddon).length || selectedRecord?.addonServiceIds.length || 0;
+  const selectedServiceTotal = Number(selectedRecord?.selectedServiceTotal ?? 0);
+  const selectedServiceDurationMinutes = Number(selectedRecord?.selectedServiceDurationMinutes ?? 0);
 
   const handleShareSelectedRequest = async () => {
     if (!selectedRecord) return;
@@ -1005,6 +1037,7 @@ function AppointmentRequestsContent() {
                 {visibleRecords.map((record) => {
                   const active = record.id === selectedRequestId;
                   const urgency = urgencyTone(record);
+                  const addOnCount = record.selectedServices?.filter((service) => service.isAddon).length ?? record.addonServiceIds.length;
                   return (
                     <button
                       key={record.id}
@@ -1038,6 +1071,16 @@ function AppointmentRequestsContent() {
                         <Badge className={cn("rounded-full px-2.5 py-1", requestStatusBadge(record.status))}>
                           {requestStatusLabel(record.status)}
                         </Badge>
+                        {addOnCount > 0 ? (
+                          <Badge variant="outline" className="rounded-full border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-800">
+                            {addOnCount} add-on{addOnCount === 1 ? "" : "s"}
+                          </Badge>
+                        ) : null}
+                        {Number(record.selectedServiceTotal ?? 0) > 0 ? (
+                          <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800">
+                            {formatMoney(record.selectedServiceTotal)}
+                          </Badge>
+                        ) : null}
                         {urgency ? (
                           <Badge className={cn("rounded-full px-2.5 py-1", urgency.className)}>{urgency.label}</Badge>
                         ) : null}
@@ -1172,6 +1215,61 @@ function AppointmentRequestsContent() {
                       href={selectedRequestMapsHref}
                     />
                   </div>
+                </div>
+
+                <div className="rounded-[1.4rem] border border-emerald-200/80 bg-[linear-gradient(180deg,#f0fdf4_0%,#ffffff_100%)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Selected services</p>
+                      <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                        {selectedRecord.serviceSummary || "Customer selected services"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {selectedAddOnCount > 0
+                          ? `${selectedAddOnCount} selected add-on${selectedAddOnCount === 1 ? "" : "s"} included in this request.`
+                          : "No optional add-ons selected on this request."}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm md:min-w-56">
+                      <div className="rounded-2xl border border-emerald-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Estimate</p>
+                        <p className="mt-1 font-semibold text-slate-950">{selectedServiceTotal > 0 ? formatMoney(selectedServiceTotal) : "Not shown"}</p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Duration</p>
+                        <p className="mt-1 font-semibold text-slate-950">{formatDurationLabel(selectedServiceDurationMinutes)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {selectedServices.length > 0 ? (
+                    <div className="mt-4 grid gap-2">
+                      {selectedServices.map((service) => (
+                        <div
+                          key={service.id}
+                          className="flex flex-col gap-2 rounded-2xl border border-emerald-100 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="min-w-0 break-words text-sm font-semibold text-slate-950">{service.name}</p>
+                              {service.isAddon ? (
+                                <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-800">
+                                  Add-on
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                                  Base
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">{formatDurationLabel(service.durationMinutes)}</p>
+                          </div>
+                          <p className="shrink-0 text-sm font-semibold text-slate-950">
+                            {service.price > 0 ? formatMoney(service.price) : "No price"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
