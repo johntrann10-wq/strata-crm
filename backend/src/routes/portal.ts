@@ -1,19 +1,25 @@
 import express, { type Request, type Response } from "express";
+import { z } from "zod";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
+  appointmentServices,
   appointments,
   businesses,
   clients,
   invoices,
   quotes,
+  serviceAddonLinks,
+  services,
   vehicles,
 } from "../db/schema.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
+import { createActivityLog } from "../lib/activity.js";
 import { BadRequestError, NotFoundError } from "../lib/errors.js";
 import { getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
 import { getActiveInvoicePaymentTotal } from "../lib/invoicePayments.js";
 import { calculateAppointmentFinanceTotals } from "../lib/revenueTotals.js";
+import { createRateLimiter } from "../middleware/security.js";
 import {
   buildPublicAppUrl,
   buildPublicDocumentUrl,
@@ -26,6 +32,18 @@ import {
 import { retrieveConnectAccount } from "../lib/stripe.js";
 
 export const portalRouter = express.Router();
+
+const publicPortalAddonRequestLimiter = createRateLimiter({
+  id: "public_portal_addon_request",
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  message: "Too many add-on requests. Please wait a bit before trying again.",
+  key: ({ ip, path }) => `public:portal-addon:${ip}:${path}`,
+});
+
+const portalAddonRequestSchema = z.object({
+  addonServiceId: z.string().uuid(),
+});
 
 function toMoneyNumber(value: number | string | null | undefined): number {
   if (value == null || value === "") return 0;
@@ -80,6 +98,25 @@ type PortalReferenceDocument = {
   url: string;
 };
 
+type PortalAppointmentServiceLine = {
+  id: string;
+  appointmentId: string;
+  serviceId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  durationMinutes: number | null;
+};
+
+type PortalAppointmentAddonSuggestion = {
+  id: string;
+  name: string;
+  price: number;
+  durationMinutes: number | null;
+  parentServiceId: string;
+  parentServiceName: string;
+};
+
 function formatDocumentTitle(kind: PublicDocumentKind, source: Record<string, unknown>): string {
   if (kind === "invoice") {
     const invoiceNumber = String(source.invoiceNumber ?? "").trim();
@@ -108,6 +145,120 @@ function buildDocumentUrl(payload: PublicDocumentTokenPayload & { tokenVersion?:
     return buildPublicDocumentUrl(`/api/invoices/${payload.entityId}/public-html?token=${token}`);
   }
   return buildPublicDocumentUrl(`/api/appointments/${payload.entityId}/public-html?token=${token}`);
+}
+
+async function buildPortalAppointmentServiceContext(
+  businessId: string,
+  appointmentIds: string[]
+): Promise<{
+  serviceLinesByAppointment: Map<string, PortalAppointmentServiceLine[]>;
+  addonSuggestionsByAppointment: Map<string, PortalAppointmentAddonSuggestion[]>;
+}> {
+  const serviceLinesByAppointment = new Map<string, PortalAppointmentServiceLine[]>();
+  const addonSuggestionsByAppointment = new Map<string, PortalAppointmentAddonSuggestion[]>();
+  if (appointmentIds.length === 0) {
+    return { serviceLinesByAppointment, addonSuggestionsByAppointment };
+  }
+
+  const serviceRows = await db
+    .select({
+      id: appointmentServices.id,
+      appointmentId: appointmentServices.appointmentId,
+      serviceId: appointmentServices.serviceId,
+      quantity: appointmentServices.quantity,
+      unitPrice: appointmentServices.unitPrice,
+      serviceName: services.name,
+      servicePrice: services.price,
+      durationMinutes: services.durationMinutes,
+    })
+    .from(appointmentServices)
+    .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+    .where(and(inArray(appointmentServices.appointmentId, appointmentIds), eq(services.businessId, businessId)))
+    .orderBy(asc(appointmentServices.createdAt));
+
+  const serviceIds = new Set<string>();
+  const serviceNameById = new Map<string, string>();
+  const existingServiceIdsByAppointment = new Map<string, Set<string>>();
+
+  for (const row of serviceRows) {
+    const line: PortalAppointmentServiceLine = {
+      id: row.id,
+      appointmentId: row.appointmentId,
+      serviceId: row.serviceId,
+      name: row.serviceName,
+      quantity: Number(row.quantity ?? 1),
+      unitPrice: toMoneyNumber(row.unitPrice ?? row.servicePrice),
+      durationMinutes: row.durationMinutes ?? null,
+    };
+    serviceLinesByAppointment.set(row.appointmentId, [...(serviceLinesByAppointment.get(row.appointmentId) ?? []), line]);
+    serviceIds.add(row.serviceId);
+    serviceNameById.set(row.serviceId, row.serviceName);
+    if (!existingServiceIdsByAppointment.has(row.appointmentId)) {
+      existingServiceIdsByAppointment.set(row.appointmentId, new Set<string>());
+    }
+    existingServiceIdsByAppointment.get(row.appointmentId)?.add(row.serviceId);
+  }
+
+  const parentServiceIds = Array.from(serviceIds);
+  if (parentServiceIds.length === 0) {
+    return { serviceLinesByAppointment, addonSuggestionsByAppointment };
+  }
+
+  const addonLinks = await db
+    .select({
+      parentServiceId: serviceAddonLinks.parentServiceId,
+      addonServiceId: serviceAddonLinks.addonServiceId,
+      sortOrder: serviceAddonLinks.sortOrder,
+    })
+    .from(serviceAddonLinks)
+    .where(and(eq(serviceAddonLinks.businessId, businessId), inArray(serviceAddonLinks.parentServiceId, parentServiceIds)))
+    .orderBy(asc(serviceAddonLinks.sortOrder), asc(serviceAddonLinks.createdAt));
+
+  const addonServiceIds = Array.from(new Set(addonLinks.map((link) => link.addonServiceId)));
+  if (addonServiceIds.length === 0) {
+    return { serviceLinesByAppointment, addonSuggestionsByAppointment };
+  }
+
+  const addonRows = await db
+    .select({
+      id: services.id,
+      name: services.name,
+      price: services.price,
+      durationMinutes: services.durationMinutes,
+    })
+    .from(services)
+    .where(and(eq(services.businessId, businessId), eq(services.active, true), inArray(services.id, addonServiceIds)));
+  const addonById = new Map(addonRows.map((addon) => [addon.id, addon]));
+  const linksByParentService = addonLinks.reduce((acc, link) => {
+    acc.set(link.parentServiceId, [...(acc.get(link.parentServiceId) ?? []), link]);
+    return acc;
+  }, new Map<string, typeof addonLinks>());
+
+  for (const [appointmentId, appointmentServiceLines] of serviceLinesByAppointment) {
+    const existingIds = existingServiceIdsByAppointment.get(appointmentId) ?? new Set<string>();
+    const seenSuggestions = new Set<string>();
+    const suggestions: PortalAppointmentAddonSuggestion[] = [];
+
+    for (const line of appointmentServiceLines) {
+      for (const link of linksByParentService.get(line.serviceId) ?? []) {
+        const addon = addonById.get(link.addonServiceId);
+        if (!addon || existingIds.has(addon.id) || seenSuggestions.has(addon.id)) continue;
+        seenSuggestions.add(addon.id);
+        suggestions.push({
+          id: addon.id,
+          name: addon.name,
+          price: toMoneyNumber(addon.price),
+          durationMinutes: addon.durationMinutes ?? null,
+          parentServiceId: link.parentServiceId,
+          parentServiceName: serviceNameById.get(link.parentServiceId) ?? "Booked service",
+        });
+      }
+    }
+
+    addonSuggestionsByAppointment.set(appointmentId, suggestions);
+  }
+
+  return { serviceLinesByAppointment, addonSuggestionsByAppointment };
 }
 
 async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload): Promise<{
@@ -198,6 +349,120 @@ async function resolvePortalReferenceDocument(access: PublicDocumentTokenPayload
     },
   };
 }
+
+portalRouter.post(
+  "/:token/appointments/:appointmentId/add-on-request",
+  publicPortalAddonRequestLimiter.middleware,
+  express.json({ limit: "16kb" }),
+  wrapAsync(async (req: Request, res: Response) => {
+    const token = typeof req.params.token === "string" ? req.params.token.trim() : "";
+    const access = verifyAnyPublicDocumentToken(token);
+    if (!access) throw new BadRequestError("This customer hub link is invalid or expired.");
+
+    const parsed = portalAddonRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new BadRequestError(parsed.error.issues[0]?.message ?? "Invalid add-on request.");
+
+    const { clientId } = await resolvePortalReferenceDocument(access);
+    const [appointment] = await db
+      .select({
+        id: appointments.id,
+        title: appointments.title,
+        status: appointments.status,
+        startTime: appointments.startTime,
+        clientFirstName: clients.firstName,
+        clientLastName: clients.lastName,
+        clientEmail: clients.email,
+        clientPhone: clients.phone,
+      })
+      .from(appointments)
+      .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, access.businessId)))
+      .where(
+        and(
+          eq(appointments.id, req.params.appointmentId),
+          eq(appointments.businessId, access.businessId),
+          eq(appointments.clientId, clientId)
+        )
+      )
+      .limit(1);
+
+    if (!appointment) throw new NotFoundError("Appointment not found.");
+    if (!["scheduled", "confirmed", "in_progress"].includes(appointment.status)) {
+      throw new BadRequestError("Add-ons can only be requested for active upcoming appointments.");
+    }
+
+    const currentServiceRows = await db
+      .select({
+        serviceId: appointmentServices.serviceId,
+        serviceName: services.name,
+      })
+      .from(appointmentServices)
+      .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+      .where(and(eq(appointmentServices.appointmentId, appointment.id), eq(services.businessId, access.businessId)));
+
+    const currentServiceIds = currentServiceRows.map((row) => row.serviceId);
+    if (currentServiceIds.length === 0) {
+      throw new BadRequestError("This appointment does not have any services that support add-ons yet.");
+    }
+    if (currentServiceIds.includes(parsed.data.addonServiceId)) {
+      throw new BadRequestError("This add-on is already part of the appointment.");
+    }
+
+    const [addon] = await db
+      .select({
+        id: services.id,
+        name: services.name,
+        price: services.price,
+        durationMinutes: services.durationMinutes,
+      })
+      .from(services)
+      .where(and(eq(services.id, parsed.data.addonServiceId), eq(services.businessId, access.businessId), eq(services.active, true)))
+      .limit(1);
+    if (!addon) throw new BadRequestError("This add-on is unavailable.");
+
+    const [link] = await db
+      .select({
+        parentServiceId: serviceAddonLinks.parentServiceId,
+      })
+      .from(serviceAddonLinks)
+      .where(
+        and(
+          eq(serviceAddonLinks.businessId, access.businessId),
+          eq(serviceAddonLinks.addonServiceId, addon.id),
+          inArray(serviceAddonLinks.parentServiceId, currentServiceIds)
+        )
+      )
+      .limit(1);
+    if (!link) throw new BadRequestError("This add-on is not available for the booked services.");
+
+    const parentServiceName =
+      currentServiceRows.find((row) => row.serviceId === link.parentServiceId)?.serviceName ?? "Booked service";
+    const clientName =
+      [appointment.clientFirstName, appointment.clientLastName].filter(Boolean).join(" ").trim() || "Customer";
+
+    await createActivityLog({
+      businessId: access.businessId,
+      action: "appointment.public_addon_requested",
+      entityType: "appointment",
+      entityId: appointment.id,
+      metadata: {
+        source: "customer_hub",
+        addonServiceId: addon.id,
+        addonName: addon.name,
+        addonPrice: toMoneyNumber(addon.price),
+        addonDurationMinutes: addon.durationMinutes ?? null,
+        parentServiceId: link.parentServiceId,
+        parentServiceName,
+        appointmentTitle: formatDocumentTitle("appointment", appointment),
+        appointmentStartTime: appointment.startTime,
+        clientName,
+        clientEmail: appointment.clientEmail ?? null,
+        clientPhone: appointment.clientPhone ?? null,
+      },
+    });
+
+    res.status(201).json({ ok: true, message: "Add-on request sent." });
+  })
+);
 
 portalRouter.get(
   "/:token",
@@ -355,6 +620,11 @@ portalRouter.get(
         paidAt: null,
       }))
     );
+    const { serviceLinesByAppointment, addonSuggestionsByAppointment } =
+      await buildPortalAppointmentServiceContext(
+        access.businessId,
+        upcomingAppointments.map((appointment) => appointment.id)
+      );
 
     const recentAppointments = await db
       .select({
@@ -459,6 +729,8 @@ portalRouter.get(
           depositSatisfied: finance?.depositSatisfied ?? false,
           vehicleLabel:
             [appointment.vehicleYear, appointment.vehicleMake, appointment.vehicleModel].filter(Boolean).join(" ") || null,
+          serviceLines: serviceLinesByAppointment.get(appointment.id) ?? [],
+          availableAddons: addonSuggestionsByAppointment.get(appointment.id) ?? [],
           url: buildDocumentUrl({
             kind: "appointment",
             entityId: appointment.id,

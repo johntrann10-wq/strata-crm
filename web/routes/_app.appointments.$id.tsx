@@ -238,6 +238,57 @@ function buildEmailHref(value: string | null | undefined): string | null {
   return trimmed ? `mailto:${trimmed}` : null;
 }
 
+type CustomerAddonRequest = {
+  activityId: string;
+  addonServiceId: string;
+  addonName: string;
+  addonPrice: number | null;
+  addonDurationMinutes: number | null;
+  parentServiceName: string | null;
+  clientName: string | null;
+  createdAt: string | Date | null;
+};
+
+function parseCustomerAddonRequests(
+  records: Array<{ id?: string | null; type?: string | null; action?: string | null; metadata?: string | null; createdAt?: string | Date | null }>
+): CustomerAddonRequest[] {
+  const seenAddonServiceIds = new Set<string>();
+  return records
+    .filter((record) => (record.type ?? record.action) === "appointment.public_addon_requested")
+    .map((record) => {
+      try {
+        const parsed = record.metadata ? (JSON.parse(record.metadata) as Record<string, unknown>) : {};
+        const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
+        const addonName = typeof parsed.addonName === "string" && parsed.addonName.trim() ? parsed.addonName.trim() : "Requested add-on";
+        const addonPrice = Number(parsed.addonPrice);
+        const addonDurationMinutes = Number(parsed.addonDurationMinutes);
+        return {
+          activityId: record.id ?? `${addonServiceId}:${String(record.createdAt ?? "")}`,
+          addonServiceId,
+          addonName,
+          addonPrice: Number.isFinite(addonPrice) ? addonPrice : null,
+          addonDurationMinutes: Number.isFinite(addonDurationMinutes) ? addonDurationMinutes : null,
+          parentServiceName:
+            typeof parsed.parentServiceName === "string" && parsed.parentServiceName.trim()
+              ? parsed.parentServiceName.trim()
+              : null,
+          clientName:
+            typeof parsed.clientName === "string" && parsed.clientName.trim()
+              ? parsed.clientName.trim()
+              : null,
+          createdAt: record.createdAt ?? null,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((request): request is CustomerAddonRequest => {
+      if (!request?.addonServiceId || seenAddonServiceIds.has(request.addonServiceId)) return false;
+      seenAddonServiceIds.add(request.addonServiceId);
+      return true;
+    });
+}
+
 function safeDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -607,6 +658,7 @@ export default function AppointmentDetail() {
   const [editClientId, setEditClientId] = useState("");
   const [editVehicleId, setEditVehicleId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("__none__");
+  const [addingRequestedAddonId, setAddingRequestedAddonId] = useState<string | null>(null);
   const [depositPaymentAmount, setDepositPaymentAmount] = useState("");
   const [depositPaymentMethod, setDepositPaymentMethod] = useState("cash");
   const [depositPaymentDate, setDepositPaymentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -923,6 +975,15 @@ export default function AppointmentDetail() {
       ),
     [existingServiceIds, serviceAddonLinks, serviceCatalogRecords]
   );
+  const customerAddonRequests = parseCustomerAddonRequests(
+    (activityLogs ?? []) as Array<{
+      id?: string | null;
+      type?: string | null;
+      action?: string | null;
+      metadata?: string | null;
+      createdAt?: string | Date | null;
+    }>
+  );
   const completedServiceIds = new Map(
     (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
       (acc, record) => {
@@ -1194,6 +1255,25 @@ export default function AppointmentDetail() {
       return;
     }
     toast.success(`${service.name ?? "Add-on"} added to appointment`);
+    void triggerNotificationFeedback("success");
+    void refetchAppointment();
+    void refetchActivity();
+  };
+
+  const handleAddRequestedService = async (serviceId: string) => {
+    if (!appointment?.id || !serviceId) return;
+    setAddingRequestedAddonId(serviceId);
+    await triggerImpactFeedback("light");
+    const result = await runAddAppointmentService({
+      appointmentId: appointment.id,
+      serviceId,
+    }).finally(() => setAddingRequestedAddonId(null));
+    if (result.error) {
+      toast.error(`Failed to add requested add-on: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
+      return;
+    }
+    toast.success("Requested add-on added to appointment");
     void triggerNotificationFeedback("success");
     void refetchAppointment();
     void refetchActivity();
@@ -2730,6 +2810,102 @@ export default function AppointmentDetail() {
                   )}
                 </CardContent>
               </Card>
+
+              {customerAddonRequests.length > 0 ? (
+                <Card className="border-orange-200 bg-orange-50/70">
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <CardTitle className="text-base">Customer add-on requests</CardTitle>
+                        <p className="mt-1 text-sm text-orange-900/75">
+                          Requested from the customer hub. Review before changing the appointment.
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="rounded-full bg-white text-orange-900">
+                        {customerAddonRequests.length}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {customerAddonRequests.map((request) => {
+                      const alreadyAdded = existingServiceIds.has(request.addonServiceId);
+                      const catalogService = serviceCatalogRecords.find(
+                        (service) => service.id === request.addonServiceId
+                      );
+                      const displayPrice =
+                        request.addonPrice != null
+                          ? request.addonPrice
+                          : catalogService?.price != null
+                            ? Number(catalogService.price)
+                            : null;
+                      const displayDuration = request.addonDurationMinutes ?? catalogService?.durationMinutes ?? null;
+                      const isAddingThisRequest = addingRequestedAddonId === request.addonServiceId;
+                      return (
+                        <div
+                          key={request.activityId}
+                          className="rounded-2xl border border-orange-200 bg-background p-4 shadow-sm"
+                        >
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0 space-y-3">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="break-words text-base font-semibold text-foreground">{request.addonName}</p>
+                                  {alreadyAdded ? <StatusBadge status="added" type="job" /> : null}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {request.clientName ? `${request.clientName} requested this` : "Customer requested this"}
+                                  {request.parentServiceName ? ` with ${request.parentServiceName}` : ""}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground">
+                                  {displayPrice != null && Number.isFinite(displayPrice)
+                                    ? `Adds ${formatCurrency(displayPrice)}`
+                                    : "Price from catalog"}
+                                </span>
+                                {displayDuration ? (
+                                  <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground">
+                                    Adds {displayDuration} min
+                                  </span>
+                                ) : null}
+                                {request.createdAt ? (
+                                  <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                                    Requested {formatDateTime(request.createdAt)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                              {!catalogService && !alreadyAdded ? (
+                                <p className="max-w-56 text-sm text-muted-foreground">
+                                  This add-on is no longer active in the service catalog.
+                                </p>
+                              ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="min-h-10 w-full sm:w-auto"
+                                variant={alreadyAdded ? "outline" : "default"}
+                                onClick={() => void handleAddRequestedService(request.addonServiceId)}
+                                disabled={addingService || alreadyAdded || !catalogService}
+                              >
+                                {isAddingThisRequest ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : alreadyAdded ? (
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                ) : (
+                                  <Plus className="mr-2 h-4 w-4" />
+                                )}
+                                {alreadyAdded ? "Already added" : catalogService ? "Add to appointment" : "Unavailable"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              ) : null}
 
               <Card id="appointment-services-card" className="scroll-mt-24">
                 <CardHeader>
