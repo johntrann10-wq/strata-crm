@@ -120,6 +120,37 @@ type PortalAppointmentAddonSuggestion = {
   requestStatus: "available" | "requested";
 };
 
+type PortalAddonRequestStatus = "requested" | "resolved";
+
+export type PortalAddonRequestActivityRow = {
+  appointmentId: string | null;
+  action: string;
+  metadata: string | null;
+};
+
+export function buildPortalAddonRequestStatusMap(rows: PortalAddonRequestActivityRow[]) {
+  const requestStatusByAppointment = new Map<string, Map<string, PortalAddonRequestStatus>>();
+
+  for (const row of rows) {
+    if (!row.appointmentId) continue;
+    let addonServiceId = "";
+    try {
+      const parsed = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
+      addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
+    } catch {
+      addonServiceId = "";
+    }
+    if (!addonServiceId) continue;
+    if (!requestStatusByAppointment.has(row.appointmentId)) {
+      requestStatusByAppointment.set(row.appointmentId, new Map<string, PortalAddonRequestStatus>());
+    }
+    const status = row.action === "appointment.public_addon_requested" ? "requested" : "resolved";
+    requestStatusByAppointment.get(row.appointmentId)?.set(addonServiceId, status);
+  }
+
+  return requestStatusByAppointment;
+}
+
 function formatDocumentTitle(kind: PublicDocumentKind, source: Record<string, unknown>): string {
   if (kind === "invoice") {
     const invoiceNumber = String(source.invoiceNumber ?? "").trim();
@@ -232,7 +263,6 @@ async function buildPortalAppointmentServiceContext(
     .from(services)
     .where(and(eq(services.businessId, businessId), eq(services.active, true), inArray(services.id, addonServiceIds)));
   const addonById = new Map(addonRows.map((addon) => [addon.id, addon]));
-  const requestStatusByAppointment = new Map<string, Map<string, "requested" | "resolved">>();
   const addonRequestActivityRows = await db
     .select({
       appointmentId: activityLogs.entityId,
@@ -254,23 +284,7 @@ async function buildPortalAppointmentServiceContext(
       )
     )
     .orderBy(asc(activityLogs.createdAt));
-
-  for (const row of addonRequestActivityRows) {
-    if (!row.appointmentId) continue;
-    let addonServiceId = "";
-    try {
-      const parsed = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
-      addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
-    } catch {
-      addonServiceId = "";
-    }
-    if (!addonServiceId) continue;
-    if (!requestStatusByAppointment.has(row.appointmentId)) {
-      requestStatusByAppointment.set(row.appointmentId, new Map<string, "requested" | "resolved">());
-    }
-    const status = row.action === "appointment.public_addon_requested" ? "requested" : "resolved";
-    requestStatusByAppointment.get(row.appointmentId)?.set(addonServiceId, status);
-  }
+  const requestStatusByAppointment = buildPortalAddonRequestStatusMap(addonRequestActivityRows);
 
   const linksByParentService = addonLinks.reduce((acc, link) => {
     acc.set(link.parentServiceId, [...(acc.get(link.parentServiceId) ?? []), link]);
