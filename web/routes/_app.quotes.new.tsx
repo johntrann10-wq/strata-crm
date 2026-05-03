@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, Link, useOutletContext, useSearchParams } from "react-router";
 import { useFindMany, useFindFirst, useAction } from "../hooks/useApi";
 import { api } from "../api";
@@ -160,6 +160,25 @@ function buildPackageTemplates(
           Number(service.durationMinutes ?? 0) +
           linkedAddons.reduce((sum, addon) => sum + Number(addon.durationMinutes ?? 0), 0),
       };
+    })
+    .filter((entry) => entry.linkedAddons.length > 0);
+}
+
+function buildSelectedAddonSuggestions(
+  services: ServiceRecord[],
+  addonLinks: AddonLinkRecord[],
+  lineItemDescriptions: string[],
+) {
+  const selectedDescriptions = new Set(lineItemDescriptions.map((description) => description.trim().toLowerCase()).filter(Boolean));
+  return services
+    .filter((service) => !service.isAddon && selectedDescriptions.has(service.name.trim().toLowerCase()))
+    .map((service) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === service.id)
+        .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
+        .filter((candidate): candidate is ServiceRecord => Boolean(candidate))
+        .filter((addon) => !selectedDescriptions.has(addon.name.trim().toLowerCase()));
+      return { baseService: service, linkedAddons };
     })
     .filter((entry) => entry.linkedAddons.length > 0);
 }
@@ -570,8 +589,12 @@ export default function NewQuotePage() {
     toast.success("Client added");
   };
 
-  const serviceRecords = (services ?? []) as ServiceRecord[];
-  const addonLinks = (packageAddonLinks ?? []) as AddonLinkRecord[];
+  const serviceRecords = useMemo(() => (services ?? []) as ServiceRecord[], [services]);
+  const addonLinks = useMemo(() => (packageAddonLinks ?? []) as AddonLinkRecord[], [packageAddonLinks]);
+  const selectedAddonSuggestions = useMemo(
+    () => buildSelectedAddonSuggestions(serviceRecords, addonLinks, lineItems.map((item) => item.description)),
+    [addonLinks, lineItems, serviceRecords]
+  );
   const normalizedServiceSearch = serviceSearchQuery.trim().toLowerCase();
   const packageTemplates = buildPackageTemplates(serviceRecords, addonLinks);
   const recommendedPackageTemplates = packageTemplates.filter((pkg) =>
@@ -853,6 +876,38 @@ export default function NewQuotePage() {
                 <>
                   <Separator />
                   <div className="space-y-4">
+                    {selectedAddonSuggestions.length > 0 ? (
+                      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3 sm:p-4">
+                        <div className="flex flex-col gap-1">
+                          <p className="text-sm font-semibold text-amber-950">Suggested add-ons</p>
+                          <p className="text-xs leading-5 text-amber-800/80">
+                            Based on services already on this quote. Add only what belongs on this estimate.
+                          </p>
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                          {selectedAddonSuggestions.map((suggestion) => (
+                            <div key={suggestion.baseService.id} className="space-y-2">
+                              <p className="text-xs font-medium text-amber-900/80">For {suggestion.baseService.name}</p>
+                              <div className="flex flex-wrap gap-2">
+                                {suggestion.linkedAddons.map((addon) => (
+                                  <button
+                                    key={addon.id}
+                                    type="button"
+                                    onClick={() => addServiceAsLineItem(addon)}
+                                    className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-sm transition-colors hover:bg-amber-50"
+                                  >
+                                    <Plus className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                                    <span className="min-w-0 break-words">{addon.name}</span>
+                                    <span className="shrink-0 text-slate-500">{formatCurrency(toMoneyNumber(addon.price))}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
                     <div className="rounded-2xl border border-border/70 bg-slate-50/70 p-3 sm:p-4">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <p className="text-sm font-medium">Find services</p>
