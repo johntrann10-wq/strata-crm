@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { formatServiceCategory } from "../lib/serviceCatalog";
+import { isPackageTemplateService } from "../lib/servicePackages";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
@@ -163,7 +164,7 @@ function buildInvoicePackageTemplates(
   addonLinks: AddonLinkRecord[],
 ) {
   return services
-    .filter((service) => !service.isAddon)
+    .filter((service) => !service.isAddon && isPackageTemplateService(service))
     .map((service) => {
       const linkedAddons = addonLinks
         .filter((link) => link.parentServiceId === service.id)

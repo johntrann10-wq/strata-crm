@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { formatServiceCategory } from "../lib/serviceCatalog";
+import { isPackageTemplateService } from "../lib/servicePackages";
 import { formatVehicleLabel } from "../lib/vehicles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -144,7 +145,7 @@ function buildPackageTemplates(
   addonLinks: AddonLinkRecord[],
 ) {
   return services
-    .filter((service) => !service.isAddon)
+    .filter((service) => !service.isAddon && isPackageTemplateService(service))
     .map((service) => {
       const linkedAddons = addonLinks
         .filter((link) => link.parentServiceId === service.id)

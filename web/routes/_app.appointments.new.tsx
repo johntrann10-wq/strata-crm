@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import { formatServiceCategory } from "../lib/serviceCatalog";
+import { isPackageTemplateService } from "../lib/servicePackages";
 import type { AuthOutletContext } from "./_app";
 import { getWorkflowCreationPreset } from "../lib/workflowCreationPresets";
 import { Button } from "@/components/ui/button";
@@ -237,7 +238,7 @@ function buildPackageTemplates(
   addonLinks: PackageAddonLinkRecord[],
 ) {
   return services
-    .filter((service) => !service.isAddon)
+    .filter((service) => !service.isAddon && isPackageTemplateService(service))
     .map((service) => {
       const linkedAddons = addonLinks
         .filter((link) => link.parentServiceId === service.id)
