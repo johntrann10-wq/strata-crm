@@ -43,8 +43,8 @@ test.describe("Multi-day job calendar QA - mobile", () => {
 
     await expect(monthGrid).toBeVisible();
     await expect(selectedPanel).toBeVisible();
-    await expect(page.getByText("Wrap Titan 5d").first()).toBeVisible();
-    await expect(page.getByText("PPF Carrera 3d").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Open Tuesday, March 31/i })).toBeVisible();
+    await expect(page.getByText("Scheduling conflicts need review")).toBeVisible();
 
     const before = {
       grid: await monthGrid.boundingBox(),

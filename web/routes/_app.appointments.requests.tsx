@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Link, Navigate, useOutletContext, useSearchParams } from "react-router";
 import {
@@ -8,9 +8,13 @@ import {
   ChevronRight,
   Inbox,
   Loader2,
+  Mail,
+  MapPin,
   MessageSquareMore,
+  Phone,
   RefreshCcw,
   Send,
+  Share2,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -36,6 +40,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { clearAuthState, getAuthToken } from "@/lib/auth";
+import {
+  shareNativeContent,
+  triggerNotificationFeedback,
+  triggerSelectionFeedback,
+} from "@/lib/nativeInteractions";
 import { getPreferredAuthorizedAppPath } from "@/lib/permissionRouting";
 import { cn } from "@/lib/utils";
 import type { AuthOutletContext } from "./_app";
@@ -100,6 +109,15 @@ type OwnerBookingRequestRecord = {
   serviceMode: "in_shop" | "mobile";
   addonServiceIds: string[];
   serviceSummary: string;
+  selectedServices: Array<{
+    id: string;
+    name: string;
+    price: number;
+    durationMinutes: number;
+    isAddon: boolean;
+  }>;
+  selectedServiceTotal: number;
+  selectedServiceDurationMinutes: number;
   requestedDate: string | null;
   requestedTimeStart: string | null;
   requestedTimeEnd: string | null;
@@ -263,6 +281,70 @@ function formatDateLabel(value: string | null | undefined, timeZone?: string | n
     year: "numeric",
     timeZone: timeZone || undefined,
   }).format(parsed);
+}
+
+function formatMoney(value: number | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDurationLabel(minutes: number | null | undefined): string {
+  const value = Math.max(0, Math.round(Number(minutes ?? 0)));
+  if (value <= 0) return "No duration";
+  const hours = Math.floor(value / 60);
+  const remainingMinutes = value % 60;
+  if (hours && remainingMinutes) return `${hours} hr ${remainingMinutes} min`;
+  if (hours) return `${hours} hr`;
+  return `${remainingMinutes} min`;
+}
+
+function trimContactValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatDisplayPhone(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  return trimmed;
+}
+
+function buildPhoneHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `tel:${normalized}` : null;
+}
+
+function buildSmsHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `sms:${normalized}` : null;
+}
+
+function buildEmailHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  return trimmed ? `mailto:${trimmed}` : null;
+}
+
+function buildMapsHref(parts: Array<string | null | undefined>): string | null {
+  const address = parts.map(trimContactValue).filter(Boolean).join(", ");
+  return address ? `https://maps.apple.com/?q=${encodeURIComponent(address)}` : null;
 }
 
 function formatAgeLabel(value: string): string {
@@ -455,10 +537,13 @@ function buildBookingRequestAppointmentHref(record: OwnerBookingRequestRecord): 
   if (record.serviceId) {
     params.set("serviceIds", [record.serviceId, ...record.addonServiceIds].filter(Boolean).join(","));
   }
+  if (record.vehicle.summary) params.set("vehicleSummary", record.vehicle.summary);
   if (record.vehicle.year != null) params.set("vehicleYear", String(record.vehicle.year));
   if (record.vehicle.make) params.set("vehicleMake", record.vehicle.make);
   if (record.vehicle.model) params.set("vehicleModel", record.vehicle.model);
   if (record.vehicle.color) params.set("vehicleColor", record.vehicle.color);
+  const sourceAddress = [record.serviceAddress, record.serviceCity, record.serviceState, record.serviceZip].filter(Boolean).join(", ");
+  if (sourceAddress) params.set("sourceAddress", sourceAddress);
   return `/appointments/new?${params.toString()}`;
 }
 
@@ -474,6 +559,7 @@ function AppointmentRequestsContent() {
   const { businessId, permissions } = useOutletContext<AuthOutletContext>();
   const canManage = permissions.has("appointments.write");
   const [searchParams, setSearchParams] = useSearchParams();
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
   const [records, setRecords] = useState<OwnerBookingRequestRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<OwnerBookingRequestRecord | null>(null);
   const [listLoading, setListLoading] = useState(true);
@@ -541,7 +627,7 @@ function AppointmentRequestsContent() {
       if (selectedRequestId) {
         const next = new URLSearchParams(searchParams);
         next.delete("request");
-        setSearchParams(next, { replace: true });
+        setSearchParams(next, { replace: true, preventScrollReset: true });
       }
       setSelectedRecord(null);
       return;
@@ -549,7 +635,7 @@ function AppointmentRequestsContent() {
     if (!selectedRequestId || !visibleRecords.some((record) => record.id === selectedRequestId)) {
       const next = new URLSearchParams(searchParams);
       next.set("request", visibleRecords[0].id);
-      setSearchParams(next, { replace: true });
+      setSearchParams(next, { replace: true, preventScrollReset: true });
     }
   }, [searchParams, selectedRequestId, setSearchParams, visibleRecords]);
 
@@ -614,6 +700,15 @@ function AppointmentRequestsContent() {
       cancelled = true;
     };
   }, [businessId, selectedRecord]);
+
+  useEffect(() => {
+    if (!selectedRequestId || typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 1279px)").matches) return;
+    const frame = window.requestAnimationFrame(() => {
+      detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedRequestId]);
 
   const requestMetrics = useMemo(() => {
     const openCount = records.filter((record) => matchesStatusFilter(record, "open")).length;
@@ -685,8 +780,10 @@ function AppointmentRequestsContent() {
       applyRecordUpdate(payload.record);
       setApproveDialog({ open: false, message: "" });
       toast.success(payload.scheduledFor ? `Appointment created for ${payload.scheduledFor}.` : "Appointment created.");
+      void triggerNotificationFeedback("success");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not approve this requested slot.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -731,8 +828,10 @@ function AppointmentRequestsContent() {
         selectedSlots: [],
       });
       toast.success("Alternate times sent to the customer.");
+      void triggerNotificationFeedback("success");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send alternate times.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -760,8 +859,10 @@ function AppointmentRequestsContent() {
       applyRecordUpdate(payload.record);
       setAskNewTimeDialog({ open: false, message: "", expiresInHours: "72" });
       toast.success("A secure follow-up link was sent to the customer.");
+      void triggerNotificationFeedback("success");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not ask the customer for another time.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -782,8 +883,10 @@ function AppointmentRequestsContent() {
       applyRecordUpdate(payload.record);
       setDeclineDialog({ open: false, message: "" });
       toast.success("The booking request was declined.");
+      void triggerNotificationFeedback("warning");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not decline this request.");
+      void triggerNotificationFeedback("error");
     } finally {
       setSubmittingAction(null);
     }
@@ -797,6 +900,38 @@ function AppointmentRequestsContent() {
   const canRespondWithOwnerAction =
     canManage && !!selectedRecord && !["confirmed", "declined", "expired"].includes(selectedRecord.status);
   const canProposeAlternates = canRespondWithOwnerAction && selectedRequestPolicy.allowAlternateSlots;
+  const selectedCustomerPhoneLabel = formatDisplayPhone(selectedRecord?.customer.phone ?? null);
+  const selectedCustomerPhoneHref = buildPhoneHref(selectedRecord?.customer.phone ?? null);
+  const selectedCustomerSmsHref = buildSmsHref(selectedRecord?.customer.phone ?? null);
+  const selectedCustomerEmailHref = buildEmailHref(selectedRecord?.customer.email ?? null);
+  const selectedRequestMapsHref = buildMapsHref([
+    selectedRecord?.serviceAddress ?? null,
+    selectedRecord?.serviceCity ?? null,
+    selectedRecord?.serviceState ?? null,
+    selectedRecord?.serviceZip ?? null,
+  ]);
+  const selectedCustomerPortalHref = selectedRecord?.portalUrl || selectedRecord?.publicResponseUrl || selectedRecord?.confirmationUrl || null;
+  const selectedServices = selectedRecord?.selectedServices ?? [];
+  const selectedAddOnCount = selectedServices.filter((service) => service.isAddon).length || selectedRecord?.addonServiceIds.length || 0;
+  const selectedServiceTotal = Number(selectedRecord?.selectedServiceTotal ?? 0);
+  const selectedServiceDurationMinutes = Number(selectedRecord?.selectedServiceDurationMinutes ?? 0);
+
+  const handleShareSelectedRequest = async () => {
+    if (!selectedRecord) return;
+    await triggerSelectionFeedback();
+    const result = await shareNativeContent({
+      title: selectedRecord.serviceSummary || "Booking request",
+      text: `Customer request for ${[selectedRecord.customer.firstName, selectedRecord.customer.lastName].filter(Boolean).join(" ").trim() || "customer"}`,
+      url: selectedCustomerPortalHref ?? undefined,
+    });
+    if (result === "copied") {
+      toast.success("Request link copied");
+      void triggerNotificationFeedback("success");
+    } else if (result === "unavailable") {
+      toast.error("Sharing is not available on this device right now.");
+      void triggerNotificationFeedback("error");
+    }
+  };
 
   return (
     <div className="page-content page-section max-w-7xl">
@@ -824,7 +959,7 @@ function AppointmentRequestsContent() {
         <MetricCard label="Urgent" value={String(requestMetrics.urgentCount)} detail="Requests older than one day without a final answer." />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="overflow-hidden py-0">
           <CardHeader className="border-b border-slate-200/80 py-5">
             <div className="flex items-start justify-between gap-3">
@@ -902,6 +1037,7 @@ function AppointmentRequestsContent() {
                 {visibleRecords.map((record) => {
                   const active = record.id === selectedRequestId;
                   const urgency = urgencyTone(record);
+                  const addOnCount = record.selectedServices?.filter((service) => service.isAddon).length ?? record.addonServiceIds.length;
                   return (
                     <button
                       key={record.id}
@@ -909,7 +1045,7 @@ function AppointmentRequestsContent() {
                       onClick={() => {
                         const next = new URLSearchParams(searchParams);
                         next.set("request", record.id);
-                        setSearchParams(next);
+                        setSearchParams(next, { preventScrollReset: true });
                       }}
                       className={cn(
                         "flex w-full flex-col gap-3 px-5 py-4 text-left transition-colors sm:px-6",
@@ -935,6 +1071,16 @@ function AppointmentRequestsContent() {
                         <Badge className={cn("rounded-full px-2.5 py-1", requestStatusBadge(record.status))}>
                           {requestStatusLabel(record.status)}
                         </Badge>
+                        {addOnCount > 0 ? (
+                          <Badge variant="outline" className="rounded-full border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-800">
+                            {addOnCount} add-on{addOnCount === 1 ? "" : "s"}
+                          </Badge>
+                        ) : null}
+                        {Number(record.selectedServiceTotal ?? 0) > 0 ? (
+                          <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800">
+                            {formatMoney(record.selectedServiceTotal)}
+                          </Badge>
+                        ) : null}
                         {urgency ? (
                           <Badge className={cn("rounded-full px-2.5 py-1", urgency.className)}>{urgency.label}</Badge>
                         ) : null}
@@ -947,7 +1093,7 @@ function AppointmentRequestsContent() {
             )}
           </CardContent>
         </Card>
-        <div className="space-y-4">
+        <div ref={detailPanelRef} className="space-y-4">
           {detailLoading && !selectedRecord ? (
             <Card>
               <CardHeader>
@@ -1031,6 +1177,101 @@ function AppointmentRequestsContent() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6 py-6">
+                <div className="rounded-[1.3rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Customer actions</p>
+                      <p className="text-sm leading-6 text-slate-600">
+                        Respond from the queue without hunting for the customer’s phone, email, address, or request link.
+                      </p>
+                    </div>
+                    {selectedCustomerPortalHref ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => void handleShareSelectedRequest()}>
+                          <Share2 className="mr-2 h-4 w-4" />
+                          Share request
+                        </Button>
+                        <Button variant="outline" asChild>
+                          <a href={selectedCustomerPortalHref} target="_blank" rel="noreferrer">
+                            <ChevronRight className="mr-2 h-4 w-4" />
+                            Open customer page
+                          </a>
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <RequestActionTile icon={Phone} title="Call customer" detail={selectedCustomerPhoneLabel ?? "No phone"} href={selectedCustomerPhoneHref} />
+                    <RequestActionTile icon={MessageSquareMore} title="Text customer" detail={selectedCustomerPhoneLabel ?? "No phone"} href={selectedCustomerSmsHref} />
+                    <RequestActionTile icon={Mail} title="Email customer" detail={selectedRecord.customer.email || "No email"} href={selectedCustomerEmailHref} />
+                    <RequestActionTile
+                      icon={MapPin}
+                      title="Open in Maps"
+                      detail={
+                        [selectedRecord.serviceAddress, selectedRecord.serviceCity, selectedRecord.serviceState, selectedRecord.serviceZip]
+                          .filter(Boolean)
+                          .join(", ") || "No service address"
+                      }
+                      href={selectedRequestMapsHref}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-[1.4rem] border border-emerald-200/80 bg-[linear-gradient(180deg,#f0fdf4_0%,#ffffff_100%)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Selected services</p>
+                      <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                        {selectedRecord.serviceSummary || "Customer selected services"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
+                        {selectedAddOnCount > 0
+                          ? `${selectedAddOnCount} selected add-on${selectedAddOnCount === 1 ? "" : "s"} included in this request.`
+                          : "No optional add-ons selected on this request."}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm md:min-w-56">
+                      <div className="rounded-2xl border border-emerald-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Estimate</p>
+                        <p className="mt-1 font-semibold text-slate-950">{selectedServiceTotal > 0 ? formatMoney(selectedServiceTotal) : "Not shown"}</p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-200 bg-white px-3 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">Duration</p>
+                        <p className="mt-1 font-semibold text-slate-950">{formatDurationLabel(selectedServiceDurationMinutes)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {selectedServices.length > 0 ? (
+                    <div className="mt-4 grid gap-2">
+                      {selectedServices.map((service) => (
+                        <div
+                          key={service.id}
+                          className="flex flex-col gap-2 rounded-2xl border border-emerald-100 bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="min-w-0 break-words text-sm font-semibold text-slate-950">{service.name}</p>
+                              {service.isAddon ? (
+                                <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-800">
+                                  Add-on
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                                  Base
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">{formatDurationLabel(service.durationMinutes)}</p>
+                          </div>
+                          <p className="shrink-0 text-sm font-semibold text-slate-950">
+                            {service.price > 0 ? formatMoney(service.price) : "No price"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
                   <div className="rounded-[1.4rem] border border-orange-200/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.14),transparent_36%),linear-gradient(180deg,#fff7ed_0%,#ffffff_100%)] p-4 sm:p-5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-700">Requested date and time</p>
@@ -1069,7 +1310,7 @@ function AppointmentRequestsContent() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-2">
+                <div className="grid gap-4 lg:grid-cols-2">
                   <Card className="gap-4 border-slate-200/80 bg-white py-0">
                     <CardHeader className="border-b border-slate-200/80 py-5">
                       <CardTitle>Customer and vehicle</CardTitle>
@@ -1138,7 +1379,7 @@ function AppointmentRequestsContent() {
                           <span>{formatDateLabel(availabilityHints.date, availabilityHints.timezone)} has {availabilityHints.slots.length} bookable options.</span>
                           <span>Duration {availabilityHints.durationMinutes} minutes</span>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           {availabilityHints.slots.slice(0, 9).map((slot) => (
                             <div key={slot.startTime} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                               <p className="text-sm font-medium text-slate-950">{slot.label}</p>
@@ -1412,6 +1653,53 @@ function MetricCard({ label, value, detail }: { label: string; value: string; de
       <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{detail}</p>
     </div>
+  );
+}
+
+function RequestActionTile({
+  icon: Icon,
+  title,
+  detail,
+  href,
+}: {
+  icon: typeof Phone;
+  title: string;
+  detail: string;
+  href?: string | null;
+}) {
+  const sharedClassName =
+    "flex items-center gap-3 rounded-[1rem] border px-4 py-3 text-left shadow-sm transition-colors";
+
+  const content = (
+    <>
+      <div className="rounded-full bg-orange-100 p-2 text-orange-700">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm font-medium text-slate-950">{title}</p>
+        <p className="truncate text-xs text-slate-500">{detail}</p>
+      </div>
+    </>
+  );
+
+  if (!href) {
+    return (
+      <div className={`${sharedClassName} cursor-not-allowed border-slate-200 bg-white/70 opacity-70`} aria-disabled="true">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      className={`${sharedClassName} border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50/50`}
+      onClick={() => {
+        void triggerSelectionFeedback();
+      }}
+    >
+      {content}
+    </a>
   );
 }
 

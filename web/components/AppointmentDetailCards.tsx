@@ -17,12 +17,34 @@ import {
   Mail,
   CheckCircle,
   Loader2,
+  MapPin,
+  MessageSquare,
 } from "lucide-react";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+
+function normalizePhone(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (!digits) return null;
+  if (digits.length === 11 && digits.startsWith("1")) return digits;
+  if (digits.length === 10) return `1${digits}`;
+  return digits;
+}
+
+function formatPhone(value: string | null | undefined): string | null {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
 
 const statusColorMap: Record<string, string> = {
   // appointment statuses
@@ -67,9 +89,13 @@ interface ClientCardProps {
     phone?: string | null;
     email?: string | null;
   } | null;
+  mapsHref?: string | null;
+  locationLabel?: string | null;
 }
 
-export function ClientCard({ client }: ClientCardProps) {
+export function ClientCard({ client, mapsHref, locationLabel }: ClientCardProps) {
+  const normalizedPhone = normalizePhone(client?.phone);
+  const formattedPhone = formatPhone(client?.phone);
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -94,19 +120,62 @@ export function ClientCard({ client }: ClientCardProps) {
                 {[client.firstName, client.lastName].filter(Boolean).join(" ") || "Unnamed Client"}
               </span>
             )}
-            {client.phone && (
+            {formattedPhone ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Phone className="h-3.5 w-3.5 shrink-0" />
-                <span>{client.phone}</span>
+                {normalizedPhone ? (
+                  <a href={`tel:${normalizedPhone}`} className="hover:text-foreground hover:underline">
+                    {formattedPhone}
+                  </a>
+                ) : (
+                  <span>{formattedPhone}</span>
+                )}
               </div>
-            )}
-            {client.email && (
+            ) : null}
+            {client.email ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{client.email}</span>
+                <a href={`mailto:${client.email}`} className="truncate hover:text-foreground hover:underline">
+                  {client.email}
+                </a>
               </div>
-            )}
+            ) : null}
+            {locationLabel ? <p className="text-xs text-muted-foreground">{locationLabel}</p> : null}
             <Separator />
+            <div className="grid gap-2 sm:grid-cols-2">
+              {normalizedPhone ? (
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <a href={`tel:${normalizedPhone}`}>
+                    <Phone className="mr-2 h-4 w-4" />
+                    Call client
+                  </a>
+                </Button>
+              ) : null}
+              {normalizedPhone ? (
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <a href={`sms:${normalizedPhone}`}>
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Text client
+                  </a>
+                </Button>
+              ) : null}
+              {client.email ? (
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <a href={`mailto:${client.email}`}>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Email client
+                  </a>
+                </Button>
+              ) : null}
+              {mapsHref ? (
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <a href={mapsHref} target="_blank" rel="noreferrer">
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Open in Maps
+                  </a>
+                </Button>
+              ) : null}
+            </div>
             <Button variant="outline" size="sm" className="w-full" asChild>
               <Link to={client.id ? `/appointments/new?clientId=${client.id}` : "/appointments/new"}>
                 New Appointment

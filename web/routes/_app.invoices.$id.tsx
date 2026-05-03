@@ -70,6 +70,7 @@ import { cn } from "@/lib/utils";
 import { getCurrentBusinessId } from "@/lib/auth";
 import { getTransactionalEmailErrorMessage } from "@/lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
+import { canOpenExternalPaymentProvider } from "@/lib/mobileShell";
 import { printAuthenticatedDocument } from "@/lib/printDocument";
 import { getInvoiceCollectionSummary } from "@/lib/paymentStates";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
@@ -92,6 +93,11 @@ const STATUS_STYLES: Record<string, string> = {
 function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "$0.00";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
+}
+
+function toMoneyNumber(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
 function formatDate(value: string | Date | null | undefined): string {
@@ -157,14 +163,14 @@ function normalizeLineItems(inv: Record<string, unknown> | null | undefined): Ar
 }
 
 /** Normalize payments from API (array or edges.node) */
-function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }> {
+function normalizePayments(inv: Record<string, unknown> | null | undefined): Array<{ id: string; amount?: number | string | null; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }> {
   if (!inv?.payments) return [];
   const p = inv.payments as unknown;
-  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }>;
+  if (Array.isArray(p)) return p as Array<{ id: string; amount?: number | string | null; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null }>;
   const edges = (p as { edges?: Array<{ node?: unknown }> })?.edges;
   return Array.isArray(edges)
     ? edges
-        .map((e) => e?.node as { id: string; amount?: number; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null })
+        .map((e) => e?.node as { id: string; amount?: number | string | null; method?: string; createdAt?: string; paidAt?: string; reversedAt?: string | null; notes?: string | null })
         .filter(Boolean)
     : [];
 }
@@ -354,6 +360,9 @@ export default function InvoiceDetailPage() {
             amount: true,
             method: true,
             createdAt: true,
+            paidAt: true,
+            reversedAt: true,
+            notes: true,
           },
         },
       },
@@ -430,8 +439,10 @@ export default function InvoiceDetailPage() {
 
   const paymentsList = normalizePayments(invoice as Record<string, unknown>);
   const lineItemsList = normalizeLineItems(invoice as Record<string, unknown>);
-  const totalPaid = paymentsList.reduce((sum, p) => sum + (p.reversedAt ? 0 : Number(p.amount || 0)), 0);
-  const remainingBalance = Number((invoice as Record<string, unknown>)?.total || 0) - totalPaid;
+  const activePayments = paymentsList.filter((payment) => !payment.reversedAt);
+  const totalPaid = Number(activePayments.reduce((sum, payment) => sum + toMoneyNumber(payment.amount), 0).toFixed(2));
+  const invoiceTotal = Math.max(0, toMoneyNumber((invoice as Record<string, unknown>)?.total));
+  const remainingBalance = Math.max(0, Number((invoiceTotal - totalPaid).toFixed(2)));
 
   const handleOpenPaymentDialog = useCallback(() => {
     setPaymentAmount(remainingBalance > 0 ? remainingBalance.toFixed(2) : "0.00");
@@ -454,6 +465,12 @@ export default function InvoiceDetailPage() {
   useEffect(() => {
     const stripePayment = searchParams.get("stripePayment");
     if (!stripePayment) return;
+    if (!canOpenExternalPaymentProvider()) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("stripePayment");
+      setSearchParams(next, { replace: true });
+      return;
+    }
     if (stripePayment === "success") {
       toast.success("Stripe payment submitted. Invoice status will update as soon as Stripe confirms it.");
       void refetch();
@@ -497,6 +514,7 @@ export default function InvoiceDetailPage() {
 
   const handleStripeCheckout = async () => {
     if (!invoice?.id) return;
+    if (!canOpenExternalPaymentProvider()) return;
     const result = await createStripePaymentSession({ id: invoice.id });
     if (!result.error) {
       const url = (result.data as { url?: string } | undefined)?.url;
@@ -737,7 +755,7 @@ export default function InvoiceDetailPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-5xl space-y-5 px-3 py-4 sm:p-6">
+    <div className="container mx-auto max-w-5xl space-y-5 px-4 py-4 pb-28 sm:p-6">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to invoices queue" /> : null}
       <PageHeader
         backTo={returnTo}
@@ -801,9 +819,9 @@ export default function InvoiceDetailPage() {
               ) : null}
             </div>
 
-            <div className="flex w-full items-center gap-2 sm:hidden">
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:hidden">
               {invoiceAllowsPayment(status) && canWritePayments ? (
-                <Button onClick={handleOpenPaymentDialog} className="flex-1">
+                <Button onClick={handleOpenPaymentDialog} className="w-full">
                   <CreditCard className="h-4 w-4 mr-2" />
                   Record Payment
                 </Button>
@@ -812,7 +830,7 @@ export default function InvoiceDetailPage() {
                   onClick={() => void handleMarkAsSent()}
                   disabled={sendingToClient}
                   variant="outline"
-                  className="flex-1"
+                  className="w-full"
                 >
                   {sendingToClient ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -994,7 +1012,7 @@ export default function InvoiceDetailPage() {
             <CardContent className="p-0">
               {paymentsList.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  No payments recorded yet. Manual collections and Stripe payments will appear here.
+                  No payments recorded yet. Manual collections will appear here.
                 </div>
               ) : (
                 <Table>
@@ -1063,7 +1081,11 @@ export default function InvoiceDetailPage() {
               detail={collectionSummary.detail}
               amount={formatCurrency(remainingBalance)}
               primaryLabel="Collect payment"
-              tertiaryLabel={billingStatus?.stripeConnectReady && remainingBalance > 0 ? "Pay with Stripe" : undefined}
+              tertiaryLabel={
+                canOpenExternalPaymentProvider() && billingStatus?.stripeConnectReady && remainingBalance > 0
+                  ? "Pay with Stripe"
+                  : undefined
+              }
               secondaryLabel={status === "draft" ? "Send invoice first" : "Resend invoice"}
               onPrimary={handleOpenPaymentDialog}
               onTertiary={() => {

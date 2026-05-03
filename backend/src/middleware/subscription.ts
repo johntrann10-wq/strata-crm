@@ -6,7 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { businesses } from "../db/schema.js";
-import { SubscriptionRequiredError } from "../lib/errors.js";
+import { AppError, SubscriptionRequiredError } from "../lib/errors.js";
 import { isStripeConfigured } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 import { hasFullBillingAccess } from "../lib/billingAccess.js";
@@ -74,10 +74,20 @@ export async function requireSubscription(
       return;
     }
 
-    logger.warn("Subscription enforcement skipped because billing columns are unavailable", {
+    logger.error("Subscription enforcement blocked because billing columns are unavailable", {
       businessId: req.businessId,
       error: error instanceof Error ? error.message : String(error),
     });
-    next();
+    if (req.originalUrl.includes("/api/billing")) {
+      next();
+      return;
+    }
+    next(
+      new AppError(
+        "Billing protection is temporarily unavailable because the billing schema is out of date. Finish the latest migration and try again.",
+        503,
+        "BILLING_SCHEMA_UNAVAILABLE"
+      )
+    );
   }
 }

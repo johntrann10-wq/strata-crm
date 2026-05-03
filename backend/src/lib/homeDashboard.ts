@@ -296,6 +296,7 @@ export type HomeDashboardBookingsOverview = {
   depositsCollectedAmount: number;
   depositsDueAmount: number;
   depositsDueCount: number;
+  addOnInsights: HomeDashboardAddOnInsights;
   links: {
     bookingsThisWeek: string;
     bookingsThisMonth: string;
@@ -307,6 +308,21 @@ export type HomeDashboardBookingsOverview = {
     depositsDue: string;
   };
   funnel: HomeDashboardPipelineStage[];
+};
+
+export type HomeDashboardAddOnInsights = {
+  appointmentCount: number;
+  appointmentsWithAddOns: number;
+  attachmentRate: number;
+  addOnRevenue: number;
+  addOnCount: number;
+  averageAddOnRevenuePerBooking: number;
+  topAddOns: Array<{
+    id: string;
+    name: string;
+    count: number;
+    revenue: number;
+  }>;
 };
 
 export type HomeDashboardPreferences = {
@@ -600,6 +616,17 @@ function toMoneyNumber(value: MoneyLike): number {
   return Number.isFinite(parsed) ? Number(parsed) : 0;
 }
 
+function toValidDate(value: Date | string | null | undefined) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 function getDashboardAppointmentAmount(
   row: Pick<
     AppointmentDashboardRow,
@@ -622,24 +649,39 @@ function getDashboardAppointmentAmount(
     adminFeeRate: toMoneyNumber(row.adminFeeRate),
     applyAdminFee: row.applyAdminFee === true,
   });
+  const explicitAdminFeeAmount = Math.max(0, toMoneyNumber(row.adminFeeAmount));
+  const explicitTaxAmount = Math.max(0, toMoneyNumber(row.taxAmount));
 
   const adminFeeAmount =
     row.applyAdminFee === true
-      ? row.adminFeeAmount != null
-        ? Math.max(0, toMoneyNumber(row.adminFeeAmount))
+      ? explicitAdminFeeAmount > 0
+        ? explicitAdminFeeAmount
         : computed.adminFeeAmount
       : 0;
   const taxableSubtotal = subtotal + adminFeeAmount;
   const taxAmount =
     row.applyTax === true
-      ? row.taxAmount != null
-        ? Math.max(0, toMoneyNumber(row.taxAmount))
+      ? explicitTaxAmount > 0
+        ? explicitTaxAmount
         : Number(((taxableSubtotal * Math.max(0, toMoneyNumber(row.taxRate))) / 100).toFixed(2))
       : 0;
   const computedTotal = Math.max(0, Number((taxableSubtotal + taxAmount).toFixed(2)));
+  const hasStructuredAmountInputs =
+    subtotal > 0 ||
+    row.applyTax === true ||
+    row.applyAdminFee === true ||
+    explicitTaxAmount > 0 ||
+    explicitAdminFeeAmount > 0 ||
+    toMoneyNumber(row.taxRate) > 0 ||
+    toMoneyNumber(row.adminFeeRate) > 0;
 
-  if (computedTotal > 0) return computedTotal;
-  return storedTotal;
+  if (hasStructuredAmountInputs && computedTotal > 0) {
+    return computedTotal;
+  }
+  if (storedTotal > 0) {
+    return Number(storedTotal.toFixed(2));
+  }
+  return computedTotal;
 }
 
 function safeParseMetadata(metadata: string | null | undefined): Record<string, unknown> {
@@ -659,6 +701,12 @@ function getActivityLogEffectivePaidAt(metadata: string | null | undefined, fall
     if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
   }
   return fallback;
+}
+
+function coerceValidDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const candidate = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(candidate.getTime()) ? null : candidate;
 }
 
 function isCarryoverPaymentRow(row: {
@@ -852,16 +900,17 @@ export function getDashboardModulePermissions(permissions: PermissionKey[] = [])
   const has = (permission: PermissionKey) => permissions.includes(permission);
   return {
     today: has("appointments.read"),
-    cash: has("payments.read") || has("invoices.read"),
+    // Treat cash widgets as true finance visibility, not generic invoice lookup access.
+    cash: has("payments.read"),
     conversion: has("customers.read") || has("quotes.read"),
     todaySchedule: has("appointments.read"),
     actionQueue: true,
     pipeline: has("customers.read") || has("quotes.read") || has("appointments.read") || has("invoices.read"),
-    revenueCollections: has("payments.read") || has("invoices.read"),
+    revenueCollections: has("payments.read"),
     recentActivity: true,
     automations: has("settings.read"),
     businessHealth: true,
-    goals: has("payments.read") || has("invoices.read"),
+    goals: has("payments.read"),
     teamVisibility: has("team.read"),
     clientVisibility: has("customers.read"),
     vehicleVisibility: has("vehicles.read"),
@@ -1873,7 +1922,7 @@ export function buildMonthlyRevenueChart(params: {
   monthEnd: Date;
   timezone: string;
   bookedAppointments: Array<{
-    bookedAt: Date;
+    bookedAt: Date | string | null;
     subtotal: MoneyLike;
     taxRate: MoneyLike;
     taxAmount: MoneyLike;
@@ -1883,9 +1932,9 @@ export function buildMonthlyRevenueChart(params: {
     applyAdminFee: boolean | null;
     totalPrice: MoneyLike;
   }>;
-  standaloneInvoices: Array<{ bookedAt: Date; total: MoneyLike }>;
-  collectedPayments: Array<{ paidAt: Date; amount: number }>;
-  expenseRows: Array<{ expenseDate: Date; amount: MoneyLike }>;
+  standaloneInvoices: Array<{ bookedAt: Date | string | null; total: MoneyLike }>;
+  collectedPayments: Array<{ paidAt: Date | string | null; amount: number }>;
+  expenseRows: Array<{ expenseDate: Date | string | null; amount: MoneyLike }>;
   monthlyRevenueGoal: number | null;
 }) {
   const monthStartParts = getTimeZoneParts(params.monthStart, params.timezone);
@@ -1911,17 +1960,23 @@ export function buildMonthlyRevenueChart(params: {
   });
 
   const indexByDate = new Map(days.map((day, index) => [day.date, index]));
-  const addBooked = (date: Date, amount: MoneyLike) => {
+  const addBooked = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
+    if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.bookedRevenue += toMoneyNumber(amount);
   };
-  const addCollected = (date: Date, amount: number) => {
+  const addCollected = (dateLike: Date | string | null | undefined, amount: number) => {
+    const date = toValidDate(dateLike);
+    if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.collectedRevenue += amount;
   };
-  const addExpense = (date: Date, amount: MoneyLike) => {
+  const addExpense = (dateLike: Date | string | null | undefined, amount: MoneyLike) => {
+    const date = toValidDate(dateLike);
+    if (!date) return;
     const index = indexByDate.get(getBusinessDateKey(date, params.timezone));
     if (index == null) return;
     days[index]!.expenseAmount += toMoneyNumber(amount);
@@ -1992,6 +2047,7 @@ export function buildBookingsOverview(params: {
   depositsCollectedAmount: number;
   depositsDueAmount: number;
   depositsDueCount: number;
+  addOnInsights: HomeDashboardAddOnInsights;
 }) {
   const bookingsToday = params.monthAppointments.filter((row) => row.createdAt >= params.todayStart && row.createdAt <= params.todayEnd).length;
   const bookingsThisWeek = params.monthAppointments.filter((row) => row.createdAt >= params.weekStart && row.createdAt <= params.weekEnd).length;
@@ -2025,6 +2081,7 @@ export function buildBookingsOverview(params: {
     depositsCollectedAmount: Number(params.depositsCollectedAmount.toFixed(2)),
     depositsDueAmount: Number(params.depositsDueAmount.toFixed(2)),
     depositsDueCount: params.depositsDueCount,
+    addOnInsights: params.addOnInsights,
     links: {
       bookingsThisWeek: buildAppPath(`/calendar?view=week&date=${encodeURIComponent(weekDateKey)}`),
       bookingsThisMonth: buildAppPath(`/calendar?view=month&date=${encodeURIComponent(monthDateKey)}`),
@@ -2277,27 +2334,77 @@ function normalizeRangePreference(value: string | null | undefined): HomeDashboa
   return null;
 }
 
+let dashboardPreferencesSchemaReady: Promise<void> | null = null;
+
+function isIgnorableDashboardPreferencesSchemaError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    detail?: unknown;
+    constraint?: unknown;
+    cause?: unknown;
+  };
+  const source =
+    candidate.cause && typeof candidate.cause === "object"
+      ? (candidate.cause as {
+          code?: unknown;
+          message?: unknown;
+          detail?: unknown;
+          constraint?: unknown;
+        })
+      : candidate;
+  const code = String(source.code ?? "");
+  const message = String(source.message ?? "").toLowerCase();
+  const detail = String(source.detail ?? "").toLowerCase();
+  const constraint = String(source.constraint ?? "").toLowerCase();
+
+  return (
+    code === "42P07" ||
+    code === "42710" ||
+    message.includes("relation \"dashboard_preferences\" already exists") ||
+    (code === "23505" &&
+      constraint === "pg_type_typname_nsp_index" &&
+      detail.includes("dashboard_preferences"))
+  );
+}
+
 async function ensureDashboardPreferencesSchema(tx: DbExecutor) {
-  await tx.execute(sql`
-    CREATE TABLE IF NOT EXISTS dashboard_preferences (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      widget_order text NOT NULL DEFAULT '[]',
-      hidden_widgets text NOT NULL DEFAULT '[]',
-      default_range text DEFAULT NULL,
-      default_team_member_id uuid DEFAULT NULL,
-      dismissed_queue_items text NOT NULL DEFAULT '{}',
-      snoozed_queue_items text NOT NULL DEFAULT '{}',
-      last_seen_at timestamptz DEFAULT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
-    )
-  `);
-  await tx.execute(sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS dashboard_preferences_business_user_unique
-      ON dashboard_preferences (business_id, user_id)
-  `);
+  if (!dashboardPreferencesSchemaReady) {
+    dashboardPreferencesSchemaReady = (async () => {
+      try {
+        await tx.execute(sql`
+          CREATE TABLE IF NOT EXISTS dashboard_preferences (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            widget_order text NOT NULL DEFAULT '[]',
+            hidden_widgets text NOT NULL DEFAULT '[]',
+            default_range text DEFAULT NULL,
+            default_team_member_id uuid DEFAULT NULL,
+            dismissed_queue_items text NOT NULL DEFAULT '{}',
+            snoozed_queue_items text NOT NULL DEFAULT '{}',
+            last_seen_at timestamptz DEFAULT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
+        await tx.execute(sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS dashboard_preferences_business_user_unique
+            ON dashboard_preferences (business_id, user_id)
+        `);
+      } catch (error) {
+        if (!isIgnorableDashboardPreferencesSchemaError(error)) throw error;
+      }
+    })();
+  }
+
+  try {
+    await dashboardPreferencesSchemaReady;
+  } catch (error) {
+    dashboardPreferencesSchemaReady = null;
+    throw error;
+  }
 }
 
 async function loadDashboardPreferences(
@@ -2787,6 +2894,90 @@ async function loadMonthAppointmentsForRevenue(
     .orderBy(asc(bookedAt));
 }
 
+export function buildAddOnInsights(params: {
+  appointmentCount: number;
+  rows: Array<{
+    appointmentId: string;
+    serviceId: string;
+    serviceName: string;
+    quantity: MoneyLike;
+    unitPrice: MoneyLike;
+  }>;
+}): HomeDashboardAddOnInsights {
+  const appointmentIds = new Set<string>();
+  const topAddOnMap = new Map<string, { id: string; name: string; count: number; revenue: number }>();
+  let addOnRevenue = 0;
+  let addOnCount = 0;
+
+  for (const row of params.rows) {
+    appointmentIds.add(row.appointmentId);
+    const quantity = Math.max(1, toMoneyNumber(row.quantity));
+    const unitPrice = toMoneyNumber(row.unitPrice);
+    const revenue = Number((quantity * unitPrice).toFixed(2));
+    addOnRevenue += revenue;
+    addOnCount += quantity;
+
+    const current = topAddOnMap.get(row.serviceId) ?? {
+      id: row.serviceId,
+      name: row.serviceName,
+      count: 0,
+      revenue: 0,
+    };
+    current.count += quantity;
+    current.revenue = Number((current.revenue + revenue).toFixed(2));
+    topAddOnMap.set(row.serviceId, current);
+  }
+
+  const appointmentsWithAddOns = appointmentIds.size;
+  const appointmentCount = Math.max(0, params.appointmentCount);
+  const attachmentRate = appointmentCount > 0 ? Math.round((appointmentsWithAddOns / appointmentCount) * 100) : 0;
+
+  return {
+    appointmentCount,
+    appointmentsWithAddOns,
+    attachmentRate,
+    addOnRevenue: Number(addOnRevenue.toFixed(2)),
+    addOnCount,
+    averageAddOnRevenuePerBooking:
+      appointmentCount > 0 ? Number((addOnRevenue / Math.max(appointmentCount, 1)).toFixed(2)) : 0,
+    topAddOns: Array.from(topAddOnMap.values())
+      .sort((left, right) => right.revenue - left.revenue || right.count - left.count || left.name.localeCompare(right.name))
+      .slice(0, 4),
+  };
+}
+
+async function loadMonthAddOnInsights(
+  businessId: string,
+  monthStart: Date,
+  monthEnd: Date,
+  appointmentCount: number,
+  tx: DbExecutor
+): Promise<HomeDashboardAddOnInsights> {
+  const rows = await tx
+    .select({
+      appointmentId: appointments.id,
+      serviceId: services.id,
+      serviceName: services.name,
+      quantity: appointmentServices.quantity,
+      unitPrice: sql<MoneyLike>`coalesce(${appointmentServices.unitPrice}, ${services.price}, 0)`.as("unit_price"),
+    })
+    .from(appointmentServices)
+    .innerJoin(appointments, eq(appointmentServices.appointmentId, appointments.id))
+    .innerJoin(services, eq(appointmentServices.serviceId, services.id))
+    .where(
+      and(
+        eq(appointments.businessId, businessId),
+        eq(services.businessId, businessId),
+        eq(services.isAddon, true),
+        gte(appointments.createdAt, monthStart),
+        lte(appointments.createdAt, monthEnd),
+        sql`${appointments.status} not in ('cancelled', 'no-show')`
+      )
+    );
+
+  return buildAddOnInsights({ appointmentCount, rows });
+}
+
 async function loadReviewRequestReadyRows(
   business: DashboardBusinessConfig,
   cutoff: Date,
@@ -2851,7 +3042,8 @@ async function loadReactivationRows(
       and(
         eq(clients.businessId, business.id),
         eq(clients.marketingOptIn, true),
-        or(sql`${lastVisits.lastVisit} is null`, lte(lastVisits.lastVisit, cutoff)),
+        sql`${lastVisits.lastVisit} is not null`,
+        lte(lastVisits.lastVisit, cutoff),
         sql`not exists (
           select 1 from ${activityLogs}
           where ${activityLogs.businessId} = ${business.id}
@@ -3703,6 +3895,14 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
     ),
   ]);
 
+  const emptyAddOnInsights = buildAddOnInsights({ appointmentCount: monthAppointments.length, rows: [] });
+  const addOnInsights = await loadOrFallback(
+    "monthAddOnInsights",
+    emptyAddOnInsights,
+    ["summary_conversion", "pipeline", "revenue_collections"],
+    () => loadMonthAddOnInsights(params.businessId, monthStart, monthEnd, monthAppointments.length, tx)
+  );
+
   const appointmentIds = todayAppointments.map((row) => row.id);
   const serviceNamesByAppointmentId = await loadOrFallback(
     "appointmentServiceNames",
@@ -4018,6 +4218,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
       depositsCollectedAmount: 0,
       depositsDueAmount: 0,
       depositsDueCount: 0,
+      addOnInsights: buildAddOnInsights({ appointmentCount: 0, rows: [] }),
       links: {
         bookingsThisWeek: "/calendar",
         bookingsThisMonth: "/calendar",
@@ -4046,6 +4247,7 @@ export async function getHomeDashboardSnapshot(params: HomeDashboardParams): Pro
           depositsCollectedAmount: depositsCoveredAmount,
           depositsDueAmount,
           depositsDueCount: depositsDueRows.length,
+          addOnInsights,
         }),
         allowed: modulePermissions.today || modulePermissions.pipeline || modulePermissions.revenueCollections || modulePermissions.conversion,
       }) as HomeDashboardBookingsOverview

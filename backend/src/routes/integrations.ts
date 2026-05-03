@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireTenant } from "../middleware/tenant.js";
 import { requirePermission } from "../middleware/permissions.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { wrapAsync } from "../lib/asyncHandler.js";
 import { INTEGRATION_REGISTRY } from "../lib/integrationRegistry.js";
 import { isIntegrationFeatureEnabled, listIntegrationFeatureFlags } from "../lib/integrationFeatureFlags.js";
 import { listIntegrationFailures, retryIntegrationJobForBusiness } from "../lib/integrationJobs.js";
@@ -415,7 +416,7 @@ integrationsRouter.post(
   requireAuth,
   requireTenant,
   requirePermission("settings.write"),
-  async (req: Request, res: Response) => {
+  wrapAsync(async (req: Request, res: Response) => {
     requireBusinessIntegrationAdmin(req);
     const bid = businessId(req);
     if (!isIntegrationFeatureEnabled("twilio_sms")) {
@@ -439,7 +440,7 @@ integrationsRouter.post(
     });
 
     res.json({ record });
-  }
+  })
 );
 
 integrationsRouter.post(
@@ -447,7 +448,7 @@ integrationsRouter.post(
   requireAuth,
   requireTenant,
   requirePermission("settings.write"),
-  async (req: Request, res: Response) => {
+  wrapAsync(async (req: Request, res: Response) => {
     requireBusinessIntegrationAdmin(req);
     const bid = businessId(req);
     const userId = req.userId;
@@ -455,7 +456,7 @@ integrationsRouter.post(
     const record = await disconnectTwilioBusiness(bid, userId);
     if (!record) throw new NotFoundError("Twilio connection not found.");
     res.json({ record });
-  }
+  })
 );
 
 integrationsRouter.post(

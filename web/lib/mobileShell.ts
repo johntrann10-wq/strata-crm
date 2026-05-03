@@ -3,7 +3,7 @@
  *
  * Strata's web app is still the product source of truth. These helpers only
  * make auth returns and route restoration predictable when the app is opened
- * from a native shell or standalone container.
+ * from the native Capacitor shell.
  */
 const DEFAULT_SIGNED_IN_PATH = "/signed-in";
 const DEFAULT_APP_RETURN_PATH = "/app-return";
@@ -13,14 +13,77 @@ const APP_RETURN_NEXT_PARAM = "next";
 const APP_RETURN_SOURCE_PARAM = "source";
 const GOOGLE_AUTH_SOURCE = "google-auth";
 
+type NativeAppUrlListenerHandle = {
+  remove: () => Promise<void> | void;
+};
+
+type WindowWithCapacitor = Window & {
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+    platform?: string;
+  };
+  WEBVIEW_SERVER_URL?: string;
+  androidBridge?: unknown;
+  webkit?: {
+    messageHandlers?: {
+      bridge?: unknown;
+    };
+  };
+};
+
+function stripTrailingSlash(path: string): string {
+  return path.length > 1 ? path.replace(/\/+$/, "") || "/" : path;
+}
+
 function normalizeAppPath(input: string | null | undefined, fallback: string): string {
   if (typeof input !== "string") return fallback;
   const trimmed = input.trim();
   if (!trimmed || !trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
-  return trimmed;
+  return stripTrailingSlash(trimmed);
 }
 
-export function isNativeShell(): boolean {
+function getCapacitorBridge(): WindowWithCapacitor["Capacitor"] | null {
+  if (typeof window === "undefined") return null;
+  return (window as WindowWithCapacitor).Capacitor ?? null;
+}
+
+function detectNativePlatformFromRuntime(windowObject: WindowWithCapacitor): "ios" | "android" | null {
+  if (windowObject.androidBridge) return "android";
+  if (windowObject.webkit?.messageHandlers?.bridge) return "ios";
+  return null;
+}
+
+export function getCapacitorPlatform(): string | null {
+  if (typeof window === "undefined") return null;
+  const runtimePlatform = detectNativePlatformFromRuntime(window as WindowWithCapacitor);
+  if (runtimePlatform) return runtimePlatform;
+  const capacitor = getCapacitorBridge();
+  if (!capacitor) return null;
+  const platform = capacitor.getPlatform?.() ?? capacitor.platform ?? null;
+  return typeof platform === "string" && platform.trim() ? platform.toLowerCase() : null;
+}
+
+export function isCapacitorNativeApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const runtimePlatform = detectNativePlatformFromRuntime(window as WindowWithCapacitor);
+  if (runtimePlatform) return true;
+  const capacitor = getCapacitorBridge();
+  if (!capacitor) return window.location.protocol === "capacitor:";
+  if (capacitor.isNativePlatform?.() === true) return true;
+  const platform = getCapacitorPlatform();
+  return platform === "ios" || platform === "android" || window.location.protocol === "capacitor:";
+}
+
+export function isNativeIOSApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const platform = getCapacitorPlatform();
+  if (platform === "ios") return true;
+  if (!isCapacitorNativeApp()) return false;
+  return /\b(iPad|iPhone|iPod)\b/i.test(window.navigator.userAgent);
+}
+
+export function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") return false;
   const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
   try {
@@ -28,10 +91,19 @@ export function isNativeShell(): boolean {
   } catch {
     // Ignore restricted-environment matchMedia failures.
   }
-  return (
-    navigatorWithStandalone.standalone === true ||
-    typeof (window as Window & { Capacitor?: unknown }).Capacitor !== "undefined"
-  );
+  return navigatorWithStandalone.standalone === true;
+}
+
+export function isNativeShell(): boolean {
+  return isCapacitorNativeApp() || isStandaloneWebApp();
+}
+
+export function shouldShowWebBillingSurface(): boolean {
+  return !isNativeIOSApp();
+}
+
+export function canOpenExternalPaymentProvider(): boolean {
+  return !isNativeIOSApp();
 }
 
 export function getAppReturnPath(): string {
@@ -49,14 +121,15 @@ export function resolveSafeClientRedirectPath(input: string | null | undefined, 
 }
 
 /**
- * Google auth should continue using the normal web return path in browsers.
- * In a native shell we route through `/app-return` so the app can safely
- * consume the token and restore the intended destination.
+ * Google auth should continue using the normal web return path in browsers,
+ * including standalone/PWA sessions. In a true Capacitor app we route through
+ * `/app-return` so the app can safely consume the token and restore the
+ * intended destination.
  */
 export function buildGoogleAuthRedirectPath(search: string, fallback = DEFAULT_SIGNED_IN_PATH): string {
   const params = new URLSearchParams(search);
   const nextPath = resolveSafeClientRedirectPath(params.get("redirectPath"), fallback);
-  if (!isNativeShell()) return nextPath;
+  if (!isCapacitorNativeApp()) return nextPath;
   const appReturnParams = new URLSearchParams({
     [APP_RETURN_NEXT_PARAM]: nextPath,
     [APP_RETURN_SOURCE_PARAM]: GOOGLE_AUTH_SOURCE,
@@ -69,7 +142,37 @@ export function buildGoogleAuthRedirectPath(search: string, fallback = DEFAULT_S
  * frontend origin should stay the primary return strategy.
  */
 export function buildNativeSchemeReturnUrl(path = getAppReturnPath()): string {
-  return `${getAppUrlScheme()}://${path.replace(/^\/+/, "")}`;
+  return `${getAppUrlScheme()}:///${path.replace(/^\/+/, "")}`;
+}
+
+export async function openNativeBrowserUrl(url: string): Promise<void> {
+  if (!isNativeShell()) return;
+  const { Browser } = await import("@capacitor/browser");
+  await Browser.open({ url });
+}
+
+export async function getNativeLaunchUrl(): Promise<string | null> {
+  if (!isNativeShell()) return null;
+  const { App } = await import("@capacitor/app");
+  const launchResult = await App.getLaunchUrl();
+  return launchResult?.url ?? null;
+}
+
+export async function addNativeAppUrlOpenListener(
+  onUrl: (url: string | null | undefined) => void
+): Promise<() => Promise<void>> {
+  if (!isNativeShell()) {
+    return async () => {};
+  }
+
+  const { App } = await import("@capacitor/app");
+  const handle: NativeAppUrlListenerHandle = await App.addListener("appUrlOpen", ({ url }) => {
+    onUrl(url);
+  });
+
+  return async () => {
+    await handle.remove();
+  };
 }
 
 export function resolveNativeShellReturnUrl(rawUrl: string | null | undefined): string | null {
@@ -85,7 +188,18 @@ export function resolveNativeShellReturnUrl(rawUrl: string | null | undefined): 
     const url = new URL(trimmed);
 
     if (url.protocol === `${getAppUrlScheme()}:`) {
-      const schemePath = `${url.hostname ? `/${url.hostname}` : ""}${url.pathname || ""}`;
+      const configuredOriginHost = (() => {
+        try {
+          return import.meta.env.VITE_API_URL?.trim() ? new URL(import.meta.env.VITE_API_URL).hostname.toLowerCase() : null;
+        } catch {
+          return null;
+        }
+      })();
+      const normalizedHost = url.hostname.toLowerCase();
+      const hostLooksLikeFrontend = normalizedHost === DEFAULT_FRONTEND_HOST || (configuredOriginHost ? normalizedHost === configuredOriginHost : false);
+      const schemePath = hostLooksLikeFrontend
+        ? url.pathname || getAppReturnPath()
+        : `${url.hostname ? `/${url.hostname}` : ""}${url.pathname || ""}`;
       const normalizedPath = resolveSafeClientRedirectPath(schemePath, getAppReturnPath());
       return `${normalizedPath}${url.search}${url.hash}`;
     }
@@ -130,10 +244,8 @@ export function resolveAppReturnState(params: {
   if (searchParams.has("authToken")) searchParams.delete("authToken");
   if (hashParams.has("authToken")) hashParams.delete("authToken");
 
-  const isAppReturnPath = params.pathname === getAppReturnPath();
-  const nextPath = isAppReturnPath
-    ? resolveSafeClientRedirectPath(searchParams.get(APP_RETURN_NEXT_PARAM), DEFAULT_SIGNED_IN_PATH)
-    : null;
+  const isAppReturnPath = stripTrailingSlash(params.pathname || "/") === getAppReturnPath();
+  const nextPath = isAppReturnPath ? resolveSafeClientRedirectPath(searchParams.get(APP_RETURN_NEXT_PARAM), DEFAULT_SIGNED_IN_PATH) : null;
 
   if (isAppReturnPath) {
     searchParams.delete(APP_RETURN_NEXT_PARAM);

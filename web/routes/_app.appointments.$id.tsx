@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import { useFindOne, useFindFirst, useFindMany, useAction } from "../hooks/useApi";
 import { api } from "../api";
@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { invoiceAllowsPayment, validatePaymentAmount } from "@/lib/validation";
+import { canOpenExternalPaymentProvider } from "@/lib/mobileShell";
 import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 import { usePageContext } from "../components/shared/CommandPaletteContext";
 import { ContextualNextStep } from "../components/shared/ContextualNextStep";
@@ -49,6 +51,7 @@ import { RelatedRecordsPanel, type RelatedRecord } from "../components/shared/Re
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { CommunicationCard } from "../components/shared/CommunicationCard";
+import { EntityCollaborationCard } from "../components/shared/EntityCollaborationCard";
 import {
   buildQuarterHourOptions,
   FormDatePicker,
@@ -56,6 +59,11 @@ import {
   toDateInputValue,
 } from "../components/appointments/SchedulingControls";
 import { getIntakePreset } from "../lib/intakePresets";
+import {
+  triggerImpactFeedback,
+  triggerNotificationFeedback,
+  triggerSelectionFeedback,
+} from "../lib/nativeInteractions";
 import {
   ClientCard,
   VehicleCard,
@@ -81,6 +89,9 @@ import {
   RotateCcw,
   MoreHorizontal,
   CalendarDays,
+  Phone,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 
 const APPOINTMENT_STATUSES = [
@@ -185,6 +196,46 @@ function formatCurrency(amount: number | null | undefined): string {
     style: "currency",
     currency: "USD",
   }).format(amount);
+}
+
+function trimContactValue(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatDisplayPhone(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  return trimmed;
+}
+
+function buildPhoneHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `tel:${normalized}` : null;
+}
+
+function buildSmsHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^\d+]/g, "");
+  return normalized ? `sms:${normalized}` : null;
+}
+
+function buildEmailHref(value: string | null | undefined): string | null {
+  const trimmed = trimContactValue(value);
+  return trimmed ? `mailto:${trimmed}` : null;
 }
 
 type CustomerAddonRequest = {
@@ -302,6 +353,44 @@ type AppointmentDetailRecord = {
     metadata?: Record<string, unknown>;
   } | null;
 };
+
+type AppointmentServiceCatalogRecord = {
+  id: string;
+  name?: string | null;
+  category?: string | null;
+  categoryLabel?: string | null;
+  price?: number | string | null;
+  durationMinutes?: number | null;
+  active?: boolean | null;
+};
+
+type AppointmentAddonLinkRecord = {
+  parentServiceId?: string | null;
+  addonServiceId?: string | null;
+};
+
+function buildAppointmentAddonSuggestions(
+  services: AppointmentServiceCatalogRecord[],
+  addonLinks: AppointmentAddonLinkRecord[],
+  selectedServiceIds: Set<string>
+) {
+  const serviceById = new Map(services.filter((service) => service.id).map((service) => [service.id, service]));
+
+  return Array.from(selectedServiceIds)
+    .flatMap((parentServiceId) => {
+      const baseService = serviceById.get(parentServiceId);
+      if (!baseService) return [];
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === parentServiceId)
+        .map((link) => (link.addonServiceId ? serviceById.get(link.addonServiceId) : null))
+        .filter(
+          (addon): addon is AppointmentServiceCatalogRecord =>
+            Boolean(addon?.id) && addon?.active !== false && !selectedServiceIds.has(addon.id)
+        );
+      return linkedAddons.length > 0 ? [{ baseService, linkedAddons }] : [];
+    })
+    .slice(0, 4);
+}
 
 function getAppointmentDetailClientName(appointment: AppointmentDetailRecord) {
   if (!appointment.client) return "Internal block";
@@ -738,6 +827,10 @@ export default function AppointmentDetail() {
     sort: { createdAt: "Descending" },
     pause: !appointment?.business?.id,
   } as any);
+  const [{ data: serviceAddonLinks }] = useFindMany(api.serviceAddonLink, {
+    first: 500,
+    pause: !appointment?.business?.id,
+  } as any);
 
   const [{ fetching: updatingStatus }, runUpdateStatus] = useAction(api.appointment.updateStatus);
   const [{ fetching: sendingConfirmation }, runSendConfirmation] = useAction(api.appointment.sendConfirmation);
@@ -781,6 +874,11 @@ export default function AppointmentDetail() {
       next.delete("session_id");
       setSearchParams(next, { replace: true });
     };
+
+    if (!canOpenExternalPaymentProvider()) {
+      clearParams();
+      return;
+    }
 
     const run = async () => {
       if (paymentStatus === "success" && sessionId) {
@@ -851,8 +949,31 @@ export default function AppointmentDetail() {
     };
   }, [appointment, invoice, setPageContext]);
 
-  const existingServiceIds = new Set(
-    ((appointmentServices ?? []) as Array<{ serviceId?: string | null }>).map((service) => service.serviceId).filter(Boolean)
+  const existingServiceIds = useMemo(
+    () =>
+      new Set(
+        ((appointmentServices ?? []) as Array<{ serviceId?: string | null }>)
+          .map((service) => service.serviceId)
+          .filter((serviceId): serviceId is string => Boolean(serviceId))
+      ),
+    [appointmentServices]
+  );
+  const serviceCatalogRecords = useMemo(
+    () => (serviceCatalog ?? []) as AppointmentServiceCatalogRecord[],
+    [serviceCatalog]
+  );
+  const availableServices = useMemo(
+    () => serviceCatalogRecords.filter((service) => service.id && !existingServiceIds.has(service.id)),
+    [existingServiceIds, serviceCatalogRecords]
+  );
+  const appointmentAddonSuggestions = useMemo(
+    () =>
+      buildAppointmentAddonSuggestions(
+        serviceCatalogRecords,
+        (serviceAddonLinks ?? []) as AppointmentAddonLinkRecord[],
+        existingServiceIds
+      ),
+    [existingServiceIds, serviceAddonLinks, serviceCatalogRecords]
   );
   const customerAddonRequests = parseCustomerAddonRequests(
     (activityLogs ?? []) as Array<{
@@ -863,13 +984,6 @@ export default function AppointmentDetail() {
       createdAt?: string | Date | null;
     }>
   );
-  const availableServices = ((serviceCatalog ?? []) as Array<{
-    id: string;
-    name?: string | null;
-    category?: string | null;
-    price?: number | string | null;
-    durationMinutes?: number | null;
-  }>).filter((service) => service.id && !existingServiceIds.has(service.id));
   const completedServiceIds = new Map(
     (((activityLogs ?? []) as Array<{ type?: string | null; metadata?: string | null }>).reduce(
       (acc, record) => {
@@ -896,34 +1010,42 @@ export default function AppointmentDetail() {
   ) => {
     if (deliveryStatus === "emailed") {
       toast.success(`${successLabel} and email sent`);
+      void triggerNotificationFeedback("success");
       return;
     }
     if (deliveryStatus === "missing_email") {
       toast.warning(`${successLabel}, but the client has no email address.`);
+      void triggerNotificationFeedback("warning");
       return;
     }
     if (deliveryStatus === "smtp_disabled") {
       toast.warning(`${successLabel}, but transactional email is not configured.`);
+      void triggerNotificationFeedback("warning");
       return;
     }
     if (deliveryStatus === "email_failed") {
       toast.warning(`${successLabel}, but confirmation email failed${deliveryError ? `: ${deliveryError}` : "."}`);
+      void triggerNotificationFeedback("warning");
       return;
     }
     toast.success(successLabel);
+    void triggerNotificationFeedback("success");
   };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!appointment) return;
+    await triggerImpactFeedback("light");
     const result = await runUpdateStatus({ id: appointment.id, status: newStatus });
     if (result.error) {
       toast.error(`Failed to update status: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
     } else {
       const payload = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
       if (newStatus === "confirmed") {
         notifyConfirmationResult(payload?.deliveryStatus ?? null, payload?.deliveryError ?? null);
       } else {
         toast.success(`Status updated to ${STATUS_LABELS[newStatus] ?? newStatus}`);
+        void triggerNotificationFeedback("success");
       }
       void refetchAppointment();
       void refetchActivity();
@@ -936,9 +1058,11 @@ export default function AppointmentDetail() {
     recipientName?: string;
   }) => {
     if (!appointment) return;
+    await triggerImpactFeedback("light");
     const result = await runSendConfirmation({ id: appointment.id, ...payload });
     if (result.error) {
       toast.error(getTransactionalEmailErrorMessage(result.error, "Appointment confirmation"));
+      void triggerNotificationFeedback("error");
       return;
     }
     const deliveryResult = result.data as { deliveryStatus?: string | null; deliveryError?: string | null } | null;
@@ -952,11 +1076,14 @@ export default function AppointmentDetail() {
 
   const handleComplete = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("medium");
     const result = await runComplete({ id: appointment.id });
     if (result.error) {
       toast.error(`Failed to complete appointment: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
     } else {
       toast.success("Appointment marked as complete");
+      void triggerNotificationFeedback("success");
       void refetchAppointment();
       void refetchActivity();
     }
@@ -964,11 +1091,14 @@ export default function AppointmentDetail() {
 
   const handleCancel = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("rigid");
     const result = await runCancel({ id: appointment.id });
     if (result.error) {
       toast.error(`Failed to cancel appointment: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
     } else {
       toast.success("Appointment cancelled");
+      void triggerNotificationFeedback("warning");
       setShowCancelDialog(false);
       void refetchAppointment();
       void refetchActivity();
@@ -977,19 +1107,23 @@ export default function AppointmentDetail() {
 
   const handleDeleteAppointment = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("rigid");
     const result = await runDeleteAppointment({ id: appointment.id });
     if (result.error) {
       const message = result.error.message ?? "Failed to delete appointment";
       toast.error(message.includes("can't be deleted") ? message : `Failed to delete appointment: ${message}`);
+      void triggerNotificationFeedback("error");
       return;
     }
     toast.success("Appointment deleted");
+    void triggerNotificationFeedback("warning");
     setShowDeleteDialog(false);
     navigate(returnTo);
   };
 
   const handleSaveNotes = async () => {
     if (!appointment) return;
+    await triggerImpactFeedback("light");
     const result = await runUpdate({
       id: appointment.id,
       notes: notesValue,
@@ -997,9 +1131,12 @@ export default function AppointmentDetail() {
     });
     if (result.error) {
       toast.error("Failed to save notes: " + result.error.message);
+      void triggerNotificationFeedback("error");
       return;
     }
     setIsEditing(false);
+    toast.success("Notes updated");
+    void triggerNotificationFeedback("success");
     void refetchAppointment();
   };
 
@@ -1105,18 +1242,39 @@ export default function AppointmentDetail() {
     void refetchAppointment();
   };
 
+  const handleAddSuggestedService = async (service: AppointmentServiceCatalogRecord) => {
+    if (!appointment?.id || !service.id) return;
+    await triggerImpactFeedback("light");
+    const result = await runAddAppointmentService({
+      appointmentId: appointment.id,
+      serviceId: service.id,
+    });
+    if (result.error) {
+      toast.error(`Failed to add ${service.name ?? "add-on"}: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
+      return;
+    }
+    toast.success(`${service.name ?? "Add-on"} added to appointment`);
+    void triggerNotificationFeedback("success");
+    void refetchAppointment();
+    void refetchActivity();
+  };
+
   const handleAddRequestedService = async (serviceId: string) => {
     if (!appointment?.id || !serviceId) return;
     setAddingRequestedAddonId(serviceId);
+    await triggerImpactFeedback("light");
     const result = await runAddAppointmentService({
       appointmentId: appointment.id,
       serviceId,
     }).finally(() => setAddingRequestedAddonId(null));
     if (result.error) {
       toast.error(`Failed to add requested add-on: ${result.error.message}`);
+      void triggerNotificationFeedback("error");
       return;
     }
     toast.success("Requested add-on added to appointment");
+    void triggerNotificationFeedback("success");
     void refetchAppointment();
     void refetchActivity();
   };
@@ -1151,6 +1309,46 @@ export default function AppointmentDetail() {
     void refetchAppointment();
   };
 
+  const handleOperationalUpdate = async ({
+    successLabel,
+    nextStatus,
+    updateValues,
+  }: {
+    successLabel: string;
+    nextStatus?: string | null;
+    updateValues?: Record<string, unknown> | null;
+  }) => {
+    if (!appointment) return;
+
+    await triggerImpactFeedback("light");
+
+    if (nextStatus && appointment.status !== nextStatus) {
+      const statusResult = await runUpdateStatus({ id: appointment.id, status: nextStatus });
+      if (statusResult.error) {
+        toast.error(`Failed to update status: ${statusResult.error.message}`);
+        void triggerNotificationFeedback("error");
+        return;
+      }
+    }
+
+    if (updateValues) {
+      const updateResult = await runUpdate({
+        id: appointment.id,
+        ...updateValues,
+      });
+      if (updateResult.error) {
+        toast.error(`Failed to update appointment: ${updateResult.error.message}`);
+        void triggerNotificationFeedback("error");
+        return;
+      }
+    }
+
+    toast.success(successLabel);
+    void triggerNotificationFeedback("success");
+    void refetchAppointment();
+    void refetchActivity();
+  };
+
   if (!id) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -1164,8 +1362,9 @@ export default function AppointmentDetail() {
 
   if (fetching) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Loading appointment details...</p>
       </div>
     );
   }
@@ -1176,12 +1375,19 @@ export default function AppointmentDetail() {
         <p className="text-destructive text-lg font-medium">
           {error ? `Error: ${error.message}` : "Appointment not found"}
         </p>
-        <Button variant="outline" asChild>
-          <Link to={returnTo}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Appointments
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {error ? (
+            <Button variant="outline" onClick={() => void refetchAppointment()}>
+              Retry
+            </Button>
+          ) : null}
+          <Button variant="outline" asChild>
+            <Link to={returnTo}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Appointments
+            </Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -1234,6 +1440,28 @@ export default function AppointmentDetail() {
     isInternalAppointment,
     blockCoverageLabel
   );
+  const appointmentMapsHref = appointment?.isMobile && appointment.mobileAddress
+    ? `https://maps.apple.com/?q=${encodeURIComponent(appointment.mobileAddress)}`
+    : null;
+  const appointmentClientPhone = trimContactValue(appointment.client?.phone ?? null);
+  const appointmentClientPhoneLabel = formatDisplayPhone(appointmentClientPhone);
+  const appointmentClientEmail = trimContactValue(appointment.client?.email ?? null);
+  const appointmentCallHref = buildPhoneHref(appointmentClientPhone);
+  const appointmentSmsHref = buildSmsHref(appointmentClientPhone);
+  const appointmentEmailHref = buildEmailHref(appointmentClientEmail);
+  const appointmentHasMedia = ((activityLogs ?? []) as Array<{ type?: string | null }>).some((record) =>
+    String(record.type ?? "").endsWith(".media_added")
+  );
+  const supportsInShopWorkflow = !isInternalAppointment && !appointment.isMobile;
+  const quickJumpLinks = [
+    { label: "Schedule", href: "#appointment-schedule-card" },
+    { label: "Services", href: "#appointment-services-card" },
+    { label: "Notes", href: "#appointment-notes-card" },
+    { label: appointmentHasMedia ? "Photos" : "Add photos", href: "#appointment-media-card" },
+    { label: "Client", href: "#appointment-client-card" },
+    { label: "Vehicle", href: "#appointment-vehicle-card" },
+    { label: "Payments", href: "#appointment-finance-card" },
+  ];
   const hasPlaceholderClient =
     appointment.client?.firstName === "Walk-in" && appointment.client?.lastName === "Customer";
     const hasPlaceholderVehicle =
@@ -1323,6 +1551,26 @@ export default function AppointmentDetail() {
     appointment.status !== "cancelled" &&
     appointment.status !== "no-show";
   const primaryEditLabel = appointment.status === "completed" ? "Edit Details" : "Reschedule";
+  const canMarkArrived =
+    supportsInShopWorkflow &&
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show" &&
+    !(appointment as any).vehicleOnSite;
+  const canStartJob =
+    !isInternalAppointment &&
+    appointment.status !== "in_progress" &&
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show";
+  const canSetWaiting = supportsInShopWorkflow && appointment.status === "in_progress" && String((appointment as any).jobPhase ?? "") !== "waiting";
+  const canSetCuring = supportsInShopWorkflow && appointment.status === "in_progress" && String((appointment as any).jobPhase ?? "") !== "curing";
+  const canSetPickupReady =
+    supportsInShopWorkflow &&
+    appointment.status !== "completed" &&
+    appointment.status !== "cancelled" &&
+    appointment.status !== "no-show" &&
+    String((appointment as any).jobPhase ?? "") !== "pickup_ready";
 
   const relatedRecords: RelatedRecord[] = [];
   if (appointment) {
@@ -1512,6 +1760,7 @@ export default function AppointmentDetail() {
 
   const handleStripeDepositCheckout = async () => {
     if (!appointment?.id) return;
+    if (!canOpenExternalPaymentProvider()) return;
     const result = await runCreateStripeDepositSession({ id: appointment.id });
     if (!result.error) {
       const url = (result.data as { url?: string } | undefined)?.url;
@@ -1543,74 +1792,53 @@ export default function AppointmentDetail() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:py-6 space-y-5">
       {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
-      <section className="overflow-hidden rounded-[30px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_22%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.14),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 shadow-[0_22px_55px_rgba(15,23,42,0.08)]">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_320px]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
-                Appointment record
+      <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.08),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 shadow-[0_18px_44px_rgba(15,23,42,0.07)] sm:p-5">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
+              Appointment record
+            </Badge>
+            <StatusBadge status={appointment.status} type="appointment" />
+            {appointmentSource ? (
+              <Badge variant="outline" className="rounded-full border-slate-300 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-700">
+                Created from {appointmentSource.label}
               </Badge>
-              <StatusBadge status={appointment.status} type="appointment" />
-              {appointmentSource ? (
-                <Badge variant="outline" className="rounded-full border-slate-300 bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-slate-700">
-                  Created from {appointmentSource.label}
-                </Badge>
-              ) : null}
-              {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 ? (
-                <Badge className="rounded-full border-amber-200 bg-amber-100 text-amber-800 text-[11px] uppercase tracking-[0.16em]">
-                  {appointment.rescheduleCount}x rescheduled
-                </Badge>
-              ) : null}
-            </div>
-            <div>
-              <h1 className="text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.5rem]">{pageTitle}</h1>
-              {isInternalAppointment ? (
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                  Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job.
-                </p>
-              ) : null}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {isInternalAppointment ? "Block" : "Booked for"}
-                </p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
-                <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{formatDate(appointment.startTime)}</p>
-                <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)]">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {isInternalAppointment ? "Coverage" : "Work in play"}
-                </p>
-                <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
-                <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
-              </div>
-            </div>
+            ) : null}
+            {appointment.rescheduleCount != null && appointment.rescheduleCount > 0 ? (
+              <Badge className="rounded-full border-amber-200 bg-amber-100 text-amber-800 text-[11px] uppercase tracking-[0.16em]">
+                {appointment.rescheduleCount}x rescheduled
+              </Badge>
+            ) : null}
           </div>
-
-          <div className="rounded-[26px] bg-slate-950 p-5 text-white shadow-[0_18px_50px_rgba(15,23,42,0.24)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">Immediate actions</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Keep the job moving</h2>
-            <div className="mt-4 space-y-3 text-sm text-slate-300">
-              <div className="flex items-start gap-3">
-                <Clock className="mt-0.5 h-4 w-4 text-orange-300" />
-                <span>{formatDateTime(appointment.startTime)}</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <MapPin className="mt-0.5 h-4 w-4 text-orange-300" />
-                <span>{appointmentLocationLabel}</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <DollarSign className="mt-0.5 h-4 w-4 text-orange-300" />
-                <span>{appointmentValueLabel}</span>
-              </div>
+          <div className="max-w-3xl">
+            <h1 className="text-2xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{pageTitle}</h1>
+            {isInternalAppointment ? (
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Review the blocked time, assigned team coverage, and notes here without mixing it up with a customer job.
+              </p>
+            ) : null}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-[20px] border border-white/80 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {isInternalAppointment ? "Block" : "Booked for"}
+              </p>
+              <p className="mt-2 text-base font-semibold text-slate-950">{appointmentSubjectLabel}</p>
+              <p className="mt-1 text-sm text-slate-600">{appointmentSecondaryLabel}</p>
+            </div>
+            <div className="rounded-[20px] border border-white/80 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Scheduled</p>
+              <p className="mt-2 text-base font-semibold text-slate-950">{formatDate(appointment.startTime)}</p>
+              <p className="mt-1 text-sm text-slate-600">{formatTime(appointment.startTime)}</p>
+            </div>
+            <div className="rounded-[20px] border border-white/80 bg-white/85 px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {isInternalAppointment ? "Coverage" : "Work in play"}
+              </p>
+              <p className="mt-2 text-base font-semibold text-slate-950">{appointmentValueLabel}</p>
+              <p className="mt-1 text-sm text-slate-600">{appointmentLocationLabel}</p>
             </div>
           </div>
         </div>
@@ -1821,7 +2049,10 @@ export default function AppointmentDetail() {
                   <DollarSign className="h-4 w-4 mr-2" />
                   {showsCollectPaymentLabel || depositAmountValue <= 0 ? "Collect Payment" : "Collect Deposit"}
                 </Button>
-                {!hasRecordedPayment && appointment.depositAmount != null && appointment.depositAmount > 0 ? (
+                {!hasRecordedPayment &&
+                appointment.depositAmount != null &&
+                appointment.depositAmount > 0 &&
+                canOpenExternalPaymentProvider() ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -1949,23 +2180,26 @@ export default function AppointmentDetail() {
               </Button>
             ) : null}
 
-            <Dialog open={showMobileActions} onOpenChange={setShowMobileActions}>
+            <Sheet open={showMobileActions} onOpenChange={setShowMobileActions}>
               <Button
                 variant="outline"
                 className="w-full justify-center"
                 aria-label="More appointment actions"
-                onClick={() => setShowMobileActions(true)}
+                onClick={() => {
+                  void triggerSelectionFeedback();
+                  setShowMobileActions(true);
+                }}
               >
                 <MoreHorizontal className="h-4 w-4 mr-2" />
                 More actions
               </Button>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Appointment actions</DialogTitle>
-                <DialogDescription>
+            <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-[1.75rem] pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <SheetHeader>
+                <SheetTitle>Appointment actions</SheetTitle>
+                <SheetDescription>
                   Open the next workflow step for this appointment without leaving the detail view guessing.
-                </DialogDescription>
-              </DialogHeader>
+                </SheetDescription>
+              </SheetHeader>
               <div className="grid gap-2">
                 {canQuickEditAppointment ? (
                   <Button
@@ -2054,7 +2288,10 @@ export default function AppointmentDetail() {
                       <DollarSign className="mr-2 h-4 w-4" />
                       {showsCollectPaymentLabel || depositAmountValue <= 0 ? "Collect payment" : "Collect deposit"}
                     </Button>
-                    {!hasRecordedPayment && appointment.depositAmount != null && appointment.depositAmount > 0 ? (
+                    {!hasRecordedPayment &&
+                    appointment.depositAmount != null &&
+                    appointment.depositAmount > 0 &&
+                    canOpenExternalPaymentProvider() ? (
                       <Button
                         variant="outline"
                         className="justify-start"
@@ -2124,8 +2361,8 @@ export default function AppointmentDetail() {
                   </Button>
                 ) : null}
               </div>
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
           </div>
         </div>
       </div>
@@ -2139,6 +2376,161 @@ export default function AppointmentDetail() {
             <span>No staff assigned — assign a technician before starting this job.</span>
           </div>
         )}
+
+      {!isInternalAppointment ? (
+        <Card className="border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_18px_48px_rgba(15,23,42,0.06)]">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-base">Operations hub</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Reach the client, move the job forward, and jump straight to the details that matter on site.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.16em]">
+                  {appointment.isMobile ? "Mobile job" : "Shop workflow"}
+                </Badge>
+                {(appointment as any).vehicleOnSite ? (
+                  <Badge variant="outline" className="rounded-full px-3 py-1">
+                    Vehicle on site
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Reach client</p>
+                <span className="text-xs text-muted-foreground">{appointmentClientPhoneLabel || appointmentClientEmail || "No live contact on file"}</span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <OperationalActionButton icon={Phone} label="Call client" detail={appointmentClientPhoneLabel ?? "No phone"} href={appointmentCallHref} />
+                <OperationalActionButton icon={MessageSquare} label="Text client" detail={appointmentClientPhoneLabel ?? "No phone"} href={appointmentSmsHref} />
+                <OperationalActionButton icon={Mail} label="Email client" detail={appointmentClientEmail ?? "No email"} href={appointmentEmailHref} />
+                <OperationalActionButton icon={MapPin} label="Open in Maps" detail={appointmentLocationLabel} href={appointmentMapsHref} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Job state</p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {canMarkArrived ? (
+                  <OperationalActionButton
+                    icon={MapPin}
+                    label="Mark arrived"
+                    detail="Keep the job visible on site"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Vehicle marked on site",
+                        updateValues: {
+                          vehicleOnSite: true,
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canStartJob ? (
+                  <OperationalActionButton
+                    icon={Clock}
+                    label="Start job"
+                    detail="Move into active work"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Job started",
+                        nextStatus: appointment.status === "scheduled" ? "confirmed" : "in_progress",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "active_work",
+                          jobStartTime: (appointment as any).jobStartTime ?? new Date().toISOString(),
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canSetWaiting ? (
+                  <OperationalActionButton
+                    icon={Clock}
+                    label="Waiting"
+                    detail="Pause for parts, approval, or cooldown"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Job marked waiting",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "waiting",
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canSetCuring ? (
+                  <OperationalActionButton
+                    icon={Clock}
+                    label="Curing"
+                    detail="Keep the team synced on cure time"
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Job marked curing",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "curing",
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canSetPickupReady ? (
+                  <OperationalActionButton
+                    icon={CalendarDays}
+                    label="Pickup ready"
+                    detail={(appointment as any).pickupReadyTime ? "Already stamped ready" : "Stamp handoff timing now"}
+                    onClick={() =>
+                      void handleOperationalUpdate({
+                        successLabel: "Marked ready for pickup",
+                        updateValues: {
+                          vehicleOnSite: true,
+                          jobPhase: "pickup_ready",
+                          pickupReadyTime: (appointment as any).pickupReadyTime ?? new Date().toISOString(),
+                        },
+                      })
+                    }
+                  />
+                ) : null}
+                {canQuickCompleteAppointment ? (
+                  <OperationalActionButton
+                    icon={CheckCircle}
+                    label="Complete"
+                    detail="Wrap the visit and lock billing follow-through"
+                    onClick={() => {
+                      const hasServices = appointmentServices && appointmentServices.length > 0;
+                      const hasTotalPrice = getDisplayedAppointmentAmount(appointment) > 0;
+                      if (!hasServices && !hasTotalPrice) {
+                        void triggerSelectionFeedback();
+                        setShowCompleteWarningDialog(true);
+                      } else {
+                        void handleComplete();
+                      }
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Jump to</p>
+              <div className="flex flex-wrap gap-2">
+                {quickJumpLinks.map((link) => (
+                  <Button key={link.href} type="button" variant="outline" size="sm" className="rounded-full" asChild>
+                    <a href={link.href}>{link.label}</a>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <JobLifecycleStepper
         status={appointment.status}
@@ -2228,7 +2620,7 @@ export default function AppointmentDetail() {
             {/* Left column */}
             <div className="lg:col-span-2 space-y-6">
               {/* Appointment Info Card */}
-              <Card>
+              <Card id="appointment-schedule-card" className="scroll-mt-24">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Appointment Info</CardTitle>
@@ -2437,11 +2829,7 @@ export default function AppointmentDetail() {
                   <CardContent className="space-y-3">
                     {customerAddonRequests.map((request) => {
                       const alreadyAdded = existingServiceIds.has(request.addonServiceId);
-                      const catalogService = ((serviceCatalog ?? []) as Array<{
-                        id: string;
-                        price?: number | string | null;
-                        durationMinutes?: number | null;
-                      }>).find(
+                      const catalogService = serviceCatalogRecords.find(
                         (service) => service.id === request.addonServiceId
                       );
                       const displayPrice =
@@ -2519,7 +2907,7 @@ export default function AppointmentDetail() {
                 </Card>
               ) : null}
 
-              <Card>
+              <Card id="appointment-services-card" className="scroll-mt-24">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Services</CardTitle>
@@ -2555,11 +2943,50 @@ export default function AppointmentDetail() {
                         </option>
                       ))}
                     </FormSelect>
-                    <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
-                      {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                      Add service
-                    </Button>
-                  </div>
+                  <Button onClick={() => void handleAddService()} disabled={addingService || selectedServiceId === "__none__"}>
+                    {addingService ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    Add service
+                  </Button>
+                </div>
+
+                  {appointmentAddonSuggestions.length > 0 ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-950">Suggested add-ons</p>
+                          <p className="text-xs text-amber-800">
+                            Quick add linked upgrades already configured for the booked services.
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-900">
+                          Revenue lift
+                        </Badge>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {appointmentAddonSuggestions.map((suggestion) => (
+                          <div key={suggestion.baseService.id} className="space-y-2">
+                            <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-800">
+                              For {suggestion.baseService.name ?? "selected service"}
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {suggestion.linkedAddons.map((addon) => (
+                                <button
+                                  key={addon.id}
+                                  type="button"
+                                  className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={() => void handleAddSuggestedService(addon)}
+                                  disabled={addingService}
+                                >
+                                  <span className="min-w-0 break-words font-medium text-slate-950">{addon.name ?? "Add-on"}</span>
+                                  <span className="shrink-0 text-slate-600">{formatCurrency(Number(addon.price ?? 0))}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {(appointmentServices as any[])?.length ? (
                     <div className="space-y-3">
@@ -2618,7 +3045,7 @@ export default function AppointmentDetail() {
               </Card>
 
               {/* Notes Card */}
-              <Card>
+              <Card id="appointment-notes-card" className="scroll-mt-24">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <div className="flex items-center gap-3">
                     <CardTitle className="text-base">Notes</CardTitle>
@@ -2770,13 +3197,18 @@ export default function AppointmentDetail() {
                 </Card>
               ) : (
                 <>
-                  <ClientCard client={appointment.client} />
-                  <VehicleCard vehicle={appointment.vehicle} clientId={appointment.client?.id} />
+                  <div id="appointment-client-card" className="scroll-mt-24">
+                    <ClientCard client={appointment.client} locationLabel={appointmentLocationLabel} mapsHref={appointmentMapsHref} />
+                  </div>
+                  <div id="appointment-vehicle-card" className="scroll-mt-24">
+                    <VehicleCard vehicle={appointment.vehicle} clientId={appointment.client?.id} />
+                  </div>
                   <InvoiceCard invoice={invoice} invoiceFetching={invoiceFetching} appointmentId={appointment.id} />
                 </>
               )}
 
               {/* Financial Summary Card */}
+              <div id="appointment-finance-card" className="scroll-mt-24">
               <FinancialSummaryCard 
                 subtotal={appointment.subtotal}
                 taxRate={appointment.taxRate}
@@ -2835,6 +3267,7 @@ export default function AppointmentDetail() {
                 onPricingAction={handleOpenPricingDialog}
                 pricingActionDisabled={updatingNotes}
               />
+              </div>
 
               {canEditDeposit ? (
                 <Button
@@ -2847,6 +3280,24 @@ export default function AppointmentDetail() {
                   <DollarSign className="mr-2 h-4 w-4" />
                   {Number(appointment.depositAmount ?? 0) > 0 ? "Edit deposit / partial payment" : "Set deposit / partial payment"}
                 </Button>
+              ) : null}
+
+              {!isInternalAppointment ? (
+                <div id="appointment-media-card" className="scroll-mt-24">
+                <EntityCollaborationCard
+                  entityType="appointment"
+                  entityId={appointment.id}
+                  records={((activityLogs ?? []) as any[])}
+                  fetching={activityFetching}
+                  canWrite={permissions.has("appointments.write")}
+                  title="Job photos & activity"
+                  showNoteComposer={false}
+                  onCreated={() => {
+                    void refetchActivity();
+                    void refetchAppointment();
+                  }}
+                />
+                </div>
               ) : null}
 
               {!isInternalAppointment ? (
@@ -3457,6 +3908,70 @@ export default function AppointmentDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+function OperationalActionButton({
+  icon: Icon,
+  label,
+  detail,
+  href,
+  onClick,
+}: {
+  icon: typeof Phone;
+  label: string;
+  detail: string;
+  href?: string | null;
+  onClick?: (() => void) | null;
+}) {
+  const content = (
+    <>
+      <div className="rounded-full bg-primary/10 p-2 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </>
+  );
+
+  const className =
+    "flex items-center gap-3 rounded-[1rem] border border-border/70 bg-background/90 px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-background";
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        className={className}
+        onClick={() => {
+          void triggerSelectionFeedback();
+        }}
+      >
+        {content}
+      </a>
+    );
+  }
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={() => {
+          void triggerSelectionFeedback();
+          onClick();
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className={`${className} cursor-not-allowed opacity-70`} aria-disabled="true">
+      {content}
     </div>
   );
 }

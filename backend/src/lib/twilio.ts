@@ -385,6 +385,43 @@ function getTwilioMessageStatusTone(status: string | null | undefined) {
       : "pending";
 }
 
+function smsValue(vars: TemplateVars, key: string) {
+  return String(vars[key] ?? "").replace(/\s+/g, " ").trim();
+}
+
+function smsPart(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, Math.max(0, maxLength - 1)).trim()}…` : value;
+}
+
+function buildTwilioSmsBody(input: {
+  templateSlug: TwilioTemplateSlug;
+  vars: TemplateVars;
+  fallbackBody: string;
+}) {
+  if (input.templateSlug === "appointment_confirmation") {
+    const businessName = smsPart(smsValue(input.vars, "businessName") || "Your shop", 36);
+    const dateTime = smsPart(smsValue(input.vars, "dateTime"), 52);
+    const vehicle = smsPart(smsValue(input.vars, "vehicle"), 28);
+    const appointmentLine = dateTime ? ` ${dateTime}` : "";
+    const vehicleLine = vehicle && vehicle !== "-" ? `, ${vehicle}` : "";
+    return `${businessName}: Appt confirmed${appointmentLine}${vehicleLine}. Reply/call to change.`;
+  }
+
+  return input.fallbackBody;
+}
+
+function runQueuedTwilioJobSoon(job: IntegrationJobRecord) {
+  setTimeout(() => {
+    void runTwilioIntegrationJob(job).catch((error) => {
+      logger.warn("Twilio immediate job run failed", {
+        businessId: job.businessId,
+        jobId: job.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, 0);
+}
+
 async function isCooldownActive(input: {
   businessId: string;
   templateSlug: TwilioTemplateSlug;
@@ -603,6 +640,10 @@ export async function enqueueTwilioTemplateSms(input: {
     createdByUserId: input.userId ?? null,
   });
 
+  if (job) {
+    runQueuedTwilioJobSoon(job);
+  }
+
   return {
     queued: !!job,
     reason: job ? ("queued" as const) : ("duplicate" as const),
@@ -639,7 +680,11 @@ export async function runTwilioIntegrationJob(job: IntegrationJobRecord) {
     vars: payload.vars ?? {},
     subject: payload.subject ?? undefined,
   });
-  const body = message.bodyText.replace(/\s+\n/g, "\n").trim();
+  const body = buildTwilioSmsBody({
+    templateSlug: payload.templateSlug,
+    vars: payload.vars ?? {},
+    fallbackBody: message.bodyText.replace(/\s+\n/g, "\n").trim(),
+  });
   if (!body) {
     await markIntegrationJobFailed(job, new Error("Twilio SMS body rendered empty."));
     return;
@@ -690,7 +735,7 @@ export async function runTwilioIntegrationJob(job: IntegrationJobRecord) {
           vars: payload.vars ?? {},
           entityType: payload.entityType,
           entityId: payload.entityId,
-          deliveryTone: getTwilioMessageStatusTone(response.status),
+          deliveryTone: response.error_code != null ? "error" : getTwilioMessageStatusTone(response.status),
         }),
       })
       .where(eq(notificationLogs.id, log.id));
@@ -814,7 +859,7 @@ export async function handleTwilioStatusCallback(input: {
       error: errorMessage,
       metadata: JSON.stringify({
         ...(typeof log.metadata === "string" && log.metadata.trim() ? JSON.parse(log.metadata) : {}),
-        deliveryTone: getTwilioMessageStatusTone(status),
+        deliveryTone: errorCode ? "error" : getTwilioMessageStatusTone(status),
       }),
     })
     .where(eq(notificationLogs.id, log.id));

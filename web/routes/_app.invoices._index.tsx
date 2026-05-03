@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useOutletContext, useSearchParams } from "react-router";
-import { AlertCircle, FileText, Loader2, PlusCircle, Search } from "lucide-react";
+import { AlertCircle, ChevronRight, FileText, Loader2, PlusCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,10 +18,24 @@ import { toast } from "sonner";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { formatFreshness, formatShortDate, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
 import { getInvoiceCollectionSummary } from "../lib/paymentStates";
+import { selectorTabsListClassName, selectorTabsTriggerClassName } from "../components/shared/selectorStyles";
+import { isNativeIOSApp } from "@/lib/mobileShell";
+import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 
 const FILTER_TABS = ["all", "overdue", "stale", "draft", "sent", "paid", "partial", "void"] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 type InvoiceRecord = Record<string, any>;
+
+const FILTER_TAB_OPTIONS: Array<{ value: FilterTab; label: string; shortLabel: string }> = [
+  { value: "all", label: "All invoices", shortLabel: "All" },
+  { value: "overdue", label: "Overdue", shortLabel: "Overdue" },
+  { value: "stale", label: "Needs follow-up", shortLabel: "Follow-up" },
+  { value: "draft", label: "Draft", shortLabel: "Draft" },
+  { value: "sent", label: "Sent", shortLabel: "Sent" },
+  { value: "paid", label: "Paid", shortLabel: "Paid" },
+  { value: "partial", label: "Partially paid", shortLabel: "Partial" },
+  { value: "void", label: "Void", shortLabel: "Void" },
+];
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null || amount === "") return "-";
@@ -127,6 +141,7 @@ export default function InvoicesIndexPage() {
   const location = useLocation();
   const { businessId } = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const nativeIOS = isNativeIOSApp();
   const initialTab = (FILTER_TABS as readonly string[]).includes(searchParams.get("tab") ?? "")
     ? (searchParams.get("tab") as FilterTab)
     : "all";
@@ -183,7 +198,7 @@ export default function InvoicesIndexPage() {
     api.invoice,
     {
       search: debouncedSearch || undefined,
-      status: activeTab === "all" || activeTab === "overdue" ? undefined : activeTab,
+      status: activeTab === "all" || activeTab === "overdue" || activeTab === "stale" ? undefined : activeTab,
       sort: { createdAt: "Descending" },
       first: pageSize,
       pause: !businessId,
@@ -205,6 +220,12 @@ export default function InvoicesIndexPage() {
   const currentQueuePath = `${location.pathname}${location.search}`;
   const linkWithQueueState = (pathname: string) =>
     `${pathname}${pathname.includes("?") ? "&" : "?"}from=${encodeURIComponent(currentQueuePath)}`;
+
+  const handleTabChange = (value: string) => {
+    if (!(FILTER_TABS as readonly string[]).includes(value)) return;
+    void triggerImpactFeedback("light");
+    setActiveTab(value as FilterTab);
+  };
 
   const handleSendInvoice = async (invoiceId: string) => {
     setSendingInvoiceId(invoiceId);
@@ -229,7 +250,13 @@ export default function InvoicesIndexPage() {
   };
 
   return (
-    <div className="page-content page-section max-w-6xl">
+    <div
+      className={cn(
+        nativeIOS
+          ? "mx-auto w-full max-w-3xl space-y-4 px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2"
+          : "page-content page-section max-w-6xl"
+      )}
+    >
       <PageHeader
         title={
           <span className="flex items-center gap-2">
@@ -237,10 +264,14 @@ export default function InvoicesIndexPage() {
             {isRefetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : null}
           </span>
         }
-        subtitle="Manage billing, review collection follow-up, and keep invoice cash flow visible."
         right={
-          <Button asChild>
-            <Link to={linkWithQueueState("/invoices/new")}>
+          <Button asChild className={cn(nativeIOS && "h-11 w-full rounded-[20px] shadow-[0_10px_25px_rgba(249,115,22,0.16)] sm:w-auto")}>
+            <Link
+              to={linkWithQueueState("/invoices/new")}
+              onClick={() => {
+                void triggerImpactFeedback("light");
+              }}
+            >
               <PlusCircle className="mr-2 h-4 w-4" />
               New Invoice
             </Link>
@@ -248,52 +279,74 @@ export default function InvoicesIndexPage() {
         }
       />
 
-      <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.10),transparent_24%),radial-gradient(circle_at_top_right,rgba(249,115,22,0.10),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue this month</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-emerald-700">
-              {formatCurrency((invoiceMetrics as any)?.revenueThisMonth ?? 0)}
-            </p>
-          </div>
-          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Awaiting collection</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-amber-700">
-              {formatCurrency((invoiceMetrics as any)?.outstandingBalance ?? 0)}
-            </p>
-          </div>
-          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Overdue</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{overdueInvoices.length}</p>
-          </div>
-          <div className="rounded-[22px] border border-white/80 bg-slate-950 px-4 py-4 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">Stale follow-up</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em]">{staleInvoices.length}</p>
-          </div>
+      <section
+        className={cn(
+          "overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.10),transparent_24%),radial-gradient(circle_at_top_right,rgba(249,115,22,0.10),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]",
+          nativeIOS && "rounded-[30px] border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95))] p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
+        )}
+      >
+        <div className={cn("grid gap-3 md:grid-cols-4", nativeIOS && "grid-cols-2 md:grid-cols-2")}>
+          <InvoiceMetricCard label="Month" value={formatCurrency((invoiceMetrics as any)?.revenueThisMonth ?? 0)} tone="success" nativeIOS={nativeIOS} />
+          <InvoiceMetricCard label="Collect" value={formatCurrency((invoiceMetrics as any)?.outstandingBalance ?? 0)} tone="warn" nativeIOS={nativeIOS} />
+          <InvoiceMetricCard label="Overdue" value={String(overdueInvoices.length)} nativeIOS={nativeIOS} />
+          <InvoiceMetricCard label="Follow-up" value={String(staleInvoices.length)} highlight nativeIOS={nativeIOS} />
         </div>
       </section>
 
-      <ListViewToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Search invoice #, client, or vehicle..."
-        loading={isRefetching}
-        resultCount={displayedInvoices.length}
-        noun="invoices"
-        filtersLabel={
-          [
-            activeTab !== "all" ? `View: ${activeTab}` : null,
-            debouncedSearch ? `Search: ${debouncedSearch}` : null,
-          ]
-            .filter(Boolean)
-            .join(" • ") || null
-        }
-        onClear={() => {
-          setSearch("");
-          setDebouncedSearch("");
-          setActiveTab("all");
-        }}
-      />
+      {nativeIOS ? (
+        <div className="rounded-[28px] border border-white/80 bg-white/92 p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search invoice, client, vehicle"
+              className="h-12 rounded-[20px] border-white/80 bg-slate-50/80 pl-10 text-[16px] shadow-inner"
+            />
+          </div>
+          {(activeTab !== "all" || debouncedSearch) ? (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="truncate text-xs font-medium text-slate-500">
+                {displayedInvoices.length} {displayedInvoices.length === 1 ? "invoice" : "invoices"} in view
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-9 rounded-full px-3 text-xs"
+                onClick={() => {
+                  setSearch("");
+                  setDebouncedSearch("");
+                  setActiveTab("all");
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <ListViewToolbar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search invoice #, client, or vehicle..."
+          loading={isRefetching}
+          resultCount={displayedInvoices.length}
+          noun="invoices"
+          filtersLabel={
+            [
+              activeTab !== "all" ? `View: ${activeTab}` : null,
+              debouncedSearch ? `Search: ${debouncedSearch}` : null,
+            ]
+              .filter(Boolean)
+              .join(" - ") || null
+          }
+          onClear={() => {
+            setSearch("");
+            setDebouncedSearch("");
+            setActiveTab("all");
+          }}
+        />
+      )}
 
       {pageError && !isLoading ? (
         <div className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -321,7 +374,6 @@ export default function InvoicesIndexPage() {
       {overdueInvoices.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <FollowupCard
-            tone="danger"
             title="Overdue balances need follow-up"
             detail={`${overdueInvoices.length} invoice${overdueInvoices.length === 1 ? "" : "s"} are past due`}
             amount={formatCurrency(overdueInvoices.reduce((sum, invoice) => sum + balanceAmount(invoice), 0))}
@@ -331,30 +383,61 @@ export default function InvoicesIndexPage() {
         </div>
       ) : null}
 
-      <Card>
+      <Card className={cn(nativeIOS && "rounded-[30px] border-white/80 bg-white/92 shadow-[0_18px_40px_rgba(15,23,42,0.06)]")}>
         <CardContent className="p-0">
-          <div className="px-4 pt-4">
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FilterTab)}>
-              <TabsList className="mb-4 flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-8 xl:w-full">
-                {FILTER_TABS.map((tab) => (
-                  <TabsTrigger
-                    key={tab}
-                    value={tab}
-                    className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 capitalize data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5"
-                  >
-                    {tab}
-                    {tab === "overdue" && overdueInvoices.length > 0 ? (
-                      <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700">
-                        {overdueInvoices.length}
-                      </span>
-                    ) : null}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
+          {nativeIOS ? (
+            <div className="-mx-1 overflow-x-auto px-4 pb-1 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-2">
+                {FILTER_TAB_OPTIONS.map((tab) => {
+                  const count = tab.value === "overdue" ? overdueInvoices.length : tab.value === "stale" ? staleInvoices.length : null;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => handleTabChange(tab.value)}
+                      className={cn(
+                        "h-11 shrink-0 rounded-full border px-4 text-sm font-semibold transition active:scale-[0.98]",
+                        activeTab === tab.value
+                          ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                          : "border-white/80 bg-white/92 text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
+                      )}
+                    >
+                      {tab.shortLabel}
+                      {count && count > 0 ? <span className="ml-1.5 text-xs opacity-80">{count}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="px-4 pt-4">
+              <Tabs value={activeTab} onValueChange={handleTabChange}>
+                <TabsList className={selectorTabsListClassName("mb-4 w-full")}>
+                  {FILTER_TAB_OPTIONS.map((tab) => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className={selectorTabsTriggerClassName("capitalize")}
+                    >
+                      {tab.label}
+                      {tab.value === "overdue" && overdueInvoices.length > 0 ? (
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-100 px-1.5 text-[10px] font-medium leading-none text-red-700">
+                          {overdueInvoices.length}
+                        </span>
+                      ) : null}
+                      {tab.value === "stale" && staleInvoices.length > 0 ? (
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700">
+                          {staleInvoices.length}
+                        </span>
+                      ) : null}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
 
-          <div className="space-y-3 p-4 md:hidden">
+          <div className={cn("space-y-3 p-4 md:hidden", nativeIOS && "px-3.5 pt-3")}>
             {isLoading
               ? Array.from({ length: 4 }).map((_, index) => (
                   <Card key={index} className="rounded-2xl border-border/70">
@@ -419,6 +502,7 @@ export default function InvoicesIndexPage() {
                             [lastSent, lastPaid].filter(Boolean).join(" - ") || null,
                           ]}
                           href={linkWithQueueState(`/invoices/${invoice.id}`)}
+                          nativeIOS={nativeIOS}
                           actions={
                             <>
                               {["draft", "sent", "partial"].includes(String(invoice.status ?? "")) ? (
@@ -452,7 +536,7 @@ export default function InvoicesIndexPage() {
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30">
+                <tr className="border-b bg-slate-50/80">
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Invoice #</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Client</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Vehicle</th>
@@ -551,12 +635,12 @@ export default function InvoicesIndexPage() {
                                   <div className="font-medium">{formatCurrency(primaryAmount)}</div>
                                   <div className="text-xs text-muted-foreground">
                                     Total {formatCurrency(invoice.total)}
-                                    {hasPaymentHistory ? ` · Paid ${formatCurrency(paid)}` : ""}
+                                    {hasPaymentHistory ? ` - Paid ${formatCurrency(paid)}` : ""}
                                   </div>
                                   <div className="text-xs text-muted-foreground">{collectionSummary.detail}</div>
                                   {lastSent || lastPaid ? (
                                     <div className="text-xs text-muted-foreground">
-                                      {[lastSent, lastPaid].filter(Boolean).join(" · ")}
+                                      {[lastSent, lastPaid].filter(Boolean).join(" - ")}
                                     </div>
                                   ) : null}
                                 </div>
@@ -611,14 +695,14 @@ export default function InvoicesIndexPage() {
           </div>
 
           {!isLoading && displayedInvoices.length > 0 ? (
-            <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+            <div className={cn("border-t px-4 py-3 text-xs text-muted-foreground", nativeIOS && "border-slate-100 px-4")}>
               Showing {displayedInvoices.length} {displayedInvoices.length === 1 ? "invoice" : "invoices"}
             </div>
           ) : null}
 
           {(invoices?.length ?? 0) >= pageSize ? (
-            <div className="flex justify-center border-t px-4 py-4">
-              <Button variant="outline" onClick={() => setPageSize((value) => value + 25)} disabled={invoicesFetching}>
+            <div className={cn("flex justify-center border-t px-4 py-4", nativeIOS && "border-slate-100")}>
+              <Button variant="outline" className={cn(nativeIOS && "h-11 rounded-full px-5")} onClick={() => setPageSize((value) => value + 25)} disabled={invoicesFetching}>
                 {invoicesFetching ? "Loading..." : "Load more invoices"}
               </Button>
             </div>
@@ -631,20 +715,57 @@ export default function InvoicesIndexPage() {
 
 export { RouteErrorBoundary as ErrorBoundary };
 
+function InvoiceMetricCard({
+  label,
+  value,
+  tone = "default",
+  highlight = false,
+  nativeIOS = false,
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "success" | "warn";
+  highlight?: boolean;
+  nativeIOS?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]",
+        highlight && "bg-slate-950 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]",
+        nativeIOS && "rounded-[24px] px-3.5 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
+      )}
+    >
+      <p className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400", highlight && "text-orange-300", nativeIOS && "text-[10px] tracking-[0.14em]")}>
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950",
+          tone === "success" && "text-emerald-700",
+          tone === "warn" && "text-amber-700",
+          highlight && "text-white",
+          nativeIOS && "text-xl leading-none"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function FollowupCard({
   title,
   detail,
   amount,
   href,
   actionLabel,
-  tone,
 }: {
   title: string;
   detail: string;
   amount: string;
   href: string;
   actionLabel: string;
-  tone: "danger";
 }) {
   return (
     <div className={cn("rounded-lg border border-red-200 bg-red-50/80 p-4")}>
@@ -672,6 +793,7 @@ function InvoiceMobileCard({
   actions,
   overdue = false,
   accent = "default",
+  nativeIOS = false,
 }: {
   title: string;
   subtitle: string;
@@ -682,6 +804,7 @@ function InvoiceMobileCard({
   actions?: ReactNode;
   overdue?: boolean;
   accent?: "default" | "warn" | "success" | "danger";
+  nativeIOS?: boolean;
 }) {
   const toneClass =
     accent === "danger"
@@ -693,17 +816,26 @@ function InvoiceMobileCard({
           : "border-border/70 bg-card/98";
 
   return (
-    <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}>
+    <div
+      className={cn(
+        "rounded-2xl border p-4 shadow-sm",
+        toneClass,
+        nativeIOS && "rounded-[26px] border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)] active:scale-[0.99]",
+        nativeIOS && accent === "danger" && "border-red-200/80 bg-red-50/70",
+        nativeIOS && accent === "warn" && "border-amber-200/80 bg-amber-50/70",
+        nativeIOS && accent === "success" && "border-emerald-200/80 bg-emerald-50/70"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <Link to={href} className="block min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-            <p className="mt-1 truncate text-sm text-muted-foreground">{subtitle}</p>
+            <p className={cn("truncate text-sm font-semibold text-foreground", nativeIOS && "text-[17px] leading-6 tracking-[-0.02em]")}>{title}</p>
+            <p className={cn("mt-1 truncate text-sm text-muted-foreground", nativeIOS && "text-[13px]")}>{subtitle}</p>
           </Link>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <StatusBadge status={status} type="invoice" />
-          <span className="text-sm font-semibold tabular-nums text-foreground">{amount}</span>
+          <span className={cn("text-sm font-semibold tabular-nums text-foreground", nativeIOS && "text-[15px]")}>{amount}</span>
           {overdue ? (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-red-700">
               Overdue
@@ -711,15 +843,18 @@ function InvoiceMobileCard({
           ) : null}
         </div>
       </div>
-      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+      <div className={cn("mt-3 space-y-1 text-xs text-muted-foreground", nativeIOS && "text-[12px] leading-5")}>
         {lines.filter(Boolean).map((line) => (
           <p key={line}>{line}</p>
         ))}
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className={cn("mt-4 flex flex-wrap items-center gap-2", nativeIOS && "[&_button]:min-h-10 [&_a]:min-h-10 [&_a]:rounded-full [&_button]:rounded-full")}>
         {actions}
         <Button asChild size="sm" variant="ghost" className="h-8 px-3 text-xs">
-          <Link to={href}>Open</Link>
+          <Link to={href}>
+            Open
+            {nativeIOS ? <ChevronRight className="ml-1 h-3.5 w-3.5" /> : null}
+          </Link>
         </Button>
       </div>
     </div>

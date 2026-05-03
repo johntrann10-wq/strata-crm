@@ -34,17 +34,15 @@ test.describe("Dashboard home", () => {
     await page.goto("/sign-up");
     await page.locator("#email").fill(email);
     await page.locator("#password").fill(password);
+    await page.locator("#confirmPassword").fill(password);
     await page.getByRole("button", { name: /start free trial/i }).last().click();
-    await page.waitForFunction(() => window.localStorage.getItem("authToken"), null, { timeout: 20000 });
-    await page.goto("/onboarding");
     await finishOnboarding(page);
 
-    await expect(page.getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
-    await expect(page.getByText("Needs Action")).toBeVisible();
-    await expect(page.getByText("Today Schedule")).toBeVisible();
-    await expect(page.getByText("Action Queue")).toBeVisible();
-    await expect(page.getByText("Quick Actions")).toBeVisible();
-    await expect(page.getByText("Revenue + Collections")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: /^dashboard$/i })).toBeVisible();
+    await expect(page.getByText("Weekly Appointment Overview")).toBeVisible();
+    await expect(page.getByText("Upcoming Jobs / Needs Attention")).toBeVisible();
+    await expect(page.getByText("Bookings Overview")).toBeVisible();
+    await expect(page.getByText("Shortcuts", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: /this week/i }).click();
     await expect(page).toHaveURL(/range=week/);

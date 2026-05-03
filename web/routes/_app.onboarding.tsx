@@ -34,7 +34,7 @@ import type { CSSProperties } from "react";
 
 const ONBOARDING_FORM_ID = "onboarding-business-form";
 const onboardingInputClass =
-  "h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] placeholder:text-[#7d8695]";
+  "h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-base sm:text-sm placeholder:text-[#7d8695]";
 const onboardingInputStyle: CSSProperties = {
   color: "#f4f4f5",
   WebkitTextFillColor: "#f4f4f5",
@@ -200,7 +200,7 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.12),transparent_20%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_18%),linear-gradient(180deg,#0b0d10_0%,#0f1115_55%,#11141a_100%)] text-white">
       <div className="border-b border-[#1f1f1f]">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:py-4">
           <StrataLogoLockup
             markClassName="h-8 w-8"
             wordmarkClassName="text-lg font-bold tracking-tight text-white"
@@ -209,7 +209,7 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-3 py-4 pb-32 sm:px-6 sm:py-12 sm:pb-12">
+      <div className="mx-auto max-w-5xl px-4 py-4 pb-32 sm:px-6 sm:py-12 sm:pb-12">
         <ProgressIndicator step={step} />
 
         {step === 1 ? (
@@ -220,8 +220,8 @@ export default function OnboardingPage() {
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Built for fast launch
                 </div>
-                <h1 className="mb-3 mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-[3.4rem]">Choose your shop type</h1>
-                <p className="max-w-2xl text-sm leading-7 text-[#aab3c2] sm:text-lg">
+                <h1 className="mb-3 mt-4 text-[2rem] font-semibold tracking-[-0.05em] sm:text-[3.4rem]">Choose your shop type</h1>
+                <p className="max-w-2xl text-[15px] leading-6 text-[#aab3c2] sm:text-lg sm:leading-7">
                   Pick the kind of shop you run. Strata will shape the workspace around your real operating model so you
                   start with realistic defaults and a workflow that already makes sense.
                 </p>
@@ -239,7 +239,7 @@ export default function OnboardingPage() {
                       setValidationError(null);
                     }}
                     className={cn(
-                      "rounded-[1.35rem] border p-4 text-left transition-all sm:p-5",
+                      "rounded-[1.25rem] border p-4 text-left transition-all sm:rounded-[1.35rem] sm:p-5",
                       selectedType === type.value
                         ? "border-orange-500 bg-[linear-gradient(180deg,rgba(38,25,16,0.96),rgba(23,19,17,0.98))] shadow-[0_18px_40px_rgba(249,115,22,0.12)]"
                         : "border-[#2a2a2a] bg-[linear-gradient(180deg,#141414_0%,#121212_100%)] hover:border-orange-500/60 hover:bg-[#1a1714]"
@@ -260,7 +260,7 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#17181d_0%,#111217_100%)] p-5 shadow-[0_26px_70px_rgba(0,0,0,0.32)] sm:p-6">
+            <div className="rounded-[1.5rem] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(249,115,22,0.10),transparent_26%),linear-gradient(180deg,#17181d_0%,#111217_100%)] p-4 shadow-[0_26px_70px_rgba(0,0,0,0.32)] sm:rounded-[2rem] sm:p-6">
               {selectedTypeMeta ? (
                 <div className="space-y-5">
                   <div>
@@ -336,13 +336,13 @@ export default function OnboardingPage() {
                   <Receipt className="h-3.5 w-3.5" />
                   Finish setup
                 </div>
-                <h1 className="mb-3 mt-4 text-3xl font-semibold tracking-[-0.05em] sm:text-[3.2rem]">Launch your workspace</h1>
-                <p className="max-w-2xl text-sm leading-7 text-[#aab3c2] sm:text-lg">
+                <h1 className="mb-3 mt-4 text-[2rem] font-semibold tracking-[-0.05em] sm:text-[3.2rem]">Launch your workspace</h1>
+                <p className="max-w-2xl text-[15px] leading-6 text-[#aab3c2] sm:text-lg sm:leading-7">
                   Only your business name is required to get operational. Everything else can wait until after you start booking real work.
                 </p>
               </div>
 
-              <form id={ONBOARDING_FORM_ID} onSubmit={handleSubmit} className="space-y-5 rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,#15171b_0%,#121317_100%)] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-6">
+              <form id={ONBOARDING_FORM_ID} onSubmit={handleSubmit} className="space-y-5 rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,#15171b_0%,#121317_100%)] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:rounded-[2rem] sm:p-6">
                 <div className="space-y-1.5">
                   <Label htmlFor="name" className="text-sm font-medium text-[#d1d5db]">Business name <span className="text-orange-500">*</span></Label>
                   <Input id="name" value={formData.name} onChange={handleFieldChange("name")} placeholder={selectedTypeMeta?.exampleName ?? "Your business name"} required className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
@@ -436,7 +436,7 @@ export default function OnboardingPage() {
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-3xl border border-orange-500/20 bg-[linear-gradient(180deg,rgba(249,115,22,0.08),rgba(23,23,23,0.95))] p-5 sm:p-6">
+              <div className="rounded-[1.5rem] border border-orange-500/20 bg-[linear-gradient(180deg,rgba(249,115,22,0.08),rgba(23,23,23,0.95))] p-4 sm:rounded-3xl sm:p-6">
                 <p className="text-xs uppercase tracking-[0.12em] text-orange-300">First-session win</p>
                 <h2 className="mt-3 text-xl font-semibold">You should be able to do something real in the first session</h2>
                 <div className="mt-4 space-y-3">
@@ -456,7 +456,7 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              <div className="rounded-3xl border border-[#272727] bg-[linear-gradient(180deg,#171717_0%,#111111_100%)] p-5 sm:p-6">
+              <div className="rounded-[1.5rem] border border-[#272727] bg-[linear-gradient(180deg,#171717_0%,#111111_100%)] p-4 sm:rounded-3xl sm:p-6">
                 <h2 className="text-lg font-semibold">What you get immediately</h2>
                 <div className="mt-4 space-y-3">
                   {[
@@ -480,7 +480,7 @@ export default function OnboardingPage() {
               </div>
 
               {selectedTypeMeta ? (
-                <div className="rounded-3xl border border-[#272727] bg-[#131313] p-5 sm:p-6">
+                <div className="rounded-[1.5rem] border border-[#272727] bg-[#131313] p-4 sm:rounded-3xl sm:p-6">
                   <p className="text-xs uppercase tracking-[0.12em] text-[#7c8594]">Recommended defaults</p>
                   <div className="mt-3 space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-3">

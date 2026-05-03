@@ -127,10 +127,10 @@ describe.skipIf(skipEmbeddedFinancePath)("Appointment finance critical path (bac
 
   async function createAppointment(options?: { depositAmount?: number; totalPrice?: number }) {
     if (!app) throw new Error("Backend app failed to load.");
+    const sequenceOffset = appointmentSequence++;
     const start = new Date();
-    start.setDate(start.getDate() + 3 + appointmentSequence);
-    appointmentSequence += 1;
-    start.setHours(9, 0, 0, 0);
+    start.setDate(start.getDate() + 3);
+    start.setHours(9 + sequenceOffset * 4, 0, 0, 0);
     const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
     const totalPrice = options?.totalPrice ?? 715.85;
 

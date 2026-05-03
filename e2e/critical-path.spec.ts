@@ -6,7 +6,7 @@
  * - `cd backend && yarn dev` (API)
  * - `yarn test:e2e`
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
@@ -18,8 +18,30 @@ async function expectWorkspaceReady(page: import("@playwright/test").Page) {
   await expect(page.getByRole("heading", { name: /^dashboard$/i }).first()).toBeVisible();
 }
 
+async function getAuthenticatedApiContext(
+  page: import("@playwright/test").Page
+): Promise<{ request: APIRequestContext; headers: Record<string, string> }> {
+  const session = await page.evaluate(() => ({
+    currentBusinessId: window.localStorage.getItem("currentBusinessId"),
+    authToken:
+      window.sessionStorage.getItem("strataSessionAuthToken") ??
+      window.localStorage.getItem("strataPersistentAuthToken") ??
+      window.localStorage.getItem("authToken"),
+  }));
+  const currentBusinessId = session.currentBusinessId;
+  expect(currentBusinessId).toBeTruthy();
+  expect(session.authToken).toBeTruthy();
+  return {
+    request: page.context().request,
+    headers: {
+      ...(currentBusinessId ? { "x-business-id": currentBusinessId } : {}),
+      ...(session.authToken ? { Authorization: `Bearer ${session.authToken}` } : {}),
+    },
+  };
+}
+
 test.describe("Critical path (smoke)", () => {
-  test("sign up → onboarding → dashboard → create client/appointment → logout → sign in", async ({ page, request }) => {
+  test("sign up → onboarding → dashboard → create client/appointment → logout → sign in", async ({ page }) => {
     test.skip(
       skipLocalWindowsCriticalPath,
       "Full-stack critical path uses embedded Postgres, which is unreliable on native Windows. Run this smoke in WSL/CI or set PLAYWRIGHT_API_BASE to an external backend."
@@ -36,17 +58,14 @@ test.describe("Critical path (smoke)", () => {
     await expect(page.locator("#password")).toBeVisible();
     await page.locator("#email").fill(email);
     await page.locator("#password").fill(password);
+    await page.locator("#confirmPassword").fill(password);
     await page.getByRole("button", { name: /start free trial/i }).last().click();
 
-    // Sign-up doesn't navigate by itself; continue to onboarding directly.
-    await page.waitForFunction(() => window.localStorage.getItem("authToken"), null, { timeout: 20000 });
-    const tokenAfterSignUp = await page.evaluate(() => window.localStorage.getItem("authToken"));
-    expect(tokenAfterSignUp).toBeTruthy();
-    await page.goto("/onboarding");
-    await expect(page).toHaveURL(/onboarding/);
+    // Sign-up now lands inside the onboarding experience, so wait for the first step
+    // instead of a particular localStorage timing side effect.
+    await expect(page.getByRole("button", { name: /tire shop/i })).toBeVisible({ timeout: 20000 });
 
     // 2) Onboarding (UI)
-    await expect(page.getByRole("button", { name: /tire shop/i })).toBeVisible();
     await page.getByRole("button", { name: /tire shop/i }).click();
     await page.getByRole("button", { name: /^continue$/i }).click();
 
@@ -55,13 +74,10 @@ test.describe("Critical path (smoke)", () => {
     await page.getByRole("button", { name: /launch my workspace|launch/i }).click();
     await expectWorkspaceReady(page);
 
-    // Read token from localStorage (auth is bearer token based).
-    const token = await page.evaluate(() => window.localStorage.getItem("authToken"));
-    expect(token).toBeTruthy();
+    const { request, headers: authHeaders } = await getAuthenticatedApiContext(page);
 
     // 3) Create client (API setup), then verify via UI
     const clientEmail = `client-${Date.now()}@example.com`;
-    const authHeaders = { Authorization: `Bearer ${token}` };
     const clientRes = await request.post(`${apiBase}/api/clients`, {
       headers: authHeaders,
       data: { firstName: "E2E", lastName: "Client", email: clientEmail },
@@ -104,7 +120,7 @@ test.describe("Critical path (smoke)", () => {
     await expect(page.getByText(appointmentTitle).first()).toBeVisible();
 
     // 5) Logout (UI)
-    await page.getByRole("button", { name: /@example\.com$/i }).click();
+    await page.getByRole("button", { name: /^[a-z]$/i }).last().click();
     await page.getByRole("menuitem", { name: /sign out/i }).click();
     await expect(page).toHaveURL(/sign-in/);
 
@@ -114,9 +130,6 @@ test.describe("Critical path (smoke)", () => {
     await page.locator("#email").fill(email);
     await page.locator("#password").fill(password);
     await page.getByRole("button", { name: /sign in with email/i }).click();
-
-    await page.waitForFunction(() => window.localStorage.getItem("authToken"), null, { timeout: 20000 });
-    await page.goto("/signed-in");
     await expectWorkspaceReady(page);
   });
 

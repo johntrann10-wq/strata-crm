@@ -10,11 +10,21 @@ export const NavDrawer = ({ children }: { children: (props: { close: () => void 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <Menu className="h-6 w-6" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10 rounded-full border border-border/70 bg-background/85 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[300px] sm:w-[400px] transition-transform duration-300">
+      <SheetContent
+        side="left"
+        swipeToClose
+        onSwipeClose={close}
+        className="w-[min(92vw,22rem)] max-w-none p-0 transition-transform duration-300 sm:w-[24rem]"
+      >
         {children({ close })}
       </SheetContent>
     </Sheet>

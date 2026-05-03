@@ -17,7 +17,8 @@
     "repair:appointment-finance": "tsx scripts/repair-appointment-finance.ts",
     "backfill:business-webhook-secrets": "tsx scripts/backfill-business-webhook-secrets.ts",
     "test": "vitest run --config vitest.config.ts",
-    "test:watch": "vitest --config vitest.config.ts"
+    "test:watch": "vitest --config vitest.config.ts",
+    "seed:app-review-demo": "tsx scripts/seed-app-review-demo.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",

@@ -22,7 +22,7 @@ export async function loadAuthTokenVersion(userId: string): Promise<number | nul
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    if (!row) return null;
+    if (!row) return 0;
     return Number(row.authTokenVersion ?? 1);
   } catch (error) {
     if (!isUserSchemaDriftError(error)) throw error;

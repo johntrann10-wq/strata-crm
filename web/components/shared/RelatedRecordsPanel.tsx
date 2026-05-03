@@ -54,7 +54,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="animate-pulse rounded-lg bg-muted h-10 w-32 shrink-0"
+              className="h-16 w-[min(75vw,14rem)] shrink-0 animate-pulse rounded-xl bg-muted"
             />
           ))}
         </div>
@@ -78,13 +78,13 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
           </p>
         </div>
       </div>
-      <div className="max-w-full flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="flex max-w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-1 scrollbar-hide">
         {records.map((record) => {
           const { icon: Icon, colorClass } = typeConfig[record.type];
           return (
             <div
               key={`${record.type}-${record.id}`}
-              className="flex min-w-[240px] items-center gap-3 rounded-xl border border-border/70 bg-background/95 px-3 py-3 text-sm shadow-sm shrink-0"
+              className="flex min-w-[220px] max-w-[min(88vw,18rem)] shrink-0 snap-start flex-col gap-3 rounded-xl border border-border/70 bg-background/95 px-3 py-3 text-sm shadow-sm sm:max-w-none sm:min-w-[240px]"
             >
               <Link
                 to={withReturn(record.href)}
@@ -111,7 +111,7 @@ export function RelatedRecordsPanel({ records, loading }: RelatedRecordsPanelPro
               {record.actionHref && record.actionLabel ? (
                 <Link
                   to={withReturn(record.actionHref)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-border/70 px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:w-auto sm:self-end"
                 >
                   {record.actionLabel}
                   <ArrowUpRight className="h-3 w-3" />

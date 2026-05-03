@@ -1,6 +1,65 @@
 import { describe, expect, it } from "vitest";
 
 describe("business route serialization", () => {
+  it("summarizes selected booking add-on revenue without customer data", async () => {
+    const { buildBookingRevenueAddonMetadata } = await import("./businesses.js");
+
+    const metadata = buildBookingRevenueAddonMetadata({
+      baseService: {
+        id: "svc_base",
+        name: "Full Detail",
+        price: "275.00",
+        durationMinutes: 180,
+      },
+      addonServices: [
+        {
+          id: "svc_addon_1",
+          name: "Engine Bay Detail",
+          price: "45.00",
+          durationMinutes: 30,
+        },
+        {
+          id: "svc_addon_2",
+          name: "Pet Hair Removal",
+          price: "65.00",
+          durationMinutes: 45,
+        },
+      ],
+      subtotal: 385,
+      durationMinutes: 255,
+      depositAmount: 50,
+    });
+
+    expect(metadata).toEqual({
+      baseServiceId: "svc_base",
+      baseServiceName: "Full Detail",
+      baseServiceRevenue: 275,
+      hasAddons: true,
+      addonCount: 2,
+      addonIds: ["svc_addon_1", "svc_addon_2"],
+      addonNames: ["Engine Bay Detail", "Pet Hair Removal"],
+      selectedAddons: [
+        {
+          id: "svc_addon_1",
+          name: "Engine Bay Detail",
+          price: 45,
+          durationMinutes: 30,
+        },
+        {
+          id: "svc_addon_2",
+          name: "Pet Hair Removal",
+          price: 65,
+          durationMinutes: 45,
+        },
+      ],
+      addonRevenue: 110,
+      addonDurationMinutes: 75,
+      totalServiceRevenue: 385,
+      totalServiceDurationMinutes: 255,
+      depositAmount: 50,
+    });
+  });
+
   it("never returns the outbound webhook signing secret in API payloads", async () => {
     const { serializeBusiness } = await import("./businesses.js");
     const record = {
@@ -63,6 +122,9 @@ describe("business route serialization", () => {
         bookingAvailableDays: "[1,2,3,4,5]",
         bookingAvailableStartTime: "08:00",
         bookingAvailableEndTime: "17:00",
+        bookingDailyHours: null,
+        bookingBlackoutDates: null,
+        bookingClosedOnUsHolidays: false,
         operatingHours: "Mon-Fri 08:00-17:00",
       },
       locations: [{ id: "loc_123", name: "Main Shop", address: "123 Main St" }],
@@ -199,6 +261,9 @@ describe("business route serialization", () => {
         bookingAvailableDays: "[1,2,3,4,5]",
         bookingAvailableStartTime: "09:00",
         bookingAvailableEndTime: "19:00",
+        bookingDailyHours: null,
+        bookingBlackoutDates: null,
+        bookingClosedOnUsHolidays: false,
         operatingHours: "Mon-Fri 09:00-19:00",
       },
       locations: [],
@@ -262,6 +327,9 @@ describe("business route serialization", () => {
         bookingAvailableDays: "[1,2,3,4,5]",
         bookingAvailableStartTime: "09:00",
         bookingAvailableEndTime: "19:00",
+        bookingDailyHours: null,
+        bookingBlackoutDates: null,
+        bookingClosedOnUsHolidays: false,
         operatingHours: "Mon-Fri 09:00-19:00",
         updatedAt,
       },

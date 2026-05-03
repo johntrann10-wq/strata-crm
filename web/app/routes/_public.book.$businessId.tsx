@@ -82,7 +82,15 @@ type BookingService = {
   availableDayIndexes: number[] | null;
   openTime: string | null;
   closeTime: string | null;
+  dailyHours?: BookingDailyHoursEntry[] | null;
   addons: BookingAddon[];
+};
+
+type BookingDailyHoursEntry = {
+  dayIndex: number;
+  enabled: boolean;
+  openTime: string | null;
+  closeTime: string | null;
 };
 
 type BookingConfig = {
@@ -110,6 +118,9 @@ type BookingConfig = {
     dayIndexes: number[];
     openTime: string | null;
     closeTime: string | null;
+    dailyHours?: BookingDailyHoursEntry[];
+    blackoutDates?: string[];
+    closedOnUsHolidays?: boolean;
   };
   locations: Array<{ id: string; name: string; address: string | null }>;
   services: BookingService[];
@@ -440,10 +451,78 @@ function BookingDescription({
   );
 }
 
+function toDateKeyFromParts(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function toDateKeyFromUtcDate(date: Date): string {
+  return toDateKeyFromParts(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function observedDateKey(year: number, monthIndex: number, day: number): string {
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  const dayOfWeek = date.getUTCDay();
+  if (dayOfWeek === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } else if (dayOfWeek === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return toDateKeyFromUtcDate(date);
+}
+
+function nthWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number, occurrence: number): string {
+  const firstDay = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
+  const offset = (weekday - firstDay + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, 1 + offset + (occurrence - 1) * 7);
+}
+
+function lastWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number): string {
+  const lastDate = new Date(Date.UTC(year, monthIndex + 1, 0));
+  const offset = (lastDate.getUTCDay() - weekday + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, lastDate.getUTCDate() - offset);
+}
+
+function getUsHolidayDateKeys(year: number): Set<string> {
+  const holidays = new Set<string>();
+  const addFixed = (monthIndex: number, day: number) => {
+    holidays.add(toDateKeyFromParts(year, monthIndex, day));
+    holidays.add(observedDateKey(year, monthIndex, day));
+  };
+
+  addFixed(0, 1);
+  holidays.add(nthWeekdayOfMonthDateKey(year, 0, 1, 3));
+  holidays.add(nthWeekdayOfMonthDateKey(year, 1, 1, 3));
+  holidays.add(lastWeekdayOfMonthDateKey(year, 4, 1));
+  addFixed(5, 19);
+  addFixed(6, 4);
+  holidays.add(nthWeekdayOfMonthDateKey(year, 8, 1, 1));
+  holidays.add(nthWeekdayOfMonthDateKey(year, 9, 1, 2));
+  addFixed(10, 11);
+  holidays.add(nthWeekdayOfMonthDateKey(year, 10, 4, 4));
+  addFixed(11, 25);
+
+  return holidays;
+}
+
+function isUsHolidayDateKey(value: string): boolean {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  if (!Number.isInteger(year)) return false;
+  return (
+    getUsHolidayDateKeys(year).has(value) ||
+    getUsHolidayDateKeys(year - 1).has(value) ||
+    getUsHolidayDateKeys(year + 1).has(value)
+  );
+}
+
 function buildSuggestedBookingDates(params: {
   minDate: string;
   maxDate: string;
   allowedDayIndexes: number[] | null | undefined;
+  dailyHours?: BookingDailyHoursEntry[] | null;
+  blackoutDates?: string[] | null;
+  closedOnUsHolidays?: boolean;
   selectedDate: string;
   limit?: number;
 }) {
@@ -453,24 +532,83 @@ function buildSuggestedBookingDates(params: {
   const allowedDays = Array.isArray(params.allowedDayIndexes) && params.allowedDayIndexes.length > 0
     ? new Set(params.allowedDayIndexes)
     : null;
+  const blackoutDates = new Set(params.blackoutDates ?? []);
+  const dailyHoursByDay = new Map(
+    (params.dailyHours ?? [])
+      .filter((entry) => Number.isInteger(entry.dayIndex) && entry.dayIndex >= 0 && entry.dayIndex <= 6)
+      .map((entry) => [entry.dayIndex, entry])
+  );
   const results: string[] = [];
   const cursor = new Date(start);
 
   while (cursor.getTime() <= end.getTime() && results.length < (params.limit ?? 7)) {
-    if (!allowedDays || allowedDays.has(cursor.getDay())) {
-      results.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`);
+    const dateKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    const dayHours = dailyHoursByDay.get(cursor.getDay());
+    const dailyHoursAllowsDate = dayHours ? dayHours.enabled : true;
+    if (
+      (!allowedDays || allowedDays.has(cursor.getDay())) &&
+      dailyHoursAllowsDate &&
+      !blackoutDates.has(dateKey) &&
+      !(params.closedOnUsHolidays && isUsHolidayDateKey(dateKey))
+    ) {
+      results.push(dateKey);
     }
     cursor.setDate(cursor.getDate() + 1);
   }
 
   if (params.selectedDate && !results.includes(params.selectedDate)) {
     const selected = new Date(`${params.selectedDate}T00:00:00`);
-    if (!Number.isNaN(selected.getTime()) && selected.getTime() >= start.getTime() && selected.getTime() <= end.getTime()) {
+    const selectedDayHours = dailyHoursByDay.get(selected.getDay());
+    if (
+      !Number.isNaN(selected.getTime()) &&
+      selected.getTime() >= start.getTime() &&
+      selected.getTime() <= end.getTime() &&
+      !blackoutDates.has(params.selectedDate) &&
+      !(params.closedOnUsHolidays && isUsHolidayDateKey(params.selectedDate)) &&
+      (selectedDayHours ? selectedDayHours.enabled : true)
+    ) {
       results.unshift(params.selectedDate);
     }
   }
 
   return Array.from(new Set(results)).slice(0, params.limit ?? 7);
+}
+
+function resolveAvailabilityWindowForDate(params: {
+  date: string;
+  dailyHours?: BookingDailyHoursEntry[] | null;
+  closedOnUsHolidays?: boolean;
+  fallbackOpenTime: string | null | undefined;
+  fallbackCloseTime: string | null | undefined;
+}) {
+  const date = parseDateValue(params.date);
+  if (!date) {
+    return {
+      openTime: params.fallbackOpenTime ?? null,
+      closeTime: params.fallbackCloseTime ?? null,
+      closed: false,
+    };
+  }
+  if (params.closedOnUsHolidays && isUsHolidayDateKey(params.date)) {
+    return {
+      openTime: null,
+      closeTime: null,
+      closed: true,
+    };
+  }
+  const dayHours = (params.dailyHours ?? []).find((entry) => entry.dayIndex === date.getDay()) ?? null;
+  if (!dayHours) {
+    return {
+      openTime: params.fallbackOpenTime ?? null,
+      closeTime: params.fallbackCloseTime ?? null,
+      closed: false,
+    };
+  }
+  return {
+    openTime: dayHours.enabled ? dayHours.openTime ?? params.fallbackOpenTime ?? null : null,
+    closeTime: dayHours.enabled ? dayHours.closeTime ?? params.fallbackCloseTime ?? null : null,
+    closed: !dayHours.enabled,
+  };
 }
 
 function formatBookingDatePill(value: string) {
@@ -1655,11 +1793,50 @@ export default function PublicBookingPage() {
     [selectedService?.bookingWindowDays, selectedService?.leadTimeHours]
   );
   const effectiveAvailabilityDayIndexes = useMemo(
-    () => selectedService?.availableDayIndexes ?? config?.availabilityDefaults?.dayIndexes ?? null,
-    [config?.availabilityDefaults?.dayIndexes, selectedService?.availableDayIndexes]
+    () =>
+      selectedService?.dailyHours && selectedService.dailyHours.length > 0
+        ? selectedService.dailyHours
+            .filter((entry) => entry.enabled)
+            .map((entry) => entry.dayIndex)
+            .sort((left, right) => left - right)
+        : selectedService?.availableDayIndexes ?? config?.availabilityDefaults?.dayIndexes ?? null,
+    [config?.availabilityDefaults?.dayIndexes, selectedService?.availableDayIndexes, selectedService?.dailyHours]
   );
-  const effectiveOpenTime = selectedService?.openTime ?? config?.availabilityDefaults?.openTime ?? null;
-  const effectiveCloseTime = selectedService?.closeTime ?? config?.availabilityDefaults?.closeTime ?? null;
+  const effectiveDailyHours = useMemo(
+    () =>
+      selectedService?.dailyHours && selectedService.dailyHours.length > 0
+        ? selectedService.dailyHours
+        : selectedService?.openTime || selectedService?.closeTime
+          ? []
+          : config?.availabilityDefaults?.dailyHours ?? [],
+    [config?.availabilityDefaults?.dailyHours, selectedService?.closeTime, selectedService?.dailyHours, selectedService?.openTime]
+  );
+  const businessBlackoutDates = useMemo(
+    () => config?.availabilityDefaults?.blackoutDates ?? [],
+    [config?.availabilityDefaults?.blackoutDates]
+  );
+  const businessClosedOnUsHolidays = config?.availabilityDefaults?.closedOnUsHolidays ?? false;
+  const selectedDayAvailabilityWindow = useMemo(
+    () =>
+      resolveAvailabilityWindowForDate({
+        date: form.bookingDate,
+        dailyHours: effectiveDailyHours,
+        closedOnUsHolidays: businessClosedOnUsHolidays,
+        fallbackOpenTime: config?.availabilityDefaults?.openTime ?? null,
+        fallbackCloseTime: config?.availabilityDefaults?.closeTime ?? null,
+      }),
+    [
+      effectiveDailyHours,
+      businessClosedOnUsHolidays,
+      config?.availabilityDefaults?.closeTime,
+      config?.availabilityDefaults?.openTime,
+      form.bookingDate,
+    ]
+  );
+  const effectiveOpenTime =
+    selectedService?.openTime ?? selectedDayAvailabilityWindow.openTime ?? config?.availabilityDefaults?.openTime ?? null;
+  const effectiveCloseTime =
+    selectedService?.closeTime ?? selectedDayAvailabilityWindow.closeTime ?? config?.availabilityDefaults?.closeTime ?? null;
   const availabilityWindowLabel = useMemo(
     () => formatAvailabilityWindow(effectiveAvailabilityDayIndexes, effectiveOpenTime, effectiveCloseTime),
     [effectiveAvailabilityDayIndexes, effectiveOpenTime, effectiveCloseTime]
@@ -1670,10 +1847,13 @@ export default function PublicBookingPage() {
         minDate: minBookingDate,
         maxDate: maxBookingDate,
         allowedDayIndexes: effectiveAvailabilityDayIndexes,
+        dailyHours: effectiveDailyHours,
+        blackoutDates: businessBlackoutDates,
+        closedOnUsHolidays: businessClosedOnUsHolidays,
         selectedDate: form.bookingDate,
         limit: 8,
       }),
-    [effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
+    [businessBlackoutDates, businessClosedOnUsHolidays, effectiveDailyHours, effectiveAvailabilityDayIndexes, form.bookingDate, maxBookingDate, minBookingDate]
   );
   const defaultBookingDate = suggestedBookingDates[0] ?? minBookingDate;
   const selectedScheduleDate =
@@ -2004,7 +2184,11 @@ export default function PublicBookingPage() {
     };
 
     window.addEventListener("pagehide", handlePageHide);
-    return () => window.removeEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+    };
   }, [
     businessId,
     currentStep,
@@ -2805,24 +2989,26 @@ export default function PublicBookingPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="booking-vehicle-year">Vehicle year</Label>
-              <Input id="booking-vehicle-year" type="number" min="1900" max="2100" value={form.vehicleYear} onChange={(event) => setForm((current) => ({ ...current, vehicleYear: event.target.value }))} placeholder="2022" className="h-12 rounded-2xl bg-slate-50" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="booking-vehicle-color">Vehicle color</Label>
-              <Input id="booking-vehicle-color" value={form.vehicleColor} onChange={(event) => setForm((current) => ({ ...current, vehicleColor: event.target.value }))} placeholder="Black" className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-vehicle-year" type="number" min="1900" max="2100" value={form.vehicleYear} onChange={(event) => setForm((current) => ({ ...current, vehicleYear: event.target.value }))} placeholder="Year" className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="booking-vehicle-make">Vehicle make{config.requireVehicle ? " *" : ""}</Label>
-              <Input id="booking-vehicle-make" value={form.vehicleMake} onChange={(event) => setForm((current) => ({ ...current, vehicleMake: event.target.value }))} placeholder="BMW" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-vehicle-make" value={form.vehicleMake} onChange={(event) => setForm((current) => ({ ...current, vehicleMake: event.target.value }))} placeholder="Make" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="booking-vehicle-model">Vehicle model{config.requireVehicle ? " *" : ""}</Label>
-              <Input id="booking-vehicle-model" value={form.vehicleModel} onChange={(event) => setForm((current) => ({ ...current, vehicleModel: event.target.value }))} placeholder="X5" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-vehicle-model" value={form.vehicleModel} onChange={(event) => setForm((current) => ({ ...current, vehicleModel: event.target.value }))} placeholder="Model" required={config.requireVehicle} className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <StepHint icon={CarFront} text={selectedService ? `Add the vehicle for ${selectedService.name}. If you only know part of it, start with the basics and the shop can fill in the rest.` : "Add the vehicle you want serviced. If you only know part of it, start with the basics and the shop can fill in the rest."} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:max-w-[260px]">
+              <Label htmlFor="booking-vehicle-color">Vehicle color</Label>
+              <Input id="booking-vehicle-color" value={form.vehicleColor} onChange={(event) => setForm((current) => ({ ...current, vehicleColor: event.target.value }))} placeholder="Optional" className="h-12 rounded-2xl bg-slate-50" />
+            </div>
+          </div>
         </div>
       );
     }
@@ -3224,11 +3410,11 @@ export default function PublicBookingPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="booking-first-name">First name</Label>
-              <Input id="booking-first-name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} placeholder="Jamie" required className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-first-name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} required className="h-12 rounded-2xl bg-slate-50" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="booking-last-name">Last name</Label>
-              <Input id="booking-last-name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} placeholder="Rivera" required className="h-12 rounded-2xl bg-slate-50" />
+              <Input id="booking-last-name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} required className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -3291,23 +3477,63 @@ export default function PublicBookingPage() {
         {selectedService?.addons.length ? (
           <div className="space-y-3">
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Frequently added</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Frequently added</h3>
+                {selectedService.addons.some((addon) => addon.featured) ? (
+                  <Badge className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-amber-700 hover:bg-amber-50">
+                    Recommended
+                  </Badge>
+                ) : null}
+              </div>
               <p className="text-sm text-slate-600">
-                {form.vehicleMake || form.vehicleModel ? `Frequently added with ${selectedService.name} for your ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ")}.` : `Frequently added with ${selectedService.name}.`}
+                {form.vehicleMake || form.vehicleModel
+                  ? `Useful upgrades often added with ${selectedService.name} for your ${[form.vehicleYear, form.vehicleMake, form.vehicleModel].filter(Boolean).join(" ")}.`
+                  : `Useful upgrades often added with ${selectedService.name}.`}
               </p>
             </div>
             <div className="grid gap-3">
-              {selectedService.addons.map((addon) => {
+              {[...selectedService.addons].sort((left, right) => Number(right.featured) - Number(left.featured)).map((addon) => {
                 const active = form.addonServiceIds.includes(addon.id);
                 return (
-                  <button key={addon.id} type="button" onClick={() => toggleAddon(addon.id)} className={cn("flex items-start justify-between gap-4 rounded-[1.25rem] border p-4 text-left transition-all motion-reduce:transition-none", active ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)]" : "border-slate-200 bg-white hover:bg-slate-50")}>
-                    <div className="space-y-1">
-                      <p className="font-medium text-slate-950">{addon.name}</p>
+                  <button
+                    key={addon.id}
+                    type="button"
+                    onClick={() => toggleAddon(addon.id)}
+                    aria-pressed={active}
+                    className={cn(
+                      "group flex min-h-[5.75rem] items-start justify-between gap-4 rounded-[1.35rem] border p-4 text-left shadow-[0_14px_30px_rgba(15,23,42,0.05)] transition-all motion-reduce:transition-none",
+                      active
+                        ? "border-[color:var(--booking-primary-soft-border)] bg-[var(--booking-primary-soft)] ring-2 ring-[color:var(--booking-primary-soft-border)]"
+                        : addon.featured
+                          ? "border-amber-200 bg-amber-50/40 hover:bg-amber-50/70"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    )}
+                  >
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="min-w-0 break-words text-base font-semibold leading-5 tracking-[-0.02em] text-slate-950">{addon.name}</p>
+                        {addon.featured ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/85 px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                            <Sparkles className="h-3 w-3" />
+                            Recommended
+                          </span>
+                        ) : null}
+                      </div>
                       {addon.description ? <BookingDescription description={addon.description} /> : null}
                     </div>
-                    <div className="text-right text-sm">
-                      {config.showPrices && addon.showPrice ? <p className="font-semibold text-slate-950">{formatPrice(addon.price)}</p> : null}
-                      {config.showDurations && addon.showDuration ? <p className="mt-1 text-slate-500">{formatDuration(addon.durationMinutes)}</p> : null}
+                    <div className="flex shrink-0 flex-col items-end gap-2 text-right text-sm">
+                      <span
+                        className={cn(
+                          "inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors",
+                          active ? "border-transparent bg-[var(--booking-primary)] text-white" : "border-slate-300 bg-white text-transparent group-hover:text-slate-300"
+                        )}
+                      >
+                        <Check className="h-4 w-4" />
+                      </span>
+                      <div>
+                        {config.showPrices && addon.showPrice ? <p className="font-semibold text-slate-950">{formatPrice(addon.price)}</p> : null}
+                        {config.showDurations && addon.showDuration ? <p className="mt-1 text-slate-500">{formatDuration(addon.durationMinutes)}</p> : null}
+                      </div>
                     </div>
                   </button>
                 );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { CarFront, CircleDollarSign, Clock3, ExternalLink, Loader2, MapPin, Plus, Trash2, User, Wrench } from "lucide-react";
@@ -7,12 +7,27 @@ import { useAction, useFindMany, useFindFirst } from "@/hooks/useApi";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTimeSelect, buildQuarterHourOptions, toDateInputValue } from "@/components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
-import { getJobPhaseLabel, getOperationalDayLabel, getOperationalTimelineLabel, isMultiDayJob } from "@/lib/calendarJobSpans";
+import {
+  getJobPhaseLabel,
+  getOperationalDayLabel,
+  getOperationalTimelineLabel,
+  isMultiDayJob,
+  parseCalendarDateTimeInput,
+} from "@/lib/calendarJobSpans";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { hasBackendFinanceField, resolveAppointmentFinanceState } from "@/lib/appointmentFinanceState";
 
@@ -48,7 +63,7 @@ export type AppointmentInspectorRecord = {
   notes?: string | null;
   internalNotes?: string | null;
   location?: { name?: string | null } | null;
-  client?: { id?: string | null; firstName?: string | null; lastName?: string | null } | null;
+  client?: { id?: string | null; firstName?: string | null; lastName?: string | null; phone?: string | null; email?: string | null } | null;
   vehicle?: { id?: string | null; year?: number | null; make?: string | null; model?: string | null } | null;
   assignedStaff?: { firstName?: string | null; lastName?: string | null } | null;
 };
@@ -75,6 +90,9 @@ const QUICK_PHASE_OPTIONS = [
   { value: "hold", label: "On hold" },
   { value: "pickup_ready", label: "Ready" },
 ] as const;
+
+type ConfirmationIntent = "reversePayment" | "cancelAppointment" | "deleteAppointment";
+type InlineEditor = "deposit" | "price" | "timing" | "details" | "payment";
 
 const TIME_OPTIONS = buildQuarterHourOptions();
 
@@ -141,6 +159,10 @@ function getLifecycleLabel(appointment: AppointmentInspectorRecord): string {
   return LIFECYCLE_STATUS_LABELS[String(appointment.status ?? "")] ?? "Scheduled";
 }
 
+function getContactInsight(appointment: AppointmentInspectorRecord): string {
+  return appointment.client?.phone?.trim() || appointment.client?.email?.trim() || "No contact saved";
+}
+
 function getPaymentSummary(
   appointment: AppointmentInspectorRecord,
   activityLogs: AppointmentPaymentActivity[]
@@ -202,6 +224,9 @@ export function AppointmentInspectorPanel({
   emptyTitle = "Select a job",
   emptyDescription = "Pick any job to inspect the customer, vehicle, timing, money, and current stage.",
   compact = false,
+  minimalChrome = false,
+  preferNativeInputs = false,
+  nativeSheetMode = false,
   onAppointmentChange,
   onRequestClose,
 }: {
@@ -209,6 +234,9 @@ export function AppointmentInspectorPanel({
   emptyTitle?: string;
   emptyDescription?: string;
   compact?: boolean;
+  minimalChrome?: boolean;
+  preferNativeInputs?: boolean;
+  nativeSheetMode?: boolean;
   onAppointmentChange?: (() => void | Promise<void>) | undefined;
   onRequestClose?: (() => void) | undefined;
 }) {
@@ -239,6 +267,9 @@ export function AppointmentInspectorPanel({
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [priceDialogOpen, setPriceDialogOpen] = useState(false);
+  const [confirmationIntent, setConfirmationIntent] = useState<ConfirmationIntent | null>(null);
+  const [activeInlineEditor, setActiveInlineEditor] = useState<InlineEditor | null>(null);
+  const inlineEditorRef = useRef<HTMLDivElement | null>(null);
   const [clientIdDraft, setClientIdDraft] = useState("internal");
   const [vehicleIdDraft, setVehicleIdDraft] = useState("none");
   const [assignedStaffIdDraft, setAssignedStaffIdDraft] = useState("unassigned");
@@ -341,7 +372,29 @@ export function AppointmentInspectorPanel({
     pause: !appointment?.businessId,
   } as any);
 
+  useEffect(() => {
+    setActiveInlineEditor(null);
+    setConfirmationIntent(null);
+  }, [appointment?.id]);
+
+  useEffect(() => {
+    if (!nativeSheetMode) return;
+    if (!activeInlineEditor && !confirmationIntent) return;
+    window.requestAnimationFrame(() => {
+      inlineEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [activeInlineEditor, confirmationIntent, nativeSheetMode]);
+
   if (!appointment) {
+    if (minimalChrome) {
+      return (
+        <div className="rounded-2xl border border-dashed border-border/70 bg-white/80 px-4 py-5 text-sm">
+          <p className="font-medium text-foreground">{emptyTitle}</p>
+          <p className="mt-1 text-muted-foreground">{emptyDescription}</p>
+        </div>
+      );
+    }
+
     return (
       <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
         <CardContent className={cn("space-y-2", compact ? "p-3" : "p-4")}>
@@ -431,24 +484,40 @@ export function AppointmentInspectorPanel({
   function openDepositDialog() {
     const currentAmount = Number(appointment.depositAmount ?? 0);
     setDepositDraft(currentAmount > 0 ? currentAmount.toFixed(2) : "");
+    if (nativeSheetMode) {
+      setConfirmationIntent(null);
+      setActiveInlineEditor("deposit");
+      return;
+    }
     setDepositDialogOpen(true);
   }
 
   function openPriceDialog() {
     setPriceDraft(totalAmount > 0 ? totalAmount.toFixed(2) : "");
+    if (nativeSheetMode) {
+      setConfirmationIntent(null);
+      setActiveInlineEditor("price");
+      return;
+    }
     setPriceDialogOpen(true);
   }
 
   function openTimingDialog() {
+    const pickupFallback = appointment.expectedCompletionTime ?? appointment.endTime ?? appointment.startTime ?? null;
     setServiceDate(toDateInputValue(appointment.startTime));
     setServiceStartTime(toTimeInputValue(appointment.startTime));
     setServiceEndTime(toTimeInputValue(appointment.endTime));
     setDropoffDate(toDateInputValue(appointment.jobStartTime));
     setDropoffTime(toTimeInputValue(appointment.jobStartTime));
-    setPickupDate(toDateInputValue(appointment.expectedCompletionTime));
-    setPickupTime(toTimeInputValue(appointment.expectedCompletionTime));
+    setPickupDate(toDateInputValue(pickupFallback));
+    setPickupTime(toTimeInputValue(pickupFallback));
     setPickupReadyDate(toDateInputValue(appointment.pickupReadyTime));
     setPickupReadyTime(toTimeInputValue(appointment.pickupReadyTime));
+    if (nativeSheetMode) {
+      setConfirmationIntent(null);
+      setActiveInlineEditor("timing");
+      return;
+    }
     setTimingDialogOpen(true);
   }
 
@@ -458,6 +527,11 @@ export function AppointmentInspectorPanel({
     setAssignedStaffIdDraft(appointment.assignedStaffId || "unassigned");
     setNotesDraft(appointment.notes ?? "");
     setInternalNotesDraft(appointment.internalNotes ?? "");
+    if (nativeSheetMode) {
+      setConfirmationIntent(null);
+      setActiveInlineEditor("details");
+      return;
+    }
     setDetailsDialogOpen(true);
   }
 
@@ -465,6 +539,11 @@ export function AppointmentInspectorPanel({
     setPaymentAmount(effectiveCollectionAmount > 0 ? effectiveCollectionAmount.toFixed(2) : "0.00");
     setPaymentMethod("cash");
     setPaymentDate(new Date().toISOString().split("T")[0]);
+    if (nativeSheetMode) {
+      setConfirmationIntent(null);
+      setActiveInlineEditor("payment");
+      return;
+    }
     setPaymentDialogOpen(true);
   }
 
@@ -484,7 +563,8 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success(nextAmount > 0 ? "Deposit updated" : "Deposit removed");
-    setDepositDialogOpen(false);
+    if (nativeSheetMode) setActiveInlineEditor(null);
+    else setDepositDialogOpen(false);
     await onAppointmentChange?.();
   }
 
@@ -500,7 +580,8 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success(nextAmount > 0 ? "Total price updated" : "Total price cleared");
-    setPriceDialogOpen(false);
+    if (nativeSheetMode) setActiveInlineEditor(null);
+    else setPriceDialogOpen(false);
     await onAppointmentChange?.();
   }
 
@@ -552,7 +633,8 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success(paymentSummary.isPaidInFull || effectiveCollectionAmount >= balanceDue ? "Appointment paid in full" : "Payment recorded");
-    setPaymentDialogOpen(false);
+    if (nativeSheetMode) setActiveInlineEditor(null);
+    else setPaymentDialogOpen(false);
     await onAppointmentChange?.();
   }
 
@@ -562,8 +644,18 @@ export function AppointmentInspectorPanel({
       return;
     }
 
-    const nextStartTime = new Date(`${serviceDate}T${serviceStartTime}`);
-    const nextEndTime = serviceEndTime ? new Date(`${serviceDate}T${serviceEndTime}`) : undefined;
+    const nextStartTime = parseCalendarDateTimeInput(serviceDate, serviceStartTime);
+    if (!nextStartTime) {
+      toast.error("Choose a valid service start time.");
+      return;
+    }
+
+    const nextEndTime = serviceEndTime ? parseCalendarDateTimeInput(serviceDate, serviceEndTime) : undefined;
+    if (serviceEndTime && !nextEndTime) {
+      toast.error("Choose a valid work end time.");
+      return;
+    }
+
     if (nextEndTime && nextEndTime.getTime() <= nextStartTime.getTime()) {
       toast.error("Work end must be after work start.");
       return;
@@ -578,8 +670,12 @@ export function AppointmentInspectorPanel({
         toast.error("Choose both drop-off and pickup timing.");
         return;
       }
-      nextJobStartTime = new Date(`${dropoffDate}T${dropoffTime}`);
-      nextExpectedCompletionTime = new Date(`${pickupDate}T${pickupTime}`);
+      nextJobStartTime = parseCalendarDateTimeInput(dropoffDate, dropoffTime);
+      nextExpectedCompletionTime = parseCalendarDateTimeInput(pickupDate, pickupTime);
+      if (!nextJobStartTime || !nextExpectedCompletionTime) {
+        toast.error("Choose valid drop-off and pickup timing.");
+        return;
+      }
       if (nextExpectedCompletionTime.getTime() < nextJobStartTime.getTime()) {
         toast.error("Pickup must be after drop-off.");
         return;
@@ -591,8 +687,32 @@ export function AppointmentInspectorPanel({
         toast.error("Drop-off cannot be after the scheduled labor start.");
         return;
       }
+      if ((pickupReadyDate && !pickupReadyTime) || (!pickupReadyDate && pickupReadyTime)) {
+        toast.error("Choose both pickup ready date and time, or leave both blank.");
+        return;
+      }
       if (pickupReadyDate && pickupReadyTime) {
-        nextPickupReadyTime = new Date(`${pickupReadyDate}T${pickupReadyTime}`);
+        nextPickupReadyTime = parseCalendarDateTimeInput(pickupReadyDate, pickupReadyTime);
+        if (!nextPickupReadyTime) {
+          toast.error("Choose a valid pickup ready time.");
+          return;
+        }
+      }
+      if (nextEndTime && nextEndTime.getTime() > nextExpectedCompletionTime.getTime()) {
+        toast.error("Work end cannot be after pickup.");
+        return;
+      }
+      if (nextPickupReadyTime && nextPickupReadyTime.getTime() < nextStartTime.getTime()) {
+        toast.error("Pickup ready cannot be before work starts.");
+        return;
+      }
+      if (nextPickupReadyTime && nextEndTime && nextPickupReadyTime.getTime() < nextEndTime.getTime()) {
+        toast.error("Pickup ready cannot be before work ends.");
+        return;
+      }
+      if (nextPickupReadyTime && nextPickupReadyTime.getTime() > nextExpectedCompletionTime.getTime()) {
+        toast.error("Pickup ready cannot be after pickup.");
+        return;
       }
     }
 
@@ -611,7 +731,8 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success("Timing updated");
-    setTimingDialogOpen(false);
+    if (nativeSheetMode) setActiveInlineEditor(null);
+    else setTimingDialogOpen(false);
     await onAppointmentChange?.();
   }
 
@@ -633,42 +754,35 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success("Job details updated");
-    setDetailsDialogOpen(false);
+    if (nativeSheetMode) setActiveInlineEditor(null);
+    else setDetailsDialogOpen(false);
     await onAppointmentChange?.();
   }
 
   async function handleReversePayment() {
-    const confirmed = window.confirm(
-      paymentSummary.isPaidInFull ? "Reverse the recorded payment for this appointment?" : "Reverse the recorded deposit for this appointment?"
-    );
-    if (!confirmed) return;
     const result = await reverseDepositPayment({ id: appointment.id } as any);
     if (result.error) {
       toast.error("Failed to reverse payment: " + result.error.message);
       return;
     }
     toast.success(paymentSummary.isPaidInFull ? "Payment reversed" : "Deposit reversed");
+    setConfirmationIntent(null);
     await onAppointmentChange?.();
   }
 
   async function handleCancelAppointment() {
-    const confirmed = window.confirm("Cancel this appointment?");
-    if (!confirmed) return;
     const result = await cancelAppointment({ id: appointment.id } as any);
     if (result.error) {
       toast.error("Failed to cancel appointment: " + result.error.message);
       return;
     }
     toast.success("Appointment cancelled");
+    setConfirmationIntent(null);
     await onAppointmentChange?.();
     onRequestClose?.();
   }
 
   async function handleDeleteAppointment() {
-    const confirmed = window.confirm(
-      isInternalAppointment ? "Delete this blocked/internal appointment?" : "Delete this appointment?"
-    );
-    if (!confirmed) return;
     const result = await deleteAppointment({ id: appointment.id } as any);
     if (result.error) {
       const message = result.error.message ?? "Failed to delete appointment";
@@ -676,35 +790,135 @@ export function AppointmentInspectorPanel({
       return;
     }
     toast.success(isInternalAppointment ? "Block deleted" : "Appointment deleted");
+    setConfirmationIntent(null);
     await onAppointmentChange?.();
     onRequestClose?.();
   }
 
+  const confirmationCopy =
+    confirmationIntent === "reversePayment"
+      ? {
+          title: paymentSummary.isPaidInFull ? "Reverse payment?" : "Reverse deposit?",
+          description: paymentSummary.isPaidInFull
+            ? "This removes the recorded payment from the appointment balance."
+            : "This removes the recorded deposit from the appointment balance.",
+          action: paymentSummary.isPaidInFull ? "Reverse payment" : "Reverse deposit",
+          busy: reversingPayment,
+          run: handleReversePayment,
+        }
+      : confirmationIntent === "cancelAppointment"
+        ? {
+            title: "Cancel appointment?",
+            description: "This keeps the appointment record but marks it cancelled.",
+            action: "Cancel appointment",
+            busy: cancellingAppointment,
+            run: handleCancelAppointment,
+          }
+        : confirmationIntent === "deleteAppointment"
+          ? {
+              title: isInternalAppointment ? "Delete block?" : "Delete appointment?",
+              description: isInternalAppointment
+                ? "This removes the blocked/internal appointment from the schedule."
+                : "This permanently removes the appointment from the schedule.",
+              action: isInternalAppointment ? "Delete block" : "Delete appointment",
+              busy: deletingAppointment,
+              run: handleDeleteAppointment,
+            }
+          : null;
+
+  const inlineEditorTitle =
+    activeInlineEditor === "deposit"
+      ? "Set deposit"
+      : activeInlineEditor === "price"
+        ? "Edit total price"
+        : activeInlineEditor === "timing"
+          ? "Edit timing"
+          : activeInlineEditor === "details"
+            ? "Edit job details"
+            : activeInlineEditor === "payment"
+              ? "Mark paid"
+              : null;
+
+  const inlineEditorDescription =
+    activeInlineEditor === "deposit"
+      ? "Choose how much to collect up front for this appointment."
+      : activeInlineEditor === "price"
+        ? "Update the appointment total without leaving the calendar."
+        : activeInlineEditor === "timing"
+          ? "Update the service window and shop stay timeline."
+          : activeInlineEditor === "details"
+            ? "Update client, vehicle, assignment, and notes."
+            : activeInlineEditor === "payment"
+              ? "Record the payment collected for this appointment."
+              : null;
+
   return (
     <>
-      <Card className="border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-        <CardContent className={cn(compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
-        <div className="space-y-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                {lifecycleLabel}
-              </span>
-              {isMultiDayJob(appointment) ? (
-                <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
-                  {getStageLabel(appointment)}
+      <Card className={cn("border-border/70 shadow-[0_12px_28px_rgba(15,23,42,0.04)]", minimalChrome && "!border-0 !bg-transparent !shadow-none")}>
+        <CardContent className={cn(minimalChrome ? "space-y-3.5 !p-0" : compact ? "space-y-3 p-3" : "space-y-4 p-4")}>
+        {!minimalChrome ? (
+          <div className="space-y-1">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Appointment Inspector</p>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {lifecycleLabel}
                 </span>
-              ) : null}
+                {isMultiDayJob(appointment) ? (
+                  <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+                    {getStageLabel(appointment)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <h3 className={cn("break-words font-semibold text-foreground", compact ? "line-clamp-2 text-base leading-5" : "text-lg")}>
+              {getAppointmentLabel(appointment)}
+            </h3>
+          </div>
+        ) : null}
+
+        {minimalChrome ? (
+          <div className="overflow-hidden rounded-[1.65rem] border border-white/80 bg-white/96 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.1),inset_0_1px_0_rgba(255,255,255,0.86)] backdrop-blur-xl">
+            <div className="space-y-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Appointment</p>
+                  <h3 className="mt-1 line-clamp-2 text-[1.1rem] font-semibold leading-6 tracking-[-0.03em] text-slate-950">
+                    {getAppointmentLabel(appointment)}
+                  </h3>
+                </div>
+                <span className="shrink-0 rounded-full border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  {lifecycleLabel}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <MobileInsightTile icon={Clock3} label="Time" value={getTimingLabel(appointment)} />
+                <MobileInsightTile icon={CircleDollarSign} label={moneyStateLabel} value={getAmountLabel(appointment)} strong={totalAmount > 0} />
+                <MobileInsightTile icon={User} label="Client" value={getClientName(appointment)} />
+                <MobileInsightTile icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2 text-xs font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Stage</span>
+                  <span className="mt-1 block truncate text-slate-800">{getStageLabel(appointment)}</span>
+                </span>
+                <span className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2 text-xs font-medium text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+                  <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Contact</span>
+                  <span className="mt-1 block truncate text-slate-800">{getContactInsight(appointment)}</span>
+                </span>
+              </div>
             </div>
           </div>
-          <h3 className={cn("break-words font-semibold text-foreground", compact ? "line-clamp-2 text-base leading-5" : "text-lg")}>
-            {getAppointmentLabel(appointment)}
-          </h3>
-        </div>
+        ) : null}
 
-        <div className="grid gap-3 text-sm">
-          <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+        <div className={cn("grid gap-3 text-sm", minimalChrome && "grid-cols-2 gap-2.5")}>
+          <div
+            className={cn(
+              "rounded-xl border border-border/60 bg-background/70 px-3 py-3",
+              minimalChrome &&
+                "col-span-2 rounded-[1.35rem] border-white/75 bg-white/94 px-3.5 py-3.5 shadow-[0_12px_28px_rgba(15,23,42,0.07),inset_0_1px_0_rgba(255,255,255,0.78)] backdrop-blur-xl"
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Money</p>
@@ -715,8 +929,8 @@ export function AppointmentInspectorPanel({
               </span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <MoneyTile label="Collected" value={collectedAmount > 0 ? formatCurrency(collectedAmount) : "-"} />
-              <MoneyTile label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : totalAmount > 0 ? "Paid" : "-"} />
+              <MoneyTile label="Collected" value={collectedAmount > 0 ? formatCurrency(collectedAmount) : "-"} polished={minimalChrome} />
+              <MoneyTile label="Balance due" value={balanceDue > 0 ? formatCurrency(balanceDue) : totalAmount > 0 ? "Paid" : "-"} polished={minimalChrome} />
             </div>
             {showFinancialBreakdown ? (
               <div className="mt-3 space-y-2 border-t border-border/50 pt-3 text-xs">
@@ -739,16 +953,22 @@ export function AppointmentInspectorPanel({
               </div>
             ) : null}
           </div>
-          <InspectorRow icon={User} label="Customer" value={getClientName(appointment)} />
-          <InspectorRow icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} />
-          <InspectorRow icon={Clock3} label="Timing" value={getTimingLabel(appointment)} />
-          <InspectorRow icon={Wrench} label="Stage" value={getStageLabel(appointment)} />
-          <InspectorRow icon={MapPin} label="Location" value={appointment.location?.name ?? "No location"} />
-          <InspectorRow icon={Wrench} label="Assigned tech" value={getTechName(appointment)} />
+          <InspectorRow icon={User} label="Customer" value={getClientName(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={CarFront} label="Vehicle" value={getVehicleLabel(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={Clock3} label="Timing" value={getTimingLabel(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={Wrench} label="Stage" value={getStageLabel(appointment)} polished={minimalChrome} />
+          <InspectorRow icon={MapPin} label="Location" value={appointment.location?.name ?? "No location"} polished={minimalChrome} />
+          <InspectorRow icon={Wrench} label="Assigned tech" value={getTechName(appointment)} polished={minimalChrome} />
         </div>
 
         {appointment.status !== "cancelled" && appointment.status !== "no-show" ? (
-          <div className="space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
+          <div
+            className={cn(
+              "space-y-3 rounded-xl border border-border/60 bg-muted/[0.12] p-3",
+              minimalChrome &&
+                "rounded-[1.35rem] border-white/75 bg-white/94 p-3.5 shadow-[0_12px_28px_rgba(15,23,42,0.065),inset_0_1px_0_rgba(255,255,255,0.78)] backdrop-blur-xl"
+            )}
+          >
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Quick controls</p>
               {!compact ? <p className="text-xs text-muted-foreground">Move the job forward without leaving the board.</p> : null}
@@ -759,7 +979,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                   onClick={() => void handleLifecycleUpdate("confirmed")}
                   disabled={updatingLifecycle || updatingPhase || completingAppointment}
                 >
@@ -771,7 +991,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                   onClick={() => void handleLifecycleUpdate("in_progress")}
                   disabled={updatingLifecycle || updatingPhase || completingAppointment}
                 >
@@ -783,7 +1003,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                   onClick={() => void handleComplete()}
                   disabled={updatingLifecycle || updatingPhase || completingAppointment}
                 >
@@ -804,7 +1024,7 @@ export function AppointmentInspectorPanel({
                         key={option.value}
                         size="sm"
                         variant={active ? "default" : "outline"}
-                        className="rounded-xl"
+                        className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                         onClick={() => void handlePhaseUpdate(option.value)}
                         disabled={active || updatingLifecycle || updatingPhase || completingAppointment}
                       >
@@ -824,7 +1044,7 @@ export function AppointmentInspectorPanel({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-xl"
+                    className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                     onClick={openPriceDialog}
                     disabled={savingDeposit || recordingPayment || reversingPayment}
                   >
@@ -834,7 +1054,7 @@ export function AppointmentInspectorPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl"
+                      className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                       onClick={openDepositDialog}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
@@ -845,7 +1065,7 @@ export function AppointmentInspectorPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl"
+                      className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                       onClick={openPaymentDialog}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
@@ -857,8 +1077,8 @@ export function AppointmentInspectorPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl"
-                      onClick={() => void handleReversePayment()}
+                      className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
+                      onClick={() => setConfirmationIntent("reversePayment")}
                       disabled={savingDeposit || recordingPayment || reversingPayment}
                     >
                       {reversingPayment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -875,7 +1095,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                   onClick={openTimingDialog}
                   disabled={updatingPhase || updatingLifecycle || completingAppointment}
                 >
@@ -884,7 +1104,7 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl"
+                  className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
                   onClick={openDetailsDialog}
                   disabled={updatingPhase || updatingLifecycle || completingAppointment}
                 >
@@ -900,8 +1120,8 @@ export function AppointmentInspectorPanel({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="rounded-xl"
-                    onClick={() => void handleCancelAppointment()}
+                    className={cn("rounded-xl", minimalChrome && "h-11 rounded-2xl")}
+                    onClick={() => setConfirmationIntent("cancelAppointment")}
                     disabled={cancellingAppointment || deletingAppointment}
                   >
                     {cancellingAppointment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -911,8 +1131,8 @@ export function AppointmentInspectorPanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-xl border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => void handleDeleteAppointment()}
+                  className={cn("rounded-xl border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700", minimalChrome && "h-11 rounded-2xl")}
+                  onClick={() => setConfirmationIntent("deleteAppointment")}
                   disabled={cancellingAppointment || deletingAppointment}
                 >
                   {deletingAppointment ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
@@ -920,6 +1140,371 @@ export function AppointmentInspectorPanel({
                 </Button>
               </div>
             </div>
+
+            {nativeSheetMode && (activeInlineEditor || confirmationIntent) ? (
+              <div
+                ref={inlineEditorRef}
+                className="space-y-3 rounded-[1.3rem] border border-white/80 bg-white/96 p-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.78)]"
+              >
+                {activeInlineEditor ? (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Edit in sheet</p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">{inlineEditorTitle}</p>
+                        {inlineEditorDescription ? (
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{inlineEditorDescription}</p>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 rounded-xl px-2.5"
+                        onClick={() => setActiveInlineEditor(null)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+
+                    {activeInlineEditor === "deposit" ? (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-deposit-amount-inline">Deposit amount</Label>
+                          <Input
+                            id="inspector-deposit-amount-inline"
+                            inputMode="decimal"
+                            value={depositDraft}
+                            onChange={(event) => setDepositDraft(event.target.value.replace(/[^\d.]/g, ""))}
+                            placeholder="0.00"
+                          />
+                          <p className="text-xs text-muted-foreground">Appointment total: {formatCurrency(totalAmount)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setActiveInlineEditor(null)} disabled={savingDeposit}>
+                            Cancel
+                          </Button>
+                          <Button className="flex-1 rounded-xl" onClick={() => void handleSaveDeposit()} disabled={savingDeposit}>
+                            {savingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeInlineEditor === "price" ? (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-total-price-inline">Total price</Label>
+                          <Input
+                            id="inspector-total-price-inline"
+                            inputMode="decimal"
+                            value={priceDraft}
+                            onChange={(event) => setPriceDraft(event.target.value.replace(/[^\d.]/g, ""))}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setActiveInlineEditor(null)} disabled={savingDeposit}>
+                            Cancel
+                          </Button>
+                          <Button className="flex-1 rounded-xl" onClick={() => void handleSavePrice()} disabled={savingDeposit}>
+                            {savingDeposit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeInlineEditor === "timing" ? (
+                      <div className="space-y-4">
+                        <div className="grid gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="inspector-service-date-inline">Service date</Label>
+                            <Input
+                              id="inspector-service-date-inline"
+                              type="date"
+                              value={serviceDate}
+                              onChange={(event) => setServiceDate(event.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="inspector-service-start-inline">Work start</Label>
+                            <ResponsiveTimeSelect
+                              id="inspector-service-start-inline"
+                              value={serviceStartTime}
+                              onChange={setServiceStartTime}
+                              options={TIME_OPTIONS}
+                              placeholder="Select a start time"
+                              useNative={preferNativeInputs}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="inspector-service-end-inline">Work end</Label>
+                            <ResponsiveTimeSelect
+                              id="inspector-service-end-inline"
+                              value={serviceEndTime}
+                              onChange={setServiceEndTime}
+                              options={TIME_OPTIONS}
+                              placeholder="No end time"
+                              useNative={preferNativeInputs}
+                              allowEmpty
+                            />
+                          </div>
+                        </div>
+                        {isMultiDayJob(appointment) ? (
+                          <div className="space-y-4 rounded-xl border border-border/60 bg-muted/[0.12] p-3">
+                            <div className="grid gap-3">
+                              <div className="space-y-2">
+                                <Label htmlFor="inspector-dropoff-date-inline">Drop-off date</Label>
+                                <Input
+                                  id="inspector-dropoff-date-inline"
+                                  type="date"
+                                  value={dropoffDate}
+                                  onChange={(event) => setDropoffDate(event.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="inspector-dropoff-time-inline">Drop-off time</Label>
+                                <ResponsiveTimeSelect
+                                  id="inspector-dropoff-time-inline"
+                                  value={dropoffTime}
+                                  onChange={setDropoffTime}
+                                  options={TIME_OPTIONS}
+                                  placeholder="Select a time"
+                                  useNative={preferNativeInputs}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="inspector-pickup-date-inline">Pickup date</Label>
+                                <Input
+                                  id="inspector-pickup-date-inline"
+                                  type="date"
+                                  value={pickupDate}
+                                  onChange={(event) => setPickupDate(event.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="inspector-pickup-time-inline">Pickup time</Label>
+                                <ResponsiveTimeSelect
+                                  id="inspector-pickup-time-inline"
+                                  value={pickupTime}
+                                  onChange={setPickupTime}
+                                  options={TIME_OPTIONS}
+                                  placeholder="Select a time"
+                                  useNative={preferNativeInputs}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="inspector-ready-date-inline">Pickup ready date</Label>
+                                <Input
+                                  id="inspector-ready-date-inline"
+                                  type="date"
+                                  value={pickupReadyDate}
+                                  onChange={(event) => setPickupReadyDate(event.target.value)}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="inspector-ready-time-inline">Pickup ready time</Label>
+                                <ResponsiveTimeSelect
+                                  id="inspector-ready-time-inline"
+                                  value={pickupReadyTime}
+                                  onChange={setPickupReadyTime}
+                                  options={TIME_OPTIONS}
+                                  placeholder="Not set"
+                                  useNative={preferNativeInputs}
+                                  allowEmpty
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setActiveInlineEditor(null)} disabled={updatingPhase}>
+                            Cancel
+                          </Button>
+                          <Button className="flex-1 rounded-xl" onClick={() => void handleSaveTiming()} disabled={updatingPhase}>
+                            {updatingPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save timing
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeInlineEditor === "details" ? (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-client-inline">Client</Label>
+                          <select
+                            id="inspector-client-inline"
+                            value={clientIdDraft}
+                            onChange={(event) => {
+                              const nextClientId = event.target.value;
+                              setClientIdDraft(nextClientId);
+                              setVehicleIdDraft("none");
+                            }}
+                            className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="internal">Internal / no client</option>
+                            <option value="loading" disabled>
+                              {clientOptionsFetching ? "Loading clients..." : "Select client"}
+                            </option>
+                            {clientOptions.map((client) => (
+                              <option key={client.id} value={client.id}>
+                                {client.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-vehicle-inline">Vehicle</Label>
+                          <select
+                            id="inspector-vehicle-inline"
+                            value={vehicleIdDraft}
+                            onChange={(event) => setVehicleIdDraft(event.target.value)}
+                            disabled={!selectedClientId || vehicleOptionsFetching}
+                            className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="none">
+                              {!selectedClientId
+                                ? "Internal / no vehicle"
+                                : vehicleOptionsFetching
+                                  ? "Loading vehicles..."
+                                  : "Select vehicle"}
+                            </option>
+                            {vehicleOptions.map((vehicle) => (
+                              <option key={vehicle.id} value={vehicle.id}>
+                                {vehicle.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-assigned-tech-inline">Assigned tech</Label>
+                          <select
+                            id="inspector-assigned-tech-inline"
+                            value={assignedStaffIdDraft}
+                            onChange={(event) => setAssignedStaffIdDraft(event.target.value)}
+                            className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="unassigned">Unassigned</option>
+                            {staffOptions.map((staff) => (
+                              <option key={staff.id} value={staff.id}>
+                                {staff.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-client-notes-inline">Client notes</Label>
+                          <Textarea
+                            id="inspector-client-notes-inline"
+                            value={notesDraft}
+                            onChange={(event) => setNotesDraft(event.target.value)}
+                            placeholder="Notes visible on the appointment"
+                            rows={4}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-internal-notes-inline">Internal notes</Label>
+                          <Textarea
+                            id="inspector-internal-notes-inline"
+                            value={internalNotesDraft}
+                            onChange={(event) => setInternalNotesDraft(event.target.value)}
+                            placeholder="Private team notes"
+                            rows={4}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setActiveInlineEditor(null)} disabled={updatingPhase}>
+                            Cancel
+                          </Button>
+                          <Button className="flex-1 rounded-xl" onClick={() => void handleSaveDetails()} disabled={updatingPhase}>
+                            {updatingPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save details
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeInlineEditor === "payment" ? (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-payment-amount-inline">Amount</Label>
+                          <Input
+                            id="inspector-payment-amount-inline"
+                            inputMode="decimal"
+                            value={paymentAmount}
+                            onChange={(event) => setPaymentAmount(event.target.value.replace(/[^\d.]/g, ""))}
+                            placeholder="0.00"
+                          />
+                          <p className="text-xs text-muted-foreground">Amount due now: {formatCurrency(effectiveCollectionAmount)}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-payment-method-inline">Method</Label>
+                          <select
+                            id="inspector-payment-method-inline"
+                            value={paymentMethod}
+                            onChange={(event) => setPaymentMethod(event.target.value)}
+                            className="flex h-11 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                          >
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="check">Check</option>
+                            <option value="venmo">Venmo</option>
+                            <option value="cashapp">CashApp</option>
+                            <option value="zelle">Zelle</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="inspector-payment-date-inline">Paid on</Label>
+                          <Input
+                            id="inspector-payment-date-inline"
+                            type="date"
+                            value={paymentDate}
+                            onChange={(event) => setPaymentDate(event.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setActiveInlineEditor(null)} disabled={recordingPayment}>
+                            Cancel
+                          </Button>
+                          <Button className="flex-1 rounded-xl" onClick={() => void handleRecordPayment()} disabled={recordingPayment}>
+                            {recordingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Mark paid
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {confirmationIntent && confirmationCopy ? (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-600">Confirm action</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">{confirmationCopy.title}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{confirmationCopy.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmationIntent(null)} disabled={confirmationCopy.busy}>
+                        Keep appointment
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1 rounded-xl"
+                        onClick={() => void confirmationCopy.run()}
+                        disabled={confirmationCopy.busy}
+                      >
+                        {confirmationCopy.busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {confirmationCopy.action}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -996,7 +1581,13 @@ export function AppointmentInspectorPanel({
           )}
         </div>
         ) : (
-          <div className="rounded-xl border border-border/60 bg-background/70 p-3">
+          <div
+            className={cn(
+              "rounded-xl border border-border/60 bg-background/70 p-3",
+              minimalChrome &&
+                "rounded-[1.35rem] border-white/75 bg-white/90 p-3.5 shadow-[0_14px_34px_rgba(15,23,42,0.07),inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-xl"
+            )}
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Services</p>
@@ -1027,6 +1618,31 @@ export function AppointmentInspectorPanel({
         </CardContent>
       </Card>
 
+      {!nativeSheetMode ? (
+      <AlertDialog open={confirmationIntent !== null} onOpenChange={(open) => !open && setConfirmationIntent(null)}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmationCopy?.title ?? "Confirm action"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmationCopy?.description ?? "Confirm this appointment action before continuing."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={confirmationCopy?.busy}>Keep appointment</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={() => void confirmationCopy?.run()}
+              disabled={!confirmationCopy || confirmationCopy.busy}
+            >
+              {confirmationCopy?.busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {confirmationCopy?.action ?? "Confirm"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      ) : null}
+
+      {!nativeSheetMode ? (
       <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1059,7 +1675,9 @@ export function AppointmentInspectorPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
 
+      {!nativeSheetMode ? (
       <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1089,7 +1707,9 @@ export function AppointmentInspectorPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
 
+      {!nativeSheetMode ? (
       <Dialog open={timingDialogOpen} onOpenChange={setTimingDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1117,7 +1737,7 @@ export function AppointmentInspectorPanel({
                   onChange={setServiceStartTime}
                   options={TIME_OPTIONS}
                   placeholder="Select a start time"
-                  useNative={false}
+                  useNative={preferNativeInputs}
                 />
               </div>
             </div>
@@ -1130,7 +1750,7 @@ export function AppointmentInspectorPanel({
                 onChange={setServiceEndTime}
                 options={TIME_OPTIONS}
                 placeholder="No end time"
-                useNative={false}
+                useNative={preferNativeInputs}
                 allowEmpty
               />
             </div>
@@ -1155,7 +1775,7 @@ export function AppointmentInspectorPanel({
                       onChange={setDropoffTime}
                       options={TIME_OPTIONS}
                       placeholder="Select a time"
-                      useNative={false}
+                      useNative={preferNativeInputs}
                     />
                   </div>
                 </div>
@@ -1177,7 +1797,7 @@ export function AppointmentInspectorPanel({
                       onChange={setPickupTime}
                       options={TIME_OPTIONS}
                       placeholder="Select a time"
-                      useNative={false}
+                      useNative={preferNativeInputs}
                     />
                   </div>
                 </div>
@@ -1199,7 +1819,7 @@ export function AppointmentInspectorPanel({
                       onChange={setPickupReadyTime}
                       options={TIME_OPTIONS}
                       placeholder="Not set"
-                      useNative={false}
+                      useNative={preferNativeInputs}
                       allowEmpty
                     />
                   </div>
@@ -1218,7 +1838,9 @@ export function AppointmentInspectorPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
 
+      {!nativeSheetMode ? (
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1327,7 +1949,9 @@ export function AppointmentInspectorPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
 
+      {!nativeSheetMode ? (
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1386,15 +2010,43 @@ export function AppointmentInspectorPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      ) : null}
     </>
   );
 }
 
-function MoneyTile({ label, value }: { label: string; value: string }) {
+function MoneyTile({ label, value, polished = false }: { label: string; value: string; polished?: boolean }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-background/80 px-2.5 py-2">
+    <div
+      className={cn(
+        "rounded-lg border border-border/60 bg-background/80 px-2.5 py-2",
+        polished && "rounded-2xl border-slate-100 bg-slate-50/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
+      )}
+    >
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
       <p className="mt-1 line-clamp-2 break-words text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function MobileInsightTile({
+  icon: Icon,
+  label,
+  value,
+  strong = false,
+}: {
+  icon: typeof Clock3;
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <p className={cn("mt-1 line-clamp-2 text-sm leading-5 text-slate-800", strong && "font-semibold text-slate-950")}>{value}</p>
     </div>
   );
 }
@@ -1421,15 +2073,23 @@ function InspectorRow({
   label,
   value,
   strong = false,
+  polished = false,
 }: {
   icon: typeof Clock3;
   label: string;
   value: string;
   strong?: boolean;
+  polished?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
-      <Icon className="mt-0.5 h-4 w-4 text-muted-foreground" />
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5",
+        polished &&
+          "min-w-0 flex-col gap-2 rounded-[1.15rem] border-slate-100 bg-white/94 px-3.5 py-3 shadow-[0_8px_20px_rgba(15,23,42,0.045),inset_0_1px_0_rgba(255,255,255,0.78)] backdrop-blur-xl"
+      )}
+    >
+      <Icon className={cn("mt-0.5 h-4 w-4 text-muted-foreground", polished && "mt-0 text-slate-500")} />
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
         <p className={cn("mt-1 line-clamp-2 break-words text-sm text-foreground", strong && "font-semibold")}>{value}</p>

@@ -16,6 +16,7 @@ import {
   Loader2,
   Sparkles,
   Package,
+  Plus,
   Search,
   X,
 } from "lucide-react";
@@ -214,6 +215,14 @@ type ServiceCatalogRecord = {
 type PackageAddonLinkRecord = {
   parentServiceId: string;
   addonServiceId: string;
+};
+
+type InlineClientRecord = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  email?: string | null;
 };
 
 function getServiceSearchHaystack(service: ServiceCatalogRecord) {
@@ -430,6 +439,15 @@ export default function NewAppointmentPage() {
   });
   const [quickVehicleError, setQuickVehicleError] = useState('');
   const [savingVehicle, setSavingVehicle] = useState(false);
+  const [quickClientOpen, setQuickClientOpen] = useState(false);
+  const [quickClientForm, setQuickClientForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+  });
+  const [quickClientError, setQuickClientError] = useState("");
+  const [createdInlineClient, setCreatedInlineClient] = useState<InlineClientRecord | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => locationIdParam ?? currentLocationId);
   const [showQuotePrefilledBadge, setShowQuotePrefilledBadge] = useState(false);
   const hasPrefilledFromQuote = useRef(false);
@@ -654,7 +672,7 @@ export default function NewAppointmentPage() {
     pause: !businessId,
   } as any);
 
-  const [{ data: clientsData, fetching: clientsFetching }] = useFindMany(
+  const [{ data: clientsData, fetching: clientsFetching }, refetchClients] = useFindMany(
     api.client,
     {
       filter: businessId
@@ -753,6 +771,7 @@ export default function NewAppointmentPage() {
   );
 
   const [, createVehicle] = useAction(api.vehicle.create);
+  const [{ fetching: creatingClient }, createClient] = useAction(api.client.create);
 
   // Derived calculations
   const { totalPrice, totalDuration } = useMemo(() => {
@@ -821,11 +840,9 @@ export default function NewAppointmentPage() {
   }, [expectedCompletionDate, jobStartDate]);
 
   const suggestedExpectedCompletionDateTime = useMemo(() => {
-    if (startDateTime && effectiveDuration > 0) {
-      return addMinutes(startDateTime, effectiveDuration);
-    }
+    if (endDateTime) return endDateTime;
     return startDateTime ?? dropOffDateTime;
-  }, [dropOffDateTime, effectiveDuration, startDateTime]);
+  }, [dropOffDateTime, endDateTime, startDateTime]);
 
   const handleMultiDayRangeChange = useCallback((range: DateRange | undefined) => {
     if (!range?.from) {
@@ -1049,6 +1066,60 @@ export default function NewAppointmentPage() {
     setSelectedVehicleId(null);
     setClientSearchOpen(false);
     setClientSearchQuery("");
+  };
+
+  const handleQuickClientFieldChange = (field: keyof typeof quickClientForm, value: string) => {
+    setQuickClientForm((current) => ({ ...current, [field]: value }));
+    if (quickClientError) setQuickClientError("");
+  };
+
+  const handleQuickAddClient = async () => {
+    if (!businessId) {
+      setQuickClientError("Business not found. Refresh and try again.");
+      return;
+    }
+    const firstName = quickClientForm.firstName.trim();
+    const lastName = quickClientForm.lastName.trim();
+    const phone = quickClientForm.phone.trim();
+    const email = quickClientForm.email.trim();
+    if (!firstName || !lastName) {
+      setQuickClientError("First and last name are required.");
+      return;
+    }
+    setQuickClientError("");
+    const result = await createClient({
+      firstName,
+      lastName,
+      ...(phone ? { phone } : {}),
+      ...(email ? { email } : {}),
+    });
+    if (result.error) {
+      setQuickClientError(result.error.message ?? "Failed to create client.");
+      return;
+    }
+    const createdClientId = (result.data as { id?: string } | null)?.id;
+    if (!createdClientId) {
+      setQuickClientError("Client saved but no record ID was returned. Please refresh and try again.");
+      return;
+    }
+
+    const createdClient = {
+      id: createdClientId,
+      firstName,
+      lastName,
+      phone: phone || null,
+      email: email || null,
+    };
+    setCreatedInlineClient(createdClient);
+    setSelectedClientId(createdClientId);
+    setSelectedVehicleId(null);
+    setIgnoreClientPrefill(true);
+    setClientSearchOpen(false);
+    setClientSearchQuery("");
+    setQuickClientOpen(false);
+    setQuickClientForm({ firstName: "", lastName: "", phone: "", email: "" });
+    await refetchClients();
+    toast.success("Client added");
   };
 
   const toggleService = (serviceId: string) => {
@@ -1322,7 +1393,8 @@ export default function NewAppointmentPage() {
   const services = useMemo(() => servicesData ?? [], [servicesData]);
   const selectedClient =
     clients.find((c) => c.id === selectedClientId) ??
-    (prefilledClientData?.id === selectedClientId ? prefilledClientData : undefined);
+    (prefilledClientData?.id === selectedClientId ? prefilledClientData : undefined) ??
+    (createdInlineClient?.id === selectedClientId ? createdInlineClient : undefined);
   const requiresServiceSelection = services.length > 0;
   const addonLinks = useMemo(
     () => (packageAddonLinks ?? []) as Array<{ parentServiceId: string; addonServiceId: string }>,
@@ -1434,88 +1506,77 @@ export default function NewAppointmentPage() {
 
   const staff = staffData ?? [];
   const isLoading = isSubmitting || actionFetching;
-  const selectedVehicleLabel = selectedClientId && selectedVehicleId
-    ? formatVehicleLabel(vehicles.find((vehicle) => vehicle.id === selectedVehicleId) as any)
-    : null;
-  const bookingSnapshot = [
-    selectedDate ? format(selectedDate, "EEE, MMM d") : "Pick a date",
-    startTime || "Set a start time",
-  ].join(" · ");
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto p-3 pb-28 sm:p-6 sm:pb-6 lg:p-8">
+    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,1))]">
+      <div className="mx-auto max-w-6xl p-3 pb-28 sm:p-6 sm:pb-6 lg:p-8">
         {hasQueueReturn ? <QueueReturnBanner href={returnTo} label="Back to appointments queue" /> : null}
-        {/* Header */}
-        <div className="mb-6 overflow-hidden rounded-[1.75rem] border border-white/70 bg-white/80 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_30px_70px_rgba(15,23,42,0.08)] backdrop-blur-md">
-          <div className="bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.24),rgba(255,255,255,0))] px-3 py-4 sm:px-6 sm:py-6">
-            <div className="flex items-center gap-3">
+        <div className="mb-5 overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/85 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_18px_42px_rgba(15,23,42,0.06)] backdrop-blur-md">
+          <div className="bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.13),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0))] px-3 py-3 sm:px-5 sm:py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
                 onClick={() => navigate(returnTo)}
-                className="shrink-0"
+                className="h-10 shrink-0 rounded-full px-3"
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Back
               </Button>
-              <div className="min-w-0">
-                <h1 className="mt-2 text-2xl font-bold tracking-tight sm:mt-3 sm:text-[2rem]">New Appointment</h1>
-                {selectedLocationId && locationsData?.some((location) => location.id === selectedLocationId) ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Defaulting to {locationsData.find((location) => location.id === selectedLocationId)?.name ?? "current location"}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-4 grid gap-2.5 grid-cols-2 xl:grid-cols-4 sm:mt-5 sm:gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Client</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedClient ? `${selectedClient.firstName} ${selectedClient.lastName}` : "Select"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedVehicleLabel || "Select"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedServiceIds.length > 0 ? `${selectedServiceIds.length} selected` : "Select"}
-                </p>
-                {totalDuration > 0 ? <p className="mt-1 text-xs text-muted-foreground">{formatDuration(totalDuration)}</p> : null}
-              </div>
-              <div className="rounded-2xl border border-white/70 bg-white/72 px-3 py-2.5 sm:px-4 sm:py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Run of show</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{bookingSnapshot}</p>
-                {endDateTime ? <p className="mt-1 text-xs text-muted-foreground">Ends {format(endDateTime, "h:mm a")}</p> : null}
-              </div>
+              {selectedLocationId && locationsData?.some((location) => location.id === selectedLocationId) ? (
+                <span className="rounded-full border border-white/80 bg-white/80 px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm">
+                  {locationsData.find((location) => location.id === selectedLocationId)?.name ?? "Current location"}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
           {/* Error alert */}
           {formError && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="lg:col-span-2">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{formError}</AlertDescription>
             </Alert>
           )}
 
+          <div className="min-w-0 space-y-5">
+
           {/* Section: Client & Vehicle */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+            <CardHeader className="border-b border-border/60 bg-slate-50/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base font-semibold">
                 Client &amp; Vehicle
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 sm:p-5">
               {/* Client searchable select */}
               <div className="space-y-2">
-                <Label>Client</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Client</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={() => {
+                      setQuickClientOpen((open) => !open);
+                      setQuickClientError("");
+                    }}
+                  >
+                    {quickClientOpen ? (
+                      <>
+                        <X className="mr-1.5 h-3.5 w-3.5" />
+                        Cancel
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        New client
+                      </>
+                    )}
+                  </Button>
+                </div>
                 <Popover open={clientSearchOpen} onOpenChange={setClientSearchOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -1523,7 +1584,7 @@ export default function NewAppointmentPage() {
                       variant="outline"
                       role="combobox"
                       aria-expanded={clientSearchOpen}
-                      className="w-full justify-between font-normal"
+                      className="h-11 w-full justify-between rounded-xl font-normal"
                     >
                       {selectedClient
                         ? `${selectedClient.firstName} ${selectedClient.lastName}${selectedClient.phone ? ` — ${selectedClient.phone}` : ""}`
@@ -1534,7 +1595,7 @@ export default function NewAppointmentPage() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className="w-[--radix-popover-trigger-width] p-0"
+                    className="w-[--radix-popover-trigger-width] overflow-hidden rounded-2xl p-0"
                     align="start"
                     onOpenAutoFocus={(event) => event.preventDefault()}
                   >
@@ -1549,7 +1610,7 @@ export default function NewAppointmentPage() {
                           {clientsFetching
                             ? "Loading…"
                             : clients.length === 0 && !debouncedClientQuery
-                            ? "No clients yet. Create one first."
+                            ? "No clients yet. Add one below."
                             : "No clients found."}
                         </CommandEmpty>
                         <CommandGroup>
@@ -1584,6 +1645,64 @@ export default function NewAppointmentPage() {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                {quickClientOpen ? (
+                  <div className="rounded-2xl border border-orange-100 bg-orange-50/45 p-3 shadow-[0_10px_24px_rgba(249,115,22,0.08)]">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="quick-client-first-name">First name</Label>
+                        <Input
+                          id="quick-client-first-name"
+                          value={quickClientForm.firstName}
+                          onChange={(event) => handleQuickClientFieldChange("firstName", event.target.value)}
+                          placeholder="Jane"
+                          autoComplete="given-name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="quick-client-last-name">Last name</Label>
+                        <Input
+                          id="quick-client-last-name"
+                          value={quickClientForm.lastName}
+                          onChange={(event) => handleQuickClientFieldChange("lastName", event.target.value)}
+                          placeholder="Smith"
+                          autoComplete="family-name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="quick-client-phone">Phone</Label>
+                        <Input
+                          id="quick-client-phone"
+                          type="tel"
+                          value={quickClientForm.phone}
+                          onChange={(event) => handleQuickClientFieldChange("phone", event.target.value)}
+                          placeholder="(555) 000-0000"
+                          autoComplete="tel"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="quick-client-email">Email</Label>
+                        <Input
+                          id="quick-client-email"
+                          type="email"
+                          value={quickClientForm.email}
+                          onChange={(event) => handleQuickClientFieldChange("email", event.target.value)}
+                          placeholder="jane@example.com"
+                          autoComplete="email"
+                        />
+                      </div>
+                    </div>
+                    {quickClientError ? <p className="mt-3 text-xs text-destructive">{quickClientError}</p> : null}
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Button type="button" size="sm" onClick={() => void handleQuickAddClient()} disabled={creatingClient}>
+                        {creatingClient ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                        Save client
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Saves the customer here, then keeps you on this appointment.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* Vehicle select */}
@@ -1597,7 +1716,7 @@ export default function NewAppointmentPage() {
                   </Alert>
                 )}
                 {!selectedClientId ? (
-                  <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                  <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
                     Leave client and vehicle blank to create an internal time block or reminder. Pick a client first if this should be attached to a real customer job.
                   </div>
                 ) : vehiclesFetching ? (
@@ -1605,7 +1724,7 @@ export default function NewAppointmentPage() {
                     Loading vehicles...
                   </p>
                 ) : vehicles.length === 0 ? (
-                  <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                  <div className="space-y-3 rounded-2xl border bg-muted/30 p-3">
                     <p className="text-sm text-muted-foreground italic">
                       No vehicles on file for this client. Add one now if you want to link the appointment to a vehicle.
                     </p>
@@ -1625,7 +1744,7 @@ export default function NewAppointmentPage() {
                       if (val) setVehicleError(null);
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue placeholder="Select a vehicle..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -1643,11 +1762,11 @@ export default function NewAppointmentPage() {
           </Card>
 
           {/* Section: Services */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+            <CardHeader className="border-b border-border/60 bg-slate-50/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base font-semibold">Services</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-5">
               {servicesFetching ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1659,18 +1778,16 @@ export default function NewAppointmentPage() {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  <div className="rounded-xl border border-border/70 bg-background p-3 sm:p-4">
+                  <div className="rounded-2xl border border-border/70 bg-slate-50/70 p-3 sm:p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <p className="text-sm font-medium">Find services</p>
-                      </div>
+                      <p className="text-sm font-medium">Find services</p>
                       <div className="relative w-full lg:max-w-xs">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                           value={serviceSearchQuery}
                           onChange={(event) => setServiceSearchQuery(event.target.value)}
                           placeholder="Search services, notes, or category..."
-                          className="pl-9"
+                          className="h-10 rounded-xl bg-white pl-9"
                         />
                       </div>
                     </div>
@@ -1681,7 +1798,7 @@ export default function NewAppointmentPage() {
                             key={service.id}
                             type="button"
                             onClick={() => toggleService(service.id)}
-                            className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-primary/10"
+                            className="inline-flex min-h-9 items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-primary/10"
                           >
                             <span>{service.name}</span>
                               <span className="text-xs text-muted-foreground">
@@ -1711,88 +1828,104 @@ export default function NewAppointmentPage() {
                     )}
                   </div>
 
-                  {recommendedPackageTemplates.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-sm font-medium text-muted-foreground">Recommended packages</p>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {recommendedPackageTemplates.map((pkg) => (
-                          <button
-                            key={pkg.baseService.id}
-                            type="button"
-                            onClick={() =>
-                              applyPackageTemplate(
-                                pkg.baseService.id,
-                                pkg.linkedAddons.map((addon) => addon!.id)
-                              )
-                            }
-                            className="rounded-xl border border-border/70 bg-card p-4 text-left transition-colors hover:bg-muted/30"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold">{pkg.baseService.name}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
-                                </p>
+                  {recommendedPackageTemplates.length + otherPackageTemplates.length > 0 && (
+                    <Accordion type="single" collapsible className="rounded-2xl border border-border/70 bg-card px-3 sm:px-4">
+                      <AccordionItem value="packages" className="border-b-0">
+                        <AccordionTrigger className="py-4 hover:no-underline">
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                              <Package className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0 text-left">
+                              <p className="text-sm font-semibold text-foreground">Packages</p>
+                              <p className="text-xs text-muted-foreground">
+                                {recommendedPackageTemplates.length + otherPackageTemplates.length} template
+                                {recommendedPackageTemplates.length + otherPackageTemplates.length === 1 ? "" : "s"} available
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-4 pb-4">
+                          {recommendedPackageTemplates.length > 0 ? (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Recommended</p>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                {recommendedPackageTemplates.map((pkg) => (
+                                  <button
+                                    key={pkg.baseService.id}
+                                    type="button"
+                                    onClick={() =>
+                                      applyPackageTemplate(
+                                        pkg.baseService.id,
+                                        pkg.linkedAddons.map((addon) => addon!.id)
+                                      )
+                                    }
+                                    className="rounded-2xl border border-border/70 bg-background p-4 text-left shadow-sm transition-colors hover:bg-muted/30"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-semibold">{pkg.baseService.name}</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
+                                        </p>
+                                      </div>
+                                      <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                      <span>{pkg.totalPackageDuration > 0 ? formatDuration(pkg.totalPackageDuration) : "Custom duration"}</span>
+                                      <span>·</span>
+                                      <span>${pkg.totalPackagePrice.toFixed(2)}</span>
+                                    </div>
+                                    <p className="mt-3 text-xs text-muted-foreground">
+                                      Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
+                                    </p>
+                                  </button>
+                                ))}
                               </div>
-                              <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              <span>{pkg.totalPackageDuration > 0 ? formatDuration(pkg.totalPackageDuration) : "Custom duration"}</span>
-                              <span>·</span>
-                              <span>${pkg.totalPackagePrice.toFixed(2)}</span>
-                            </div>
-                            <p className="mt-3 text-xs text-muted-foreground">
-                              Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                          ) : null}
 
-                  {otherPackageTemplates.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-muted-foreground" />
-                        <p className="text-sm font-medium text-muted-foreground">Other package templates</p>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {otherPackageTemplates.map((pkg) => (
-                          <button
-                            key={pkg.baseService.id}
-                            type="button"
-                            onClick={() =>
-                              applyPackageTemplate(
-                                pkg.baseService.id,
-                                pkg.linkedAddons.map((addon) => addon!.id)
-                              )
-                            }
-                            className="rounded-xl border border-border/70 bg-card p-4 text-left transition-colors hover:bg-muted/30"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold">{pkg.baseService.name}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
-                                </p>
+                          {otherPackageTemplates.length > 0 ? (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Other packages</p>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                {otherPackageTemplates.map((pkg) => (
+                                  <button
+                                    key={pkg.baseService.id}
+                                    type="button"
+                                    onClick={() =>
+                                      applyPackageTemplate(
+                                        pkg.baseService.id,
+                                        pkg.linkedAddons.map((addon) => addon!.id)
+                                      )
+                                    }
+                                    className="rounded-2xl border border-border/70 bg-background p-4 text-left shadow-sm transition-colors hover:bg-muted/30"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <p className="text-sm font-semibold">{pkg.baseService.name}</p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {pkg.baseService.categoryLabel ?? formatServiceCategory(pkg.baseService.category)} · {pkg.linkedAddons.length + 1} services
+                                        </p>
+                                      </div>
+                                      <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                      <span>{pkg.totalPackageDuration > 0 ? formatDuration(pkg.totalPackageDuration) : "Custom duration"}</span>
+                                      <span>·</span>
+                                      <span>${pkg.totalPackagePrice.toFixed(2)}</span>
+                                    </div>
+                                    <p className="mt-3 text-xs text-muted-foreground">
+                                      Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
+                                    </p>
+                                  </button>
+                                ))}
                               </div>
-                              <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              <span>{pkg.totalPackageDuration > 0 ? formatDuration(pkg.totalPackageDuration) : "Custom duration"}</span>
-                              <span>·</span>
-                              <span>${pkg.totalPackagePrice.toFixed(2)}</span>
-                            </div>
-                            <p className="mt-3 text-xs text-muted-foreground">
-                              Includes {pkg.linkedAddons.map((addon) => addon?.name).join(", ")}.
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                          ) : null}
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   )}
 
                   {directServiceSearchResults.length > 0 ? (
@@ -1811,7 +1944,7 @@ export default function NewAppointmentPage() {
                               key={service.id}
                               type="button"
                               className={cn(
-                                "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
+                                "flex min-h-[64px] w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors",
                                 isSelected
                                   ? "border-primary bg-primary/5"
                                   : "border-border bg-card hover:bg-muted/40"
@@ -1849,7 +1982,7 @@ export default function NewAppointmentPage() {
                       type="multiple"
                       value={expandedServiceCategories}
                       onValueChange={setExpandedServiceCategories}
-                      className="rounded-xl border border-border/70 bg-card px-3 sm:px-4"
+                      className="rounded-2xl border border-border/70 bg-card px-3 sm:px-4"
                     >
                       {groupedServices.map((group) => {
                         const selectedCount = group.services.filter((service) => selectedServiceIds.includes(service.id)).length;
@@ -1878,7 +2011,7 @@ export default function NewAppointmentPage() {
                                   <div
                                     key={service.id}
                                     className={cn(
-                                      "flex select-none items-center gap-3 rounded-lg border p-3 transition-colors",
+                                      "flex min-h-[60px] select-none items-center gap-3 rounded-xl border p-3 transition-colors",
                                       isSelected
                                         ? "border-primary bg-primary/5"
                                         : "border-border hover:bg-muted/40"
@@ -1965,7 +2098,7 @@ export default function NewAppointmentPage() {
               )}
 
               {selectedServiceIds.length > 0 && (
-                <div className="mt-4 rounded-[1.1rem] border border-primary/20 bg-primary/[0.04] p-4">
+                <div className="mt-4 rounded-[1.25rem] border border-primary/20 bg-primary/[0.04] p-4">
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Services selected</p>
@@ -1991,7 +2124,7 @@ export default function NewAppointmentPage() {
                         {selectedServices.map((service) => (
                           <div
                             key={`service-price-${service.id}`}
-                            className="grid gap-3 rounded-xl border border-border/70 bg-background/80 p-3"
+                            className="grid gap-3 rounded-2xl border border-border/70 bg-background/80 p-3"
                           >
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-foreground">{service.name}</p>
@@ -2031,11 +2164,11 @@ export default function NewAppointmentPage() {
           </Card>
 
           {/* Section: Schedule */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+            <CardHeader className="border-b border-border/60 bg-slate-50/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base font-semibold">Schedule</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 sm:p-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Date picker */}
                 <div className="space-y-2">
@@ -2048,7 +2181,7 @@ export default function NewAppointmentPage() {
                         type="button"
                         variant="outline"
                         className={cn(
-                          "w-full justify-start text-left font-normal",
+                          "h-11 w-full justify-start rounded-xl text-left font-normal",
                           !selectedDate && "text-muted-foreground"
                         )}
                       >
@@ -2059,7 +2192,7 @@ export default function NewAppointmentPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent
-                      className="w-auto p-0"
+                      className="w-auto overflow-hidden rounded-2xl p-0"
                       align="start"
                       onOpenAutoFocus={(event) => event.preventDefault()}
                     >
@@ -2123,7 +2256,7 @@ export default function NewAppointmentPage() {
                     <button
                       type="button"
                       className={cn(
-                        "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                        "flex min-h-[86px] items-start gap-3 rounded-2xl border p-3 text-left transition-colors",
                         !isMultiDayJob ? "border-primary bg-primary/5" : "border-border bg-background"
                       )}
                       onClick={() => setIsMultiDayJob(false)}
@@ -2139,7 +2272,7 @@ export default function NewAppointmentPage() {
                     <button
                       type="button"
                       className={cn(
-                        "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                        "flex min-h-[86px] items-start gap-3 rounded-2xl border p-3 text-left transition-colors",
                         isMultiDayJob ? "border-primary bg-primary/5" : "border-border bg-background"
                       )}
                       onClick={handleEnableMultiDayJob}
@@ -2156,40 +2289,49 @@ export default function NewAppointmentPage() {
                 </div>
 
                 {isMultiDayJob ? (
-                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/10 p-4 sm:col-span-2">
-                    <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-4 rounded-[1.25rem] border border-border/70 bg-muted/10 p-3.5 sm:col-span-2 sm:p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">Multi-day job timeline</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Drop-off and pickup are the main anchors. The active work window stays tied to the date and time above.
                         </p>
                       </div>
-                      <Badge variant="secondary" className="shrink-0">
+                      <Badge variant="secondary" className="w-fit shrink-0">
                         In shop
                       </Badge>
                     </div>
 
-                    <div className="space-y-3 rounded-xl border border-border/60 bg-background/90 p-3">
-                      <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-3 rounded-2xl border border-border/60 bg-background/90 p-2.5 sm:p-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Shop stay</p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             Tap the drop-off day first, then the pickup day. The calendar will highlight the full in-shop span.
                           </p>
                         </div>
-                        <div className="text-right text-[11px] text-muted-foreground">
+                        <div className="rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2 text-[11px] text-muted-foreground sm:text-right">
                           <p>{dropOffDateTime ? `Drop-off ${format(dropOffDateTime, "MMM d")}` : "Pick drop-off"}</p>
                           <p>{pickupDateTime ? `Pickup ${format(pickupDateTime, "MMM d")}` : "Pick pickup"}</p>
                         </div>
                       </div>
-                      <div className="overflow-hidden rounded-xl border border-border/60">
+                      <div className="overflow-hidden rounded-xl border border-border/60 bg-background">
                         <Calendar
                           mode="range"
                           selected={multiDayDateRange}
                           onSelect={handleMultiDayRangeChange}
                           defaultMonth={multiDayDateRange?.from ?? selectedDate ?? new Date()}
                           numberOfMonths={isSmallViewport ? 1 : 2}
-                          className="w-full p-2"
+                          className="w-full p-1 sm:p-2 [--cell-size:2.5rem] sm:[--cell-size:2.75rem]"
+                          classNames={{
+                            root: "w-full",
+                            months: "flex flex-col gap-3 md:flex-row",
+                            month: "w-full gap-3",
+                            table: "w-full table-fixed border-collapse",
+                            month_caption: "flex h-(--cell-size) w-full items-center justify-center px-9 sm:px-(--cell-size)",
+                            nav: "absolute inset-x-0 top-0 flex w-full items-center justify-between gap-1",
+                            weekday: "flex-1 rounded-md text-[0.68rem] font-medium text-muted-foreground sm:text-[0.8rem]",
+                          }}
                         />
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -2418,7 +2560,7 @@ export default function NewAppointmentPage() {
                       setSelectedLocationId(val === "none" ? null : val)
                     }
                   >
-                    <SelectTrigger>
+                        <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue placeholder="Any / No Location" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2455,17 +2597,17 @@ export default function NewAppointmentPage() {
           </Card>
 
           {/* Section: Details */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+            <CardHeader className="border-b border-border/60 bg-slate-50/60 px-4 py-4 sm:px-5">
               <CardTitle className="text-base font-semibold">
                 Additional Details
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 sm:p-5">
               {/* Is Mobile */}
               <div
                 className={cn(
-                  "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  "flex min-h-[72px] cursor-pointer items-start gap-3 rounded-2xl border p-3 transition-colors",
                   isMobile ? "border-primary bg-primary/5" : "border-border"
                 )}
                 onClick={() => {
@@ -2501,7 +2643,7 @@ export default function NewAppointmentPage() {
                       placeholder="Enter the service address..."
                       value={mobileAddress}
                       onChange={(e) => setMobileAddress(e.target.value)}
-                      className="pl-9 min-h-[80px] resize-none"
+                      className="min-h-[92px] resize-none rounded-xl pl-9"
                     />
                   </div>
                 </div>
@@ -2520,7 +2662,7 @@ export default function NewAppointmentPage() {
                       placeholder="0.00"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
-                      className="pl-9"
+                      className="h-11 rounded-xl pl-9"
                     />
                   </div>
                 </div>
@@ -2566,6 +2708,7 @@ export default function NewAppointmentPage() {
                       value={taxRate}
                       onChange={(e) => setTaxRate(e.target.value)}
                       disabled={!applyTax}
+                      className="h-11 rounded-xl"
                     />
                   </div>
                 </div>
@@ -2591,7 +2734,7 @@ export default function NewAppointmentPage() {
                         value={adminFeeRate}
                         onChange={(e) => setAdminFeeRate(e.target.value)}
                         disabled={!applyAdminFee}
-                        className="rounded-r-none"
+                        className="h-11 rounded-r-none"
                       />
                       <span className="inline-flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-sm text-muted-foreground">
                         %
@@ -2607,7 +2750,7 @@ export default function NewAppointmentPage() {
                     placeholder="Notes about this appointment (visible to client)..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="min-h-[80px] resize-none"
+                    className="min-h-[92px] resize-none rounded-xl"
                   />
                 </div>
 
@@ -2618,22 +2761,23 @@ export default function NewAppointmentPage() {
                     placeholder="Internal notes (not visible to client)..."
                     value={internalNotes}
                     onChange={(e) => setInternalNotes(e.target.value)}
-                    className="min-h-[80px] resize-none"
+                    className="min-h-[92px] resize-none rounded-xl"
                   />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Summary card */}
-          {(selectedServiceIds.length > 0 || startDateTime) && (
-            <Card className="border-primary/30 bg-primary/5">
-              <CardHeader className="pb-3">
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-4">
+            <Card className="overflow-hidden rounded-[1.35rem] border-primary/25 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+              <CardHeader className="border-b border-primary/15 bg-primary/[0.04] px-4 py-4">
                 <CardTitle className="text-base font-semibold">
-                  Appointment Summary
+                  Booking summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+              <CardContent className="space-y-3 p-4 text-sm">
                 {selectedClient && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Client</span>
@@ -2711,32 +2855,48 @@ export default function NewAppointmentPage() {
                     </div>
                   </>
                 )}
+                {!selectedServiceIds.length && !startDateTime ? (
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+                    Pick services and a date to build the booking total.
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
-          )}
 
-          {/* Actions */}
-          <div className="flex items-center justify-between gap-4 pb-8">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(returnTo)}
-              disabled={isLoading}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              Back
-            </Button>
-            <Button type="submit" disabled={isLoading} className="min-w-[140px]">
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Appointment"
-              )}
-            </Button>
-          </div>
+            <Card className="rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+              <CardContent className="space-y-3 p-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Duration</p>
+                    <p className="mt-1 text-lg font-semibold">{totalDuration > 0 ? formatDuration(totalDuration) : "TBD"}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+                    <p className="mt-1 text-lg font-semibold">${appointmentTotal.toFixed(2)}</p>
+                  </div>
+                </div>
+                <Button type="submit" disabled={isLoading} className="h-11 w-full rounded-xl">
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Appointment"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate(returnTo)}
+                  disabled={isLoading}
+                  className="h-11 w-full rounded-xl"
+                >
+                  Back
+                </Button>
+              </CardContent>
+            </Card>
+          </aside>
 
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
             <div className="mx-auto flex max-w-3xl items-center gap-3">

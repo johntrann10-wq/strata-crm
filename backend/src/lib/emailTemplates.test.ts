@@ -24,4 +24,9 @@ describe("builtin email templates", () => {
     expect(getBuiltinTemplate("booking_request_received")?.bodyText).toContain("What happens next");
     expect(getBuiltinTemplate("booking_request_owner_update")?.bodyText).toContain("Confirmed timing");
   });
+
+  it("keeps client-facing quote email HTML free of raw customer hub links", () => {
+    expect(getBuiltinTemplate("quote_sent")?.bodyHtml).not.toContain("{{portalUrl}}");
+    expect(getBuiltinTemplate("quote_follow_up")?.bodyHtml).not.toContain("{{portalUrl}}");
+  });
 });

@@ -1,7 +1,9 @@
-import { isRouteErrorResponse, Link, Outlet, useLocation, useOutletContext, useRouteError } from "react-router";
+import { isRouteErrorResponse, Link, Navigate, Outlet, useLocation, useOutletContext, useRouteError } from "react-router";
 import { Navigation } from "@/components/public/nav";
 import { buttonVariants } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { getAuthToken } from "@/lib/auth";
+import { isNativeShell } from "@/lib/mobileShell";
 import { categorySeoPages, comparisonSeoPages, featureSeoPages } from "@/lib/seoPages";
 import { cn } from "@/lib/utils";
 import type { RootOutletContext } from "../root";
@@ -18,6 +20,14 @@ export default function PublicLayout() {
     location.pathname.startsWith("/lead/") ||
     location.pathname.startsWith("/book/") ||
     location.pathname.startsWith("/booking-request/");
+  const isLegalRoute = location.pathname === "/privacy" || location.pathname === "/terms";
+  const isAllowedPublicRouteInNative = isStandalonePublicFlow || isLegalRoute;
+  const shouldBypassMarketingInNative = isNativeShell() && !isAllowedPublicRouteInNative;
+
+  if (shouldBypassMarketingInNative) {
+    const authToken = getAuthToken();
+    return <Navigate to={authToken ? "/signed-in" : "/sign-in"} replace />;
+  }
 
   return (
     <div className="flex h-full flex-col">

@@ -4,6 +4,16 @@ import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+function hasNamedDialogChild(children: React.ReactNode, names: string[]): boolean {
+  return React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) return false;
+    const elementType = child.type as { displayName?: string; name?: string };
+    const displayName = elementType.displayName ?? elementType.name;
+    if (displayName && names.includes(displayName)) return true;
+    return hasNamedDialogChild(child.props.children, names);
+  });
+}
+
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
@@ -41,22 +51,30 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  const hasTitle = hasNamedDialogChild(children, ["DialogTitle"]);
+  const hasDescription = hasNamedDialogChild(children, ["DialogDescription"]);
+  const contentProps = {
+    ...props,
+    ...(props["aria-describedby"] === undefined && !hasDescription ? { "aria-describedby": undefined } : {}),
+  };
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100vh-1rem)] w-full max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-[-50%] gap-5 overflow-y-auto rounded-2xl border border-border/80 p-4 shadow-[0_20px_60px_rgba(15,23,42,0.2)] duration-200 sm:max-h-[calc(100vh-2rem)] sm:max-w-xl sm:p-6",
+          "app-native-scroll bg-background/98 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[calc(100svh-1rem)] w-full max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-[-50%] gap-5 overflow-y-auto rounded-2xl border border-border/80 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_20px_60px_rgba(15,23,42,0.2)] duration-200 sm:max-h-[calc(100svh-2rem)] sm:max-w-xl sm:p-6",
           className
         )}
-        {...props}
+        {...contentProps}
       >
+        {!hasTitle ? <DialogTitle className="sr-only">Dialog</DialogTitle> : null}
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-lg border border-transparent bg-background/80 p-1.5 opacity-80 transition hover:border-border hover:bg-accent focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-3 right-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-background/88 opacity-80 transition hover:border-border hover:bg-accent focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>

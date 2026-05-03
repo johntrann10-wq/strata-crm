@@ -35,8 +35,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
-import { PageHeader } from "../components/shared/PageHeader";
 import { cn } from "@/lib/utils";
+import { buildPublicBookingUrl, openExternalUrl } from "@/lib/publicAppUrl";
+import { shareNativeContent, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 import {
   defaultBookingBranding,
   type BookingBrandAccentColorToken,
@@ -48,11 +49,13 @@ import {
   ArrowDown,
   ArrowUp,
   CalendarCheck2,
+  ChevronDown,
   ExternalLink,
   FolderKanban,
   Package,
   Pencil,
   Plus,
+  Share2,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -60,6 +63,7 @@ import { toast } from "sonner";
 import { formatServiceCategory } from "../lib/serviceCatalog";
 import { QuarterHourDurationGrid } from "../components/appointments/SchedulingControls";
 import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
+import type { BookingDailyHoursEntry } from "../lib/businessSettingsForm";
 
 const UNCATEGORIZED_VALUE = "__uncategorized__";
 
@@ -86,6 +90,7 @@ type ServiceRecord = {
   bookingAvailableDays: number[] | null;
   bookingAvailableStartTime: string | null;
   bookingAvailableEndTime: string | null;
+  bookingDailyHours: BookingDailyHoursEntry[] | null;
   bookingBufferMinutes: number | null;
   bookingCapacityPerSlot: number | null;
   bookingFeatured: boolean | null;
@@ -117,6 +122,7 @@ type BusinessBookingSettings = {
   bookingAvailableDays: number[];
   bookingAvailableStartTime: string;
   bookingAvailableEndTime: string;
+  bookingDailyHours: BookingDailyHoursEntry[];
   bookingBlackoutDatesText: string;
   bookingSlotIntervalMinutes: number;
   bookingBufferMinutes: string;
@@ -157,6 +163,7 @@ type ServiceFormData = {
   bookingAvailableDays: number[];
   bookingAvailableStartTime: string;
   bookingAvailableEndTime: string;
+  bookingDailyHours: BookingDailyHoursEntry[];
   bookingBufferMinutes: string;
   bookingCapacityPerSlot: string;
   bookingFeatured: boolean;
@@ -182,6 +189,7 @@ const defaultServiceFormData: ServiceFormData = {
   bookingAvailableDays: [],
   bookingAvailableStartTime: "",
   bookingAvailableEndTime: "",
+  bookingDailyHours: [],
   bookingBufferMinutes: "",
   bookingCapacityPerSlot: "",
   bookingFeatured: false,
@@ -213,6 +221,7 @@ const defaultBookingSettings: BusinessBookingSettings = {
   bookingAvailableDays: [1, 2, 3, 4, 5],
   bookingAvailableStartTime: "09:00",
   bookingAvailableEndTime: "19:00",
+  bookingDailyHours: [],
   bookingBlackoutDatesText: "",
   bookingSlotIntervalMinutes: 15,
   bookingBufferMinutes: "",
@@ -229,6 +238,66 @@ const BOOKING_DAY_OPTIONS = [
   { value: 6, label: "Sat" },
   { value: 0, label: "Sun" },
 ] as const;
+
+const DEFAULT_BOOKING_OPEN_TIME = "09:00";
+const DEFAULT_BOOKING_CLOSE_TIME = "19:00";
+
+function normalizeBookingDailyHours(
+  value: unknown,
+  fallbackDays: number[] = [1, 2, 3, 4, 5],
+  fallbackOpen = DEFAULT_BOOKING_OPEN_TIME,
+  fallbackClose = DEFAULT_BOOKING_CLOSE_TIME
+): BookingDailyHoursEntry[] {
+  const source = Array.isArray(value) ? value : [];
+  const byDay = new Map<number, BookingDailyHoursEntry>();
+  for (const item of source) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as { dayIndex?: unknown; enabled?: unknown; openTime?: unknown; closeTime?: unknown };
+    const dayIndex = Number(entry.dayIndex);
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) continue;
+    const openTime = typeof entry.openTime === "string" && entry.openTime ? entry.openTime : fallbackOpen;
+    const closeTime = typeof entry.closeTime === "string" && entry.closeTime ? entry.closeTime : fallbackClose;
+    byDay.set(dayIndex, {
+      dayIndex,
+      enabled: entry.enabled === false ? false : true,
+      openTime,
+      closeTime,
+    });
+  }
+  for (const day of BOOKING_DAY_OPTIONS) {
+    if (!byDay.has(day.value)) {
+      byDay.set(day.value, {
+        dayIndex: day.value,
+        enabled: fallbackDays.includes(day.value),
+        openTime: fallbackOpen,
+        closeTime: fallbackClose,
+      });
+    }
+  }
+  return BOOKING_DAY_OPTIONS.map((day) => byDay.get(day.value)!);
+}
+
+function bookingDailyHoursMatch(left: BookingDailyHoursEntry[], right: BookingDailyHoursEntry[]): boolean {
+  const normalizedLeft = normalizeBookingDailyHours(left);
+  const normalizedRight = normalizeBookingDailyHours(right);
+  return normalizedLeft.every((entry, index) => {
+    const other = normalizedRight[index];
+    return (
+      other &&
+      entry.dayIndex === other.dayIndex &&
+      entry.enabled === other.enabled &&
+      entry.openTime === other.openTime &&
+      entry.closeTime === other.closeTime
+    );
+  });
+}
+
+function bookingDaysFromDailyHours(value: BookingDailyHoursEntry[]): number[] {
+  return normalizeBookingDailyHours(value)
+    .filter((entry) => entry.enabled)
+    .map((entry) => entry.dayIndex)
+    .sort((left, right) => left - right);
+}
 
 function formatBookingDaySummary(days: number[] | null | undefined): string {
   const normalized = Array.isArray(days) ? [...new Set(days)] : [];
@@ -294,44 +363,80 @@ function formatDuration(minutes: number | null): string {
 }
 
 function buildServiceFormDefaults(
-  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+  bookingSettings: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >
 ): ServiceFormData {
+  const bookingDailyHours = normalizeBookingDailyHours(
+    bookingSettings.bookingDailyHours,
+    bookingSettings.bookingAvailableDays,
+    bookingSettings.bookingAvailableStartTime,
+    bookingSettings.bookingAvailableEndTime
+  );
   return {
     ...defaultServiceFormData,
     bookingAvailableDays: [...bookingSettings.bookingAvailableDays],
     bookingAvailableStartTime: bookingSettings.bookingAvailableStartTime,
     bookingAvailableEndTime: bookingSettings.bookingAvailableEndTime,
+    bookingDailyHours,
   };
 }
 
-function dayIndexesMatch(left: number[], right: number[]) {
-  if (left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
-}
-
 function buildInheritedAvailabilityPayload(
-  formData: Pick<ServiceFormData, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">,
-  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+  formData: Pick<
+    ServiceFormData,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >,
+  bookingSettings: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >
 ) {
+  const normalizedFormHours = normalizeBookingDailyHours(
+    formData.bookingDailyHours,
+    formData.bookingAvailableDays,
+    formData.bookingAvailableStartTime,
+    formData.bookingAvailableEndTime
+  );
+  const normalizedBusinessHours = normalizeBookingDailyHours(
+    bookingSettings.bookingDailyHours,
+    bookingSettings.bookingAvailableDays,
+    bookingSettings.bookingAvailableStartTime,
+    bookingSettings.bookingAvailableEndTime
+  );
+  const usesBusinessHours = bookingDailyHoursMatch(normalizedFormHours, normalizedBusinessHours);
+  const enabledDays = bookingDaysFromDailyHours(normalizedFormHours);
   return {
-    bookingAvailableDays: dayIndexesMatch(formData.bookingAvailableDays, bookingSettings.bookingAvailableDays)
-      ? []
-      : formData.bookingAvailableDays,
-    bookingAvailableStartTime:
-      formData.bookingAvailableStartTime === bookingSettings.bookingAvailableStartTime
-        ? null
-        : formData.bookingAvailableStartTime || null,
-    bookingAvailableEndTime:
-      formData.bookingAvailableEndTime === bookingSettings.bookingAvailableEndTime
-        ? null
-        : formData.bookingAvailableEndTime || null,
+    bookingAvailableDays: usesBusinessHours ? [] : enabledDays,
+    bookingAvailableStartTime: null,
+    bookingAvailableEndTime: null,
+    bookingDailyHours: usesBusinessHours ? null : normalizedFormHours,
   };
 }
 
 function serviceToFormData(
   service: ServiceRecord,
-  bookingSettings: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">
+  bookingSettings: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >
 ): ServiceFormData {
+  const businessDailyHours = normalizeBookingDailyHours(
+    bookingSettings.bookingDailyHours,
+    bookingSettings.bookingAvailableDays,
+    bookingSettings.bookingAvailableStartTime,
+    bookingSettings.bookingAvailableEndTime
+  );
+  const serviceDailyHours = Array.isArray(service.bookingDailyHours) && service.bookingDailyHours.length > 0
+    ? normalizeBookingDailyHours(
+        service.bookingDailyHours,
+        service.bookingAvailableDays ?? bookingSettings.bookingAvailableDays,
+        service.bookingAvailableStartTime ?? bookingSettings.bookingAvailableStartTime,
+        service.bookingAvailableEndTime ?? bookingSettings.bookingAvailableEndTime
+      )
+    : businessDailyHours;
+  const serviceAvailableDays = bookingDaysFromDailyHours(serviceDailyHours);
   return {
     name: service.name ?? "",
     price: service.price != null ? String(service.price) : "",
@@ -350,12 +455,10 @@ function serviceToFormData(
     bookingLeadTimeHours: String(service.bookingLeadTimeHours ?? 0),
     bookingWindowDays: String(service.bookingWindowDays ?? 30),
     bookingServiceMode: service.bookingServiceMode ?? "in_shop",
-    bookingAvailableDays:
-      Array.isArray(service.bookingAvailableDays) && service.bookingAvailableDays.length > 0
-        ? service.bookingAvailableDays
-        : [...bookingSettings.bookingAvailableDays],
-    bookingAvailableStartTime: service.bookingAvailableStartTime ?? bookingSettings.bookingAvailableStartTime,
-    bookingAvailableEndTime: service.bookingAvailableEndTime ?? bookingSettings.bookingAvailableEndTime,
+    bookingAvailableDays: serviceAvailableDays,
+    bookingAvailableStartTime: serviceDailyHours.find((entry) => entry.enabled)?.openTime ?? bookingSettings.bookingAvailableStartTime,
+    bookingAvailableEndTime: serviceDailyHours.find((entry) => entry.enabled)?.closeTime ?? bookingSettings.bookingAvailableEndTime,
+    bookingDailyHours: serviceDailyHours,
     bookingBufferMinutes:
       service.bookingBufferMinutes != null && Number(service.bookingBufferMinutes) >= 0
         ? String(service.bookingBufferMinutes)
@@ -406,9 +509,18 @@ function businessToBookingSettings(record: Partial<BusinessBookingSettings> | nu
         ? [...new Set((record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays)]
         : [1, 2, 3, 4, 5],
     bookingAvailableStartTime:
-      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? "09:00",
+      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? DEFAULT_BOOKING_OPEN_TIME,
     bookingAvailableEndTime:
-      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? "19:00",
+      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? DEFAULT_BOOKING_CLOSE_TIME,
+    bookingDailyHours: normalizeBookingDailyHours(
+      (record as { bookingDailyHours?: unknown })?.bookingDailyHours,
+      Array.isArray((record as { bookingAvailableDays?: number[] | null })?.bookingAvailableDays) &&
+        (record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays!.length > 0
+        ? [...new Set((record as { bookingAvailableDays?: number[] | null }).bookingAvailableDays)]
+        : [1, 2, 3, 4, 5],
+      (record as { bookingAvailableStartTime?: string | null })?.bookingAvailableStartTime ?? DEFAULT_BOOKING_OPEN_TIME,
+      (record as { bookingAvailableEndTime?: string | null })?.bookingAvailableEndTime ?? DEFAULT_BOOKING_CLOSE_TIME
+    ),
     bookingBlackoutDatesText: Array.isArray((record as { bookingBlackoutDates?: string[] | null })?.bookingBlackoutDates)
       ? ((record as { bookingBlackoutDates?: string[] | null }).bookingBlackoutDates ?? []).join("\n")
       : "",
@@ -577,104 +689,138 @@ function ServiceForm({
   formData: ServiceFormData;
   onChange: (data: ServiceFormData) => void;
   categoryOptions: Array<{ value: string; label: string }>;
-  bookingDefaults: Pick<BusinessBookingSettings, "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime">;
+  bookingDefaults: Pick<
+    BusinessBookingSettings,
+    "bookingAvailableDays" | "bookingAvailableStartTime" | "bookingAvailableEndTime" | "bookingDailyHours"
+  >;
 }) {
-  const bookingDefaultsLabel = `${formatBookingDaySummary(bookingDefaults.bookingAvailableDays)} • ${
+  const [bookingDetailsOpen, setBookingDetailsOpen] = useState(false);
+  const normalizedBusinessHours = normalizeBookingDailyHours(
+    bookingDefaults.bookingDailyHours,
+    bookingDefaults.bookingAvailableDays,
+    bookingDefaults.bookingAvailableStartTime,
+    bookingDefaults.bookingAvailableEndTime
+  );
+  const normalizedServiceHours = normalizeBookingDailyHours(
+    formData.bookingDailyHours,
+    formData.bookingAvailableDays,
+    formData.bookingAvailableStartTime,
+    formData.bookingAvailableEndTime
+  );
+  const serviceUsesBusinessHours = bookingDailyHoursMatch(normalizedServiceHours, normalizedBusinessHours);
+  const bookingDefaultsDisplayLabel = `${formatBookingDaySummary(bookingDefaults.bookingAvailableDays)} - ${
     formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableStartTime) || "Start time"
   } to ${formatAvailabilityTimeLabel(bookingDefaults.bookingAvailableEndTime) || "End time"}`;
+  const serviceBookingDays = bookingDaysFromDailyHours(normalizedServiceHours);
   const formSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const mobileTimeInputClassName =
     "h-11 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
-  const bookingDefaultsDisplayLabel = bookingDefaultsLabel.replace("â€¢", "-");
+  const bookingFlowSummary =
+    formData.bookingFlowType === "self_book"
+      ? "Instant booking"
+      : formData.bookingFlowType === "request"
+        ? "Request first"
+        : "Uses business default";
+  const bookingDetailsVisible = formData.bookingEnabled && bookingDetailsOpen;
 
   return (
-    <div className="grid gap-4 py-2">
-      <div className="grid gap-2">
-        <Label htmlFor="svc-name">Name *</Label>
-        <Input
-          id="svc-name"
-          value={formData.name}
-          onChange={(e) => onChange({ ...formData, name: e.target.value })}
-          placeholder="e.g. Full Detail Package"
-        />
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="svc-price">Price ($) *</Label>
-          <Input
-            id="svc-price"
-            type="number"
-            min="0"
-            step="0.01"
-            value={formData.price}
-            onChange={(e) => onChange({ ...formData, price: e.target.value })}
-            placeholder="0.00"
-          />
+    <div className="space-y-4 py-2">
+      <section className="rounded-[1.35rem] border border-border/70 bg-white/95 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="svc-name">Name *</Label>
+            <Input
+              id="svc-name"
+              value={formData.name}
+              onChange={(e) => onChange({ ...formData, name: e.target.value })}
+              placeholder="e.g. Full Detail Package"
+              className="h-11 rounded-xl"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="svc-price">Price ($) *</Label>
+              <Input
+                id="svc-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.price}
+                onChange={(e) => onChange({ ...formData, price: e.target.value })}
+                placeholder="0.00"
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="svc-category">Category</Label>
+              <ResponsiveSelect
+                id="svc-category"
+                value={formData.categoryId}
+                onValueChange={(value) => onChange({ ...formData, categoryId: value })}
+                placeholder="Select category"
+                options={categoryOptions}
+                triggerClassName="h-11 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]"
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-duration">Est. duration</Label>
+            <QuarterHourDurationGrid
+              value={formData.duration}
+              onChange={(value) => onChange({ ...formData, duration: value })}
+              allowEmpty
+              emptyLabel="No set duration"
+              maxMinutes={12 * 60}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="svc-notes">Notes</Label>
+            <Textarea
+              id="svc-notes"
+              value={formData.notes}
+              onChange={(e) => onChange({ ...formData, notes: e.target.value })}
+              placeholder="Internal notes, inclusions, or booking hints."
+              rows={3}
+              className="min-h-[92px] resize-none rounded-xl"
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label
+              className={cn(
+                "flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-colors",
+                formData.taxable ? "border-primary/25 bg-primary/5" : "border-border bg-muted/20"
+              )}
+            >
+              <Checkbox
+                id="svc-taxable"
+                checked={formData.taxable}
+                onCheckedChange={(checked) => onChange({ ...formData, taxable: Boolean(checked) })}
+              />
+              <span className="text-sm font-medium">Taxable</span>
+            </label>
+            <label
+              className={cn(
+                "flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-colors",
+                formData.isAddon ? "border-primary/25 bg-primary/5" : "border-border bg-muted/20"
+              )}
+            >
+              <Checkbox
+                id="svc-addon"
+                checked={formData.isAddon}
+                onCheckedChange={(checked) => onChange({ ...formData, isAddon: Boolean(checked) })}
+              />
+              <span className="text-sm font-medium">Add-on service</span>
+            </label>
+          </div>
         </div>
-        <div className="grid gap-2">
-          <Label htmlFor="svc-duration">Est. duration (min)</Label>
-          <QuarterHourDurationGrid
-            value={formData.duration}
-            onChange={(value) => onChange({ ...formData, duration: value })}
-            allowEmpty
-            emptyLabel="No set duration"
-            maxMinutes={12 * 60}
-          />
-        </div>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="svc-category">Category</Label>
-        <ResponsiveSelect
-          id="svc-category"
-          value={formData.categoryId}
-          onValueChange={(value) => onChange({ ...formData, categoryId: value })}
-          placeholder="Select category"
-          options={categoryOptions}
-          triggerClassName={formSelectTriggerClassName}
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="svc-notes">Notes</Label>
-        <Textarea
-          id="svc-notes"
-          value={formData.notes}
-          onChange={(e) => onChange({ ...formData, notes: e.target.value })}
-          placeholder="Internal notes, inclusions, or booking hints."
-          rows={3}
-        />
-      </div>
-      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-6">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="svc-taxable"
-            checked={formData.taxable}
-            onCheckedChange={(checked) => onChange({ ...formData, taxable: Boolean(checked) })}
-          />
-          <Label htmlFor="svc-taxable" className="cursor-pointer">
-            Taxable
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="svc-addon"
-            checked={formData.isAddon}
-            onCheckedChange={(checked) => onChange({ ...formData, isAddon: Boolean(checked) })}
-          />
-          <Label htmlFor="svc-addon" className="cursor-pointer">
-            Add-on service
-          </Label>
-        </div>
-      </div>
+      </section>
 
-      <div className="rounded-2xl border bg-muted/25 p-4">
+      <section className="rounded-[1.35rem] border border-border/70 bg-slate-50/80 p-4">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold">Public Booking Options</p>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Public booking</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              These settings start with your business booking defaults, then can be adjusted here for this service when needed.
-            </p>
-            <p className="mt-2 text-xs font-medium text-muted-foreground">
               Business defaults: {bookingDefaultsDisplayLabel}
             </p>
           </div>
@@ -690,238 +836,310 @@ function ServiceForm({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-flow">Booking flow</Label>
-            <ResponsiveSelect
-              id="svc-booking-flow"
-              value={formData.bookingFlowType}
-              onValueChange={(value) =>
-                onChange({
-                  ...formData,
-                  bookingFlowType: value as ServiceFormData["bookingFlowType"],
-                })
-              }
-              placeholder="Select booking flow"
-              options={[
-                { value: "inherit", label: "Use business default" },
-                { value: "self_book", label: "Customers can book instantly" },
-                { value: "request", label: "Review requests first" },
-              ]}
-              triggerClassName={formSelectTriggerClassName}
-            />
+        {formData.bookingEnabled ? (
+          <div className="mt-4 space-y-3">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <ServiceMetaPill label="Flow" value={bookingFlowSummary} tone="neutral" />
+              <ServiceMetaPill label="Mode" value={serviceModeLabel(formData.bookingServiceMode)} tone="neutral" />
+              <ServiceMetaPill
+                label="Hours"
+                value={serviceUsesBusinessHours ? "Business schedule" : `${formatBookingDaySummary(serviceBookingDays)} custom`}
+                tone="neutral"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full rounded-xl"
+              onClick={() => setBookingDetailsOpen((open) => !open)}
+            >
+              {bookingDetailsVisible ? "Hide booking details" : "Customize booking details"}
+              <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", bookingDetailsVisible && "rotate-180")} />
+            </Button>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-deposit">Deposit ($)</Label>
-            <Input
-              id="svc-booking-deposit"
-              type="number"
-              min="0"
-              step="0.01"
-              value={formData.bookingDepositAmount}
-              onChange={(e) => onChange({ ...formData, bookingDepositAmount: e.target.value })}
-              placeholder="0.00"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-lead-time">Lead time (hours)</Label>
-            <Input
-              id="svc-booking-lead-time"
-              type="number"
-              min="0"
-              max="336"
-              step="1"
-              value={formData.bookingLeadTimeHours}
-              onChange={(e) => onChange({ ...formData, bookingLeadTimeHours: e.target.value })}
-              placeholder="0"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-window">Booking window (days)</Label>
-            <Input
-              id="svc-booking-window"
-              type="number"
-              min="1"
-              max="180"
-              step="1"
-              value={formData.bookingWindowDays}
-              onChange={(e) => onChange({ ...formData, bookingWindowDays: e.target.value })}
-              placeholder="30"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-mode">Service mode</Label>
-            <ResponsiveSelect
-              id="svc-booking-mode"
-              value={formData.bookingServiceMode}
-              onValueChange={(value) =>
-                onChange({
-                  ...formData,
-                  bookingServiceMode: value as ServiceFormData["bookingServiceMode"],
-                })
-              }
-              placeholder="Select service mode"
-              options={[
-                { value: "in_shop", label: "In-shop only" },
-                { value: "mobile", label: "Mobile / on-site only" },
-                { value: "both", label: "Let the customer choose" },
-              ]}
-              triggerClassName={formSelectTriggerClassName}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-buffer">Buffer after booking (minutes)</Label>
-            <Input
-              id="svc-booking-buffer"
-              type="number"
-              min="0"
-              max="240"
-              step="5"
-              value={formData.bookingBufferMinutes}
-              onChange={(e) => onChange({ ...formData, bookingBufferMinutes: e.target.value })}
-              placeholder="Use business default"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-capacity">Capacity per slot</Label>
-            <Input
-              id="svc-booking-capacity"
-              type="number"
-              min="1"
-              max="12"
-              step="1"
-              value={formData.bookingCapacityPerSlot}
-              onChange={(e) => onChange({ ...formData, bookingCapacityPerSlot: e.target.value })}
-              placeholder="Use business default"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-2">
-          <Label>Booking days</Label>
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-            {BOOKING_DAY_OPTIONS.map((day) => {
-              const checked = formData.bookingAvailableDays.includes(day.value);
-              return (
-                <label
-                  key={day.value}
-                  className={cn(
-                    "flex cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
-                    checked ? "border-orange-300 bg-orange-50 text-orange-900" : "border-slate-200 bg-white text-slate-600"
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={checked}
-                    onChange={() =>
-                      onChange({
-                        ...formData,
-                        bookingAvailableDays: checked
-                          ? formData.bookingAvailableDays.filter((value) => value !== day.value)
-                          : [...formData.bookingAvailableDays, day.value].sort(),
-                      })
-                    }
-                  />
-                  {day.label}
-                </label>
-              );
-            })}
-          </div>
-          <p className="text-xs leading-5 text-muted-foreground">
-            Starts with the business booking schedule and can be adjusted here for this service.
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-border/70 bg-white/70 p-3 text-xs leading-5 text-muted-foreground">
+            This service stays internal unless you turn on public booking.
           </p>
-        </div>
+        )}
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-start">Service window start</Label>
-            <Input
-              id="svc-booking-start"
-              type="time"
-              className={mobileTimeInputClassName}
-              value={formData.bookingAvailableStartTime}
-              onChange={(e) => onChange({ ...formData, bookingAvailableStartTime: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="svc-booking-end">Service window end</Label>
-            <Input
-              id="svc-booking-end"
-              type="time"
-              className={mobileTimeInputClassName}
-              value={formData.bookingAvailableEndTime}
-              onChange={(e) => onChange({ ...formData, bookingAvailableEndTime: e.target.value })}
-            />
-          </div>
-        </div>
+        {bookingDetailsVisible ? (
+          <div className="mt-4 rounded-2xl border border-border/70 bg-white/90 p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-flow">Booking flow</Label>
+                <ResponsiveSelect
+                  id="svc-booking-flow"
+                  value={formData.bookingFlowType}
+                  onValueChange={(value) =>
+                    onChange({
+                      ...formData,
+                      bookingFlowType: value as ServiceFormData["bookingFlowType"],
+                    })
+                  }
+                  placeholder="Select booking flow"
+                  options={[
+                    { value: "inherit", label: "Use business default" },
+                    { value: "self_book", label: "Customers can book instantly" },
+                    { value: "request", label: "Review requests first" },
+                  ]}
+                  triggerClassName={formSelectTriggerClassName}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-deposit">Deposit ($)</Label>
+                <Input
+                  id="svc-booking-deposit"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.bookingDepositAmount}
+                  onChange={(e) => onChange({ ...formData, bookingDepositAmount: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
 
-        <div className="mt-4 grid gap-2">
-          <Label htmlFor="svc-booking-description">Booking description</Label>
-          <Textarea
-            id="svc-booking-description"
-            value={formData.bookingDescription}
-            onChange={(e) => onChange({ ...formData, bookingDescription: e.target.value })}
-            placeholder="Short public-facing copy for the booking page."
-            rows={3}
-          />
-        </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-lead-time">Lead time (hours)</Label>
+                <Input
+                  id="svc-booking-lead-time"
+                  type="number"
+                  min="0"
+                  max="336"
+                  step="1"
+                  value={formData.bookingLeadTimeHours}
+                  onChange={(e) => onChange({ ...formData, bookingLeadTimeHours: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-window">Booking window (days)</Label>
+                <Input
+                  id="svc-booking-window"
+                  type="number"
+                  min="1"
+                  max="180"
+                  step="1"
+                  value={formData.bookingWindowDays}
+                  onChange={(e) => onChange({ ...formData, bookingWindowDays: e.target.value })}
+                  placeholder="30"
+                />
+              </div>
+            </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
-            <Checkbox
-              id="svc-booking-featured"
-              checked={formData.bookingFeatured}
-              onCheckedChange={(checked) => onChange({ ...formData, bookingFeatured: checked === true })}
-              className="mt-1"
-            />
-            <div className="space-y-1">
-              <Label htmlFor="svc-booking-featured" className="cursor-pointer text-sm font-medium">
-                Feature first
-              </Label>
-              <p className="text-xs leading-5 text-muted-foreground">Push this service to the top of the public booking page.</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-mode">Service mode</Label>
+                <ResponsiveSelect
+                  id="svc-booking-mode"
+                  value={formData.bookingServiceMode}
+                  onValueChange={(value) =>
+                    onChange({
+                      ...formData,
+                      bookingServiceMode: value as ServiceFormData["bookingServiceMode"],
+                    })
+                  }
+                  placeholder="Select service mode"
+                  options={[
+                    { value: "in_shop", label: "In-shop only" },
+                    { value: "mobile", label: "Mobile / on-site only" },
+                    { value: "both", label: "Let the customer choose" },
+                  ]}
+                  triggerClassName={formSelectTriggerClassName}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-buffer">Buffer after booking (minutes)</Label>
+                <Input
+                  id="svc-booking-buffer"
+                  type="number"
+                  min="0"
+                  max="240"
+                  step="5"
+                  value={formData.bookingBufferMinutes}
+                  onChange={(e) => onChange({ ...formData, bookingBufferMinutes: e.target.value })}
+                  placeholder="Use business default"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="svc-booking-capacity">Capacity per slot</Label>
+                <Input
+                  id="svc-booking-capacity"
+                  type="number"
+                  min="1"
+                  max="12"
+                  step="1"
+                  value={formData.bookingCapacityPerSlot}
+                  onChange={(e) => onChange({ ...formData, bookingCapacityPerSlot: e.target.value })}
+                  placeholder="Use business default"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label>Service booking hours</Label>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Use the business schedule or set different hours for this service by day.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={serviceUsesBusinessHours ? "secondary" : "outline"}
+                  className="h-10 rounded-xl"
+                  onClick={() =>
+                    onChange({
+                      ...formData,
+                      bookingAvailableDays: [...bookingDefaults.bookingAvailableDays],
+                      bookingAvailableStartTime: bookingDefaults.bookingAvailableStartTime,
+                      bookingAvailableEndTime: bookingDefaults.bookingAvailableEndTime,
+                      bookingDailyHours: normalizedBusinessHours,
+                    })
+                  }
+                >
+                  Use business hours
+                </Button>
+              </div>
+
+              <div className="mt-3 grid gap-2">
+                {normalizedServiceHours.map((entry) => {
+                  const dayLabel = BOOKING_DAY_OPTIONS.find((day) => day.value === entry.dayIndex)?.label ?? "Day";
+                  return (
+                    <div
+                      key={entry.dayIndex}
+                      className={cn(
+                        "grid gap-3 rounded-xl border bg-white p-3 sm:grid-cols-[minmax(88px,0.75fr)_1fr_1fr] sm:items-center",
+                        entry.enabled ? "border-orange-200 shadow-sm" : "border-slate-200 opacity-75"
+                      )}
+                    >
+                      <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 sm:justify-start">
+                        <span className="text-sm font-semibold text-slate-900">{dayLabel}</span>
+                        <Switch
+                          checked={entry.enabled}
+                          onCheckedChange={(checked) => {
+                            const next = normalizedServiceHours.map((item) =>
+                              item.dayIndex === entry.dayIndex ? { ...item, enabled: checked } : item
+                            );
+                            onChange({
+                              ...formData,
+                              bookingAvailableDays: bookingDaysFromDailyHours(next),
+                              bookingDailyHours: next,
+                            });
+                          }}
+                        />
+                      </label>
+                      <div className="grid gap-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Opens
+                        </span>
+                        <Input
+                          type="time"
+                          className={mobileTimeInputClassName}
+                          value={entry.openTime}
+                          disabled={!entry.enabled}
+                          onChange={(event) => {
+                            const next = normalizedServiceHours.map((item) =>
+                              item.dayIndex === entry.dayIndex ? { ...item, openTime: event.target.value } : item
+                            );
+                            onChange({
+                              ...formData,
+                              bookingAvailableDays: bookingDaysFromDailyHours(next),
+                              bookingAvailableStartTime: next.find((item) => item.enabled)?.openTime ?? "",
+                              bookingDailyHours: next,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Closes
+                        </span>
+                        <Input
+                          type="time"
+                          className={mobileTimeInputClassName}
+                          value={entry.closeTime}
+                          disabled={!entry.enabled}
+                          onChange={(event) => {
+                            const next = normalizedServiceHours.map((item) =>
+                              item.dayIndex === entry.dayIndex ? { ...item, closeTime: event.target.value } : item
+                            );
+                            onChange({
+                              ...formData,
+                              bookingAvailableDays: bookingDaysFromDailyHours(next),
+                              bookingAvailableEndTime: next.find((item) => item.enabled)?.closeTime ?? "",
+                              bookingDailyHours: next,
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <Label htmlFor="svc-booking-description">Booking description</Label>
+              <Textarea
+                id="svc-booking-description"
+                value={formData.bookingDescription}
+                onChange={(e) => onChange({ ...formData, bookingDescription: e.target.value })}
+                placeholder="Short public-facing copy for the booking page."
+                rows={3}
+                className="resize-none rounded-xl"
+              />
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
+                <Checkbox
+                  id="svc-booking-featured"
+                  checked={formData.bookingFeatured}
+                  onCheckedChange={(checked) => onChange({ ...formData, bookingFeatured: checked === true })}
+                  className="mt-1"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="svc-booking-featured" className="cursor-pointer text-sm font-medium">
+                    Feature / recommend
+                  </Label>
+                  <p className="text-xs leading-5 text-muted-foreground">Feature primary services first and mark linked add-ons as recommended.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
+                <Checkbox
+                  id="svc-booking-hide-price"
+                  checked={formData.bookingHidePrice}
+                  onCheckedChange={(checked) => onChange({ ...formData, bookingHidePrice: checked === true })}
+                  className="mt-1"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="svc-booking-hide-price" className="cursor-pointer text-sm font-medium">
+                    Hide price
+                  </Label>
+                  <p className="text-xs leading-5 text-muted-foreground">Keep this service visible while holding pricing back.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
+                <Checkbox
+                  id="svc-booking-hide-duration"
+                  checked={formData.bookingHideDuration}
+                  onCheckedChange={(checked) => onChange({ ...formData, bookingHideDuration: checked === true })}
+                  className="mt-1"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="svc-booking-hide-duration" className="cursor-pointer text-sm font-medium">
+                    Hide duration
+                  </Label>
+                  <p className="text-xs leading-5 text-muted-foreground">Useful when the job needs review before timing is promised.</p>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
-            <Checkbox
-              id="svc-booking-hide-price"
-              checked={formData.bookingHidePrice}
-              onCheckedChange={(checked) => onChange({ ...formData, bookingHidePrice: checked === true })}
-              className="mt-1"
-            />
-            <div className="space-y-1">
-              <Label htmlFor="svc-booking-hide-price" className="cursor-pointer text-sm font-medium">
-                Hide price
-              </Label>
-              <p className="text-xs leading-5 text-muted-foreground">Keep this service visible while holding pricing back.</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 rounded-xl border bg-white/80 p-3">
-            <Checkbox
-              id="svc-booking-hide-duration"
-              checked={formData.bookingHideDuration}
-              onCheckedChange={(checked) => onChange({ ...formData, bookingHideDuration: checked === true })}
-              className="mt-1"
-            />
-            <div className="space-y-1">
-              <Label htmlFor="svc-booking-hide-duration" className="cursor-pointer text-sm font-medium">
-                Hide duration
-              </Label>
-              <p className="text-xs leading-5 text-muted-foreground">Useful when the job needs review before timing is promised.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border bg-white/80 p-3 text-xs leading-5 text-muted-foreground">
-          Linked add-ons below become the booking flow&apos;s “Frequently added” recommendations. Use them for clean upsells, not clutter.
-        </div>
-      </div>
+        ) : null}
+      </section>
     </div>
   );
 }
@@ -1074,6 +1292,10 @@ function ServiceCard({
           ? "Request only"
           : "Uses default flow"
       : null;
+  const serviceCustomDays =
+    Array.isArray(service.bookingDailyHours) && service.bookingDailyHours.length > 0
+      ? bookingDaysFromDailyHours(service.bookingDailyHours)
+      : [];
 
   return (
     <div
@@ -1121,7 +1343,7 @@ function ServiceCard({
           />
           <ServiceMetaPill
             label="Availability"
-            value={service.bookingEnabled === true && (service.bookingAvailableDays?.length ?? 0) > 0 ? `${service.bookingAvailableDays?.length} booking days` : "Uses defaults"}
+            value={service.bookingEnabled === true && serviceCustomDays.length > 0 ? `${serviceCustomDays.length} custom days` : "Uses defaults"}
           />
         </div>
 
@@ -1185,6 +1407,7 @@ export default function ServicesPage() {
   const [isSmallViewport, setIsSmallViewport] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [serviceTab, setServiceTab] = useState<ServiceTab>("active");
+  const [packageTemplatesOpen, setPackageTemplatesOpen] = useState(false);
   const [supportsCategoryManagement, setSupportsCategoryManagement] = useState(true);
 
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
@@ -1373,9 +1596,33 @@ export default function ServicesPage() {
   );
   const isFirstLoad = (servicesFetching || categoriesFetching) && !servicesData && !categoriesData;
   const bookingUrl = useMemo(() => {
-    if (!businessId || typeof window === "undefined") return null;
-    return `${window.location.origin}/book/${businessId}`;
+    const url = buildPublicBookingUrl(businessId);
+    return url || null;
   }, [businessId]);
+
+  const shareBookingUrl = async () => {
+    if (!bookingUrl || !bookingSettings.bookingEnabled) return;
+    const result = await shareNativeContent({
+      title: "Strata booking page",
+      text: "Share the live Strata booking page.",
+      url: bookingUrl,
+    });
+
+    if (result === "shared") {
+      toast.success("Booking link shared.");
+      void triggerNotificationFeedback("success");
+      return;
+    }
+    if (result === "copied") {
+      toast.success("Booking link copied.");
+      void triggerNotificationFeedback("success");
+      return;
+    }
+    if (result === "cancelled") return;
+
+    toast.error("Could not share the booking link.");
+    void triggerNotificationFeedback("error");
+  };
 
   const openCreateService = (categoryId?: string | null) => {
     if (!canEditServices) return;
@@ -1469,6 +1716,7 @@ export default function ServicesPage() {
         bookingAvailableDays: inheritedAvailability.bookingAvailableDays,
         bookingAvailableStartTime: inheritedAvailability.bookingAvailableStartTime,
         bookingAvailableEndTime: inheritedAvailability.bookingAvailableEndTime,
+        bookingDailyHours: inheritedAvailability.bookingDailyHours,
         bookingBufferMinutes: createFormData.bookingBufferMinutes ? parseInt(createFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: createFormData.bookingCapacityPerSlot ? parseInt(createFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: createFormData.bookingFeatured,
@@ -1506,6 +1754,7 @@ export default function ServicesPage() {
         bookingAvailableDays: inheritedAvailability.bookingAvailableDays,
         bookingAvailableStartTime: inheritedAvailability.bookingAvailableStartTime,
         bookingAvailableEndTime: inheritedAvailability.bookingAvailableEndTime,
+        bookingDailyHours: inheritedAvailability.bookingDailyHours,
         bookingBufferMinutes: editFormData.bookingBufferMinutes ? parseInt(editFormData.bookingBufferMinutes, 10) : null,
         bookingCapacityPerSlot: editFormData.bookingCapacityPerSlot ? parseInt(editFormData.bookingCapacityPerSlot, 10) : null,
         bookingFeatured: editFormData.bookingFeatured,
@@ -1580,101 +1829,78 @@ export default function ServicesPage() {
   };
 
   return (
-    <div className="page-content page-section max-w-6xl">
-      <PageHeader
-        title="Services"
-        right={
-          <div className="flex gap-2">
+    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,1))]">
+    <div className="mx-auto max-w-6xl px-3 py-5 pb-10 sm:px-6 lg:px-8">
+      <div className="mb-5 overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/85 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_18px_42px_rgba(15,23,42,0.06)] backdrop-blur-md">
+        <div className="flex flex-col gap-3 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.13),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0))] px-3 py-3 sm:px-5 sm:py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="rounded-full border border-slate-200 bg-white text-slate-700">
+              {activeServicesCount} active
+            </Badge>
+            <Badge variant="outline" className="rounded-full bg-white">
+              {categories.length} categories
+            </Badge>
+            <Badge variant="outline" className="rounded-full bg-white">
+              {bookingSettings.bookingEnabled ? `${bookingEnabledServicesCount} booking-ready` : "Booking disabled"}
+            </Badge>
+            <Badge variant="outline" className="rounded-full bg-white">
+              {activeAddonCount} add-ons
+            </Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="h-10 rounded-xl">
+              <Link to="/app/booking">
+                <CalendarCheck2 className="mr-2 h-4 w-4" />
+                Booking builder
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl"
+              disabled={!bookingUrl || !bookingSettings.bookingEnabled}
+              onClick={() => void shareBookingUrl()}
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 rounded-xl"
+              disabled={!bookingUrl || !bookingSettings.bookingEnabled}
+              onClick={() => {
+                if (bookingUrl && bookingSettings.bookingEnabled) {
+                  void triggerSelectionFeedback();
+                  openExternalUrl(bookingUrl);
+                }
+              }}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              View live
+            </Button>
             <Button
               variant="outline"
+              className="h-10 rounded-xl"
               onClick={() => (supportsCategoryManagement ? setCreateCategoryOpen(true) : showCategoryManagementUnavailable())}
               disabled={!canEditServices}
             >
               <FolderKanban className="mr-2 h-4 w-4" />
-              Add Category
+              Category
             </Button>
-            <Button onClick={() => openCreateService()} disabled={!canEditServices}>
+            <Button className="h-10 rounded-xl" onClick={() => openCreateService()} disabled={!canEditServices}>
               <Plus className="mr-2 h-4 w-4" />
-              Add Service
+              Service
             </Button>
           </div>
-        }
-      />
+        </div>
+      </div>
 
-      <Card className="overflow-hidden border-slate-200/80 bg-white/92 shadow-[0_20px_48px_rgba(15,23,42,0.07)]">
-        <div className="h-1.5 w-full bg-[linear-gradient(90deg,rgba(15,23,42,0.92),rgba(249,115,22,0.88),rgba(251,146,60,0.78))]" />
-        <CardHeader className="border-b border-slate-200/80 bg-slate-50/85">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="rounded-full border border-slate-200 bg-white text-slate-700">
-                  Booking page
-                </Badge>
-                <Badge variant="outline" className="rounded-full bg-white">
-                  {bookingSettings.bookingEnabled ? "Live" : "Disabled"}
-                </Badge>
-                <Badge variant="outline" className="rounded-full bg-white">
-                  {bookingSettings.bookingDefaultFlow === "self_book" ? "Direct booking default" : "Request-first default"}
-                </Badge>
-              </div>
-              <div className="space-y-1">
-                <CardTitle className="text-xl tracking-[-0.03em]">Booking page settings now live in a dedicated builder</CardTitle>
-                <CardDescription className="max-w-2xl text-sm leading-6 text-slate-600">
-                  {bookingSettings.bookingEnabled
-                    ? "Keep Services focused on the catalog. Open the booking builder for branding, copy, fields, urgency, and the live page preview."
-                    : "Booking page is disabled right now. Open the booking builder when you are ready to turn it on and shape the public experience."}
-                </CardDescription>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" className="rounded-xl">
-                <Link to="/app/booking">
-                  <CalendarCheck2 className="mr-2 h-4 w-4" />
-                  Open booking builder
-                </Link>
-              </Button>
-              <Button type="button" asChild disabled={!bookingUrl || !bookingSettings.bookingEnabled} className="rounded-xl">
-                <a href={bookingUrl && bookingSettings.bookingEnabled ? bookingUrl : "#"} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  View live
-                </a>
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        {bookingSettings.bookingEnabled ? (
-          <CardContent className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
-            <MetricCard label="Booking-ready" value={String(bookingEnabledServicesCount)} detail="Visible on the public booking page" />
-            <MetricCard label="Direct book" value={String(selfBookServicesCount)} detail="Can confirm instantly" />
-            <MetricCard
-              label="Booking headline"
-              value={bookingSettings.bookingPageTitle || "Tell us what you need"}
-              detail={bookingSettings.bookingPageSubtitle || "Share a few details and the shop can follow up with the right next step."}
-            />
-            <MetricCard
-              label="Availability defaults"
-              value={
-                bookingSettings.bookingAvailableStartTime || bookingSettings.bookingAvailableEndTime
-                  ? `${formatAvailabilityTimeLabel(bookingSettings.bookingAvailableStartTime) || "Start time"} to ${
-                      formatAvailabilityTimeLabel(bookingSettings.bookingAvailableEndTime) || "end time"
-                    }`
-                  : "Uses builder defaults"
-              }
-              detail={
-                bookingSettingsLoading
-                  ? "Loading booking settings..."
-                  : "These business hours feed public booking by default, and each service can adjust them below."
-              }
-            />
-          </CardContent>
-        ) : null}
-      </Card>
-
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Categories" value={String(categories.length)} detail="Active service groups" />
         <MetricCard label="Active services" value={String(activeServicesCount)} detail="Live catalog services" />
-        <MetricCard label="Booking-ready" value={String(bookingEnabledServicesCount)} detail="Visible on the booking page" />
-        <MetricCard label="Add-ons" value={String(activeAddonCount)} detail="Optional extras on file" />
+        <MetricCard label="Booking-ready" value={String(bookingEnabledServicesCount)} detail={bookingSettings.bookingEnabled ? "Visible on the booking page" : "Booking page currently off"} />
+        <MetricCard label="Direct book" value={String(selfBookServicesCount)} detail="Can confirm instantly" />
       </div>
 
       <ListViewToolbar
@@ -1750,22 +1976,22 @@ export default function ServicesPage() {
           action={<Button onClick={() => openCreateService()}><Plus className="mr-2 h-4 w-4" />Add Service</Button>}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {serviceGroups.map((group) => (
-            <Card key={group.id}>
-              <CardHeader>
+            <Card key={group.id} className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+              <CardHeader className="border-b border-border/60 bg-slate-50/60 px-4 py-4 sm:px-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <CardTitle>{group.title}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">{group.services.length} services</p>
+                    <CardTitle className="text-base font-semibold">{group.title}</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">{group.services.length} service{group.services.length === 1 ? "" : "s"}</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => openCreateService(group.id === UNCATEGORIZED_VALUE ? null : group.id)}>
+                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => openCreateService(group.id === UNCATEGORIZED_VALUE ? null : group.id)}>
                     <Plus className="mr-1 h-3.5 w-3.5" />
                     Add service
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-3 p-4 sm:p-5">
                 {group.services.map((service, index) => (
                     <ServiceCard
                       key={service.id}
@@ -1788,17 +2014,68 @@ export default function ServicesPage() {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
+      <Card className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 border-b border-border/60 bg-slate-50/60 px-4 py-4 text-left sm:px-5"
+          onClick={() => setPackageTemplatesOpen((open) => !open)}
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Package className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <CardTitle className="text-base font-semibold">Packages</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">{packageSummaries.length} configured template{packageSummaries.length === 1 ? "" : "s"}</p>
+            </div>
+          </div>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", packageTemplatesOpen && "rotate-180")} />
+        </button>
+        {packageTemplatesOpen ? (
+        <CardContent className="p-4 sm:p-5">
+          {packageSummaries.length === 0 ? (
+            <EmptyState icon={Package} title="No package templates yet" description="Link add-ons on a service to turn it into a reusable package." />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {packageSummaries.map((summary) => (
+                <button key={summary.service.id} type="button" onClick={() => { setEditService(summary.service); setEditFormData(serviceToFormData(summary.service, bookingSettings)); }} className="rounded-2xl border border-border/70 bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/30">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-semibold">{summary.service.name}</h3>
+                        <Badge variant="secondary">{summary.service.categoryLabel ?? formatServiceCategory(summary.service.category)}</Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{summary.linkedAddons.length} linked add-on{summary.linkedAddons.length === 1 ? "" : "s"}</p>
+                    </div>
+                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </div>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Includes</p>
+                    <div className="flex flex-wrap gap-2">
+                      {summary.linkedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)}
+                    </div>
+                    <p className="pt-2 text-sm font-medium">{formatPrice(summary.totalPrice)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+        ) : null}
+      </Card>
+
+      <Card className="overflow-hidden rounded-[1.35rem] border-border/70 bg-white/92 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+        <CardHeader className="border-b border-border/60 bg-slate-50/60 px-4 py-4 sm:px-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <CardTitle>Category management</CardTitle>
+              <CardTitle className="text-base font-semibold">Category management</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">Create, reorder, archive, and clean up the catalog structure your team actually uses.</p>
             </div>
             <Badge variant="outline">{managedCategories.length} active</Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 sm:p-5">
           {!supportsCategoryManagement ? (
             <EmptyState
               icon={FolderKanban}
@@ -1921,48 +2198,52 @@ export default function ServicesPage() {
       </AlertDialog>
 
       <Dialog open={createServiceOpen} onOpenChange={setCreateServiceOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-x-hidden overflow-y-auto p-0 sm:max-w-[760px]">
           <div className="p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Add Service</DialogTitle>
-            <DialogDescription>Create a service and place it in the right category right away.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleCreateService}>
-            <ServiceForm
-              formData={createFormData}
-              onChange={setCreateFormData}
-              categoryOptions={categoryOptions}
-              bookingDefaults={bookingSettings}
-            />
-            <DialogFooter className="mt-6">
-              <Button type="button" variant="outline" onClick={() => setCreateServiceOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={createServiceFetching}>{createServiceFetching ? "Creating..." : "Create Service"}</Button>
-            </DialogFooter>
-          </form>
+            <DialogHeader>
+              <DialogTitle>Add Service</DialogTitle>
+              <DialogDescription>Build the catalog item, then turn on public booking only when it needs to be bookable online.</DialogDescription>
+            </DialogHeader>
+            <form className="mt-4" onSubmit={handleCreateService}>
+              <ServiceForm
+                formData={createFormData}
+                onChange={setCreateFormData}
+                categoryOptions={categoryOptions}
+                bookingDefaults={bookingSettings}
+              />
+              <DialogFooter className="sticky bottom-0 -mx-4 -mb-4 mt-5 gap-2 border-t border-border/70 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6">
+                <Button type="button" variant="outline" className="sm:min-w-28" onClick={() => setCreateServiceOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="sm:min-w-36" disabled={createServiceFetching}>
+                  {createServiceFetching ? "Creating..." : "Create Service"}
+                </Button>
+              </DialogFooter>
+            </form>
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(editService)} onOpenChange={(open) => !open && setEditService(null)}>
-        <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-x-hidden overflow-y-auto p-0 sm:max-w-[760px]">
           <div className="p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle>Edit Service</DialogTitle>
-            <DialogDescription>Update service details, move it between categories, or manage add-ons.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleUpdateService}>
-            <ServiceForm
-              formData={editFormData}
-              onChange={setEditFormData}
-              categoryOptions={categoryOptions}
-              bookingDefaults={bookingSettings}
-            />
-            <Separator className="my-4" />
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-medium">Frequently added services</p>
-                <p className="mt-1 text-xs text-muted-foreground">Link related services so the booking flow can recommend clean, relevant upsells.</p>
-              </div>
+            <DialogHeader>
+              <DialogTitle>Edit Service</DialogTitle>
+              <DialogDescription>Update the catalog item, booking behavior, and related add-ons.</DialogDescription>
+            </DialogHeader>
+            <form className="mt-4" onSubmit={handleUpdateService}>
+              <ServiceForm
+                formData={editFormData}
+                onChange={setEditFormData}
+                categoryOptions={categoryOptions}
+                bookingDefaults={bookingSettings}
+              />
+              <Separator className="my-4" />
+              <div className="space-y-3 rounded-[1.35rem] border border-border/70 bg-white/95 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+                <div>
+                  <p className="text-sm font-medium">Frequently added services</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Link related services so the booking flow can recommend clean, relevant upsells.</p>
+                </div>
               {linkedAddonRecords.length > 0 ? (
                 <div className="space-y-2">
                   {linkedAddonRecords.map((link) => {
@@ -2005,15 +2286,21 @@ export default function ServicesPage() {
                 </Button>
               </div>
             </div>
-            <DialogFooter className="mt-4 sm:justify-between">
-              <Button type="button" variant="destructive" onClick={() => setDeleteService(editService)} disabled={updateServiceFetching}>Delete Service</Button>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setEditService(null)}>Cancel</Button>
-                <Button type="submit" disabled={updateServiceFetching}>{updateServiceFetching ? "Saving..." : "Save Changes"}</Button>
+              <DialogFooter className="sticky bottom-0 -mx-4 -mb-4 mt-5 gap-2 border-t border-border/70 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:-mb-6 sm:justify-between sm:px-6">
+                <Button type="button" variant="destructive" className="sm:min-w-32" onClick={() => setDeleteService(editService)} disabled={updateServiceFetching}>
+                  Delete Service
+                </Button>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <Button type="button" variant="outline" className="sm:min-w-28" onClick={() => setEditService(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="sm:min-w-32" disabled={updateServiceFetching}>
+                    {updateServiceFetching ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </form>
               </div>
-            </DialogFooter>
-          </form>
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -2032,48 +2319,7 @@ export default function ServicesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Package className="h-4 w-4" />Package templates</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">Primary services with linked add-ons, ready for faster booking.</p>
-            </div>
-            <Badge variant="outline">{packageSummaries.length} configured</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {packageSummaries.length === 0 ? (
-            <EmptyState icon={Package} title="No package templates yet" description="Link add-ons on a service to turn it into a reusable package." />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {packageSummaries.map((summary) => (
-                <button key={summary.service.id} type="button" onClick={() => { setEditService(summary.service); setEditFormData(serviceToFormData(summary.service, bookingSettings)); }} className="rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/30">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base font-semibold">{summary.service.name}</h3>
-                        <Badge variant="secondary">{summary.service.categoryLabel ?? formatServiceCategory(summary.service.category)}</Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{summary.linkedAddons.length} linked add-on{summary.linkedAddons.length === 1 ? "" : "s"}</p>
-                    </div>
-                    <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </div>
-                  <Separator className="my-4" />
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Includes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {summary.linkedAddons.map((addon) => <Badge key={addon.id} variant="outline">{addon.name}</Badge>)}
-                    </div>
-                    <p className="pt-2 text-sm font-medium">{formatPrice(summary.totalPrice)}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    </div>
     </div>
   );
 }
-

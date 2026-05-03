@@ -1,11 +1,13 @@
 import { app } from "./app.js";
-import { closeDb, verifyRuntimeSchema } from "./db/index.js";
+import { closeDb, ensureAccountDeletionSchema, ensureAppleAuthSchema, verifyRuntimeSchema } from "./db/index.js";
 import { logger } from "./lib/logger.js";
 
 const PORT = process.env.PORT!;
 
 async function start(): Promise<void> {
   try {
+    await ensureAppleAuthSchema();
+    await ensureAccountDeletionSchema();
     await verifyRuntimeSchema();
   } catch (error) {
     logger.error("Startup schema verification failed", {

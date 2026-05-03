@@ -453,6 +453,19 @@ export default function LandingPage() {
                 Start free trial
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
+              <a
+                href="https://apps.apple.com/us/app/strata-crm/id6762568120"
+                target="_blank"
+                rel="noreferrer"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "lg" }),
+                  "min-h-[52px] rounded-2xl border-gray-300 bg-white/90 px-7 text-base font-semibold text-gray-950 shadow-[0_10px_24px_rgba(15,23,42,0.08)] hover:bg-white"
+                )}
+                onClick={() => trackEvent("landing_cta_clicked", { placement: "hero", target: "app_store" })}
+              >
+                Download on App Store
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </a>
             </div>
             <p className="text-sm font-medium text-gray-500">30-day free trial | No card required</p>
           </div>

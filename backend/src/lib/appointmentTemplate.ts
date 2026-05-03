@@ -249,7 +249,7 @@ export function renderAppointmentHtml(data: AppointmentTemplateData): string {
                 ${hasDeposit ? `<div class="pricing-row"><span>Deposit due today</span><span>${formatCurrency(depositAmount)}</span></div>` : ""}
                 ${hasTotal ? `<div class="pricing-row remaining"><span>Remaining balance due</span><span>${formatCurrency(remainingBalance)}</span></div>` : ""}
               </div>
-              ${hasDeposit && !(depositSatisfied || paidInFull) && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay ${formatCurrency(depositAmount)} with Stripe</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !(depositSatisfied || paidInFull) ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
+              ${hasDeposit && !(depositSatisfied || paidInFull) && publicPaymentUrl ? `<a class="cta" href="${escapeHtml(publicPaymentUrl)}">Pay deposit</a><div class="cta-note">Secure checkout powered by Stripe.</div>` : hasDeposit && !(depositSatisfied || paidInFull) ? `<div class="cta-note">Deposit payment will appear here as soon as online payments are available.</div>` : ""}
             </section>
           </section>
           <section class="summary">

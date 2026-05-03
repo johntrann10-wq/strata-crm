@@ -834,7 +834,7 @@ If you have any questions, contact us directly.
       bodyHtml:
         renderInfoCard("Next step", "Review the quote details and contact us if you would like any changes before scheduling.") +
         renderInfoCard("Message from the shop", "{{message}}") +
-        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
+        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place in your customer hub."),
       ctaLabel: "View quote",
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
@@ -870,7 +870,7 @@ If you have any questions, contact us directly.
       introHtml: `<p style="margin:0;">Hi {{clientName}},</p><p style="margin:10px 0 0;">We wanted to follow up on your quote for <strong>{{vehicle}}</strong> totaling <strong>{{amount}}</strong>.</p>`,
       bodyHtml:
         renderInfoCard("Message from the shop", "{{message}}") +
-        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place:<br>{{portalUrl}}"),
+        renderInfoCard("Customer hub", "View all active estimates, invoices, appointments, and vehicles from one place in your customer hub."),
       ctaLabel: "Review quote",
       ctaUrl: "{{quoteUrl}}",
       ctaHint: `Quote link: {{quoteUrl}}`,
@@ -936,4 +936,3 @@ export function getBuiltinTemplate(slug: string): BuiltinEmailTemplate | null {
 }
 
 export const EMAIL_TEMPLATE_SLUGS = Object.keys(builtins);
-

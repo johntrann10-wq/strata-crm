@@ -30,6 +30,7 @@ Copy from `backend/.env.example`:
 - `FRONTEND_URL` — origin of the frontend (e.g. `https://your-app.vercel.app`) for CORS and Stripe redirect URLs
 - `API_BASE` — backend API origin (required for Google OAuth redirect URIs)
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — Google OAuth credentials
+- `APPLE_SIGN_IN_CLIENT_IDS` — optional comma-separated Apple audiences the backend should accept for native Sign in with Apple (`app.stratacrm.mobile` by default)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` — required for paid subscriptions ($29/mo, first month free)
 - `CRON_SECRET` — required; `POST /api/actions/runAutomations` requires header `x-cron-secret: <CRON_SECRET>`
 - `PORT` — required (server port, e.g. `3001`)
@@ -92,6 +93,17 @@ yarn build
 Set **`STRATA_API_ORIGIN`** (or **`VITE_API_URL`**) as above so `/api` reaches your backend.
 
 **CORS:** Set `FRONTEND_URL=https://your-app.vercel.app` (or your Netlify URL) on the backend. With the edge proxy, the browser often uses same-origin `/api` (no CORS for those requests); keep `FRONTEND_URL` correct for OAuth redirects and any direct API calls.
+
+## Native iOS Sign in with Apple
+
+The iOS shell now uses Apple's native `AuthenticationServices` flow and sends the Apple identity token to the backend for verification. Before shipping it, complete these manual Apple-side steps:
+
+1. In Apple Developer, open the App ID for `app.stratacrm.mobile` and enable **Sign in with Apple**.
+2. Regenerate any provisioning profiles used by the iOS target after enabling the capability.
+3. In Xcode, confirm the `App` target shows the **Sign in with Apple** capability and that the entitlements file is included in signing.
+4. If users may choose **Hide My Email**, configure Apple's private email relay for the sender addresses/domains Strata uses for transactional mail so relay addresses can still receive support, reset, and notification emails.
+
+See [docs/mobile/sign-in-with-apple.md](docs/mobile/sign-in-with-apple.md) for the full setup and QA checklist.
 
 ## Automations (cron)
 

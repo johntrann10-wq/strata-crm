@@ -81,6 +81,9 @@ describe.skipIf(skipEmbeddedDashboardPath)("Home dashboard snapshot service (int
     const homeDashboardMod = await import("../lib/homeDashboard.js");
     getHomeDashboardSnapshot = homeDashboardMod.getHomeDashboardSnapshot;
 
+    const dashboardMod = await import("../lib/homeDashboard.js");
+    getHomeDashboardSnapshot = dashboardMod.getHomeDashboardSnapshot;
+
     const signUpRes = await request(app).post("/api/auth/sign-up").send({
       email,
       password,

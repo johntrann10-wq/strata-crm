@@ -18,6 +18,55 @@ export interface BusinessSettingsFormData {
   bookingAvailableDays: number[];
   bookingAvailableStartTime: string;
   bookingAvailableEndTime: string;
+  bookingDailyHours: BookingDailyHoursEntry[];
+  bookingBlackoutDatesText: string;
+  bookingClosedOnUsHolidays: boolean;
+}
+
+export type BookingDailyHoursEntry = {
+  dayIndex: number;
+  enabled: boolean;
+  openTime: string;
+  closeTime: string;
+};
+
+const DEFAULT_BOOKING_DAY_INDEXES = [1, 2, 3, 4, 5];
+const DEFAULT_BOOKING_OPEN_TIME = "09:00";
+const DEFAULT_BOOKING_CLOSE_TIME = "19:00";
+
+function normalizeBookingDailyHours(
+  value: unknown,
+  fallbackDays = DEFAULT_BOOKING_DAY_INDEXES,
+  fallbackOpen = DEFAULT_BOOKING_OPEN_TIME,
+  fallbackClose = DEFAULT_BOOKING_CLOSE_TIME
+): BookingDailyHoursEntry[] {
+  const source = Array.isArray(value) ? value : [];
+  const byDay = new Map<number, BookingDailyHoursEntry>();
+  for (const item of source) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as { dayIndex?: unknown; enabled?: unknown; openTime?: unknown; closeTime?: unknown };
+    const dayIndex = Number(entry.dayIndex);
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) continue;
+    const openTime = typeof entry.openTime === "string" && entry.openTime ? entry.openTime : fallbackOpen;
+    const closeTime = typeof entry.closeTime === "string" && entry.closeTime ? entry.closeTime : fallbackClose;
+    byDay.set(dayIndex, {
+      dayIndex,
+      enabled: entry.enabled === false ? false : true,
+      openTime,
+      closeTime,
+    });
+  }
+  for (const dayIndex of [1, 2, 3, 4, 5, 6, 0]) {
+    if (!byDay.has(dayIndex)) {
+      byDay.set(dayIndex, {
+        dayIndex,
+        enabled: fallbackDays.includes(dayIndex),
+        openTime: fallbackOpen,
+        closeTime: fallbackClose,
+      });
+    }
+  }
+  return [1, 2, 3, 4, 5, 6, 0].map((dayIndex) => byDay.get(dayIndex)!);
 }
 
 export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
@@ -37,9 +86,12 @@ export const DEFAULT_BUSINESS_SETTINGS_FORM: BusinessSettingsFormData = {
   appointmentBufferMinutes: 15,
   calendarBlockCapacityPerSlot: 1,
   timezone: "America/New_York",
-  bookingAvailableDays: [1, 2, 3, 4, 5],
-  bookingAvailableStartTime: "09:00",
-  bookingAvailableEndTime: "19:00",
+  bookingAvailableDays: DEFAULT_BOOKING_DAY_INDEXES,
+  bookingAvailableStartTime: DEFAULT_BOOKING_OPEN_TIME,
+  bookingAvailableEndTime: DEFAULT_BOOKING_CLOSE_TIME,
+  bookingDailyHours: normalizeBookingDailyHours([]),
+  bookingBlackoutDatesText: "",
+  bookingClosedOnUsHolidays: false,
 };
 
 type BusinessSettingsSource = Partial<BusinessSettingsFormData> | null | undefined;
@@ -68,6 +120,18 @@ export function businessSettingsFormFromSource(source: BusinessSettingsSource) {
       source?.bookingAvailableStartTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableStartTime,
     bookingAvailableEndTime:
       source?.bookingAvailableEndTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableEndTime,
+    bookingDailyHours: normalizeBookingDailyHours(
+      (source as { bookingDailyHours?: unknown })?.bookingDailyHours,
+      Array.isArray(source?.bookingAvailableDays) && source.bookingAvailableDays.length > 0
+        ? [...new Set(source.bookingAvailableDays)]
+        : DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableDays,
+      source?.bookingAvailableStartTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableStartTime,
+      source?.bookingAvailableEndTime ?? DEFAULT_BUSINESS_SETTINGS_FORM.bookingAvailableEndTime
+    ),
+    bookingBlackoutDatesText: Array.isArray((source as { bookingBlackoutDates?: string[] | null })?.bookingBlackoutDates)
+      ? ((source as { bookingBlackoutDates?: string[] | null }).bookingBlackoutDates ?? []).join("\n")
+      : "",
+    bookingClosedOnUsHolidays: Boolean((source as { bookingClosedOnUsHolidays?: boolean | null })?.bookingClosedOnUsHolidays),
   };
 
   return {

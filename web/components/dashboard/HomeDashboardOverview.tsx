@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import {
@@ -15,6 +15,7 @@ import {
   History,
   Inbox,
   Landmark,
+  Settings,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
@@ -24,7 +25,9 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { useCommandPalette } from "@/components/shared/CommandPaletteContext";
 import { cn } from "@/lib/utils";
+import { triggerSelectionFeedback } from "@/lib/nativeInteractions";
 import type { HomeDashboardRange, HomeDashboardSnapshot } from "@/lib/homeDashboard";
 import { formatDashboardCompactCurrency, formatDashboardCurrency } from "@/lib/homeDashboard";
 
@@ -68,6 +71,165 @@ function shiftDateKey(value: string, days: number) {
 function formatDashboardAxisCurrency(value: number) {
   if (value === 0) return "$0";
   return formatDashboardCompactCurrency(value);
+}
+
+const DASHBOARD_SHORTCUTS_STORAGE_KEY = "strata.dashboard.shortcuts.v1";
+const DEFAULT_DASHBOARD_SHORTCUT_KEYS = ["new_appointment", "global_search", "search_appointments", "add_lead"] as const;
+
+type DashboardShortcutAction = Omit<HomeDashboardSnapshot["quickActions"][number], "key" | "permission"> & {
+  key: string;
+  permission: string;
+  behavior?: "link" | "command";
+};
+
+type DashboardStaticShortcut = DashboardShortcutAction & {
+  isAvailable: (snapshot: HomeDashboardSnapshot | null | undefined, backendActions: DashboardShortcutAction[]) => boolean;
+};
+
+const DASHBOARD_STATIC_SHORTCUTS: DashboardStaticShortcut[] = [
+  {
+    key: "global_search",
+    label: "Search all",
+    description: "Open the command palette for clients, jobs, appointments, vehicles, quotes, and invoices.",
+    url: "#",
+    permission: "dashboard.read",
+    behavior: "command",
+    isAvailable: (snapshot) => Boolean(snapshot),
+  },
+  {
+    key: "search_appointments",
+    label: "Search appointments",
+    description: "Jump to schedule search for client names, times, vehicles, statuses, and techs.",
+    url: "/appointments?focus=search",
+    permission: "appointments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "search_leads",
+    label: "Search leads",
+    description: "Open the lead queue with search focused for status, source, vehicle, and customer lookups.",
+    url: "/leads?focus=search",
+    permission: "customers.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.clientVisibility || snapshot?.modulePermissions.pipeline || snapshot?.modulePermissions.conversion),
+  },
+  {
+    key: "add_lead",
+    label: "Add lead",
+    description: "Open the lead intake form without hunting through the lead queue.",
+    url: "/leads?compose=1",
+    permission: "customers.write",
+    isAvailable: (_snapshot, backendActions) => backendActions.some((action) => action.key === "add_client"),
+  },
+  {
+    key: "calendar_week",
+    label: "Week calendar",
+    description: "Open the calendar directly in the mobile-friendly week view.",
+    url: "/calendar?view=week",
+    permission: "appointments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "booking_requests",
+    label: "Booking requests",
+    description: "Review inbound booking requests and customer replies.",
+    url: "/appointments/requests",
+    permission: "appointments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "clients",
+    label: "Clients",
+    description: "Open customer records and contact history.",
+    url: "/clients",
+    permission: "customers.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.clientVisibility),
+  },
+  {
+    key: "vehicles",
+    label: "Vehicles",
+    description: "Jump to the vehicle list for VIN, plate, and service history lookups.",
+    url: "/vehicles",
+    permission: "vehicles.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.vehicleVisibility),
+  },
+  {
+    key: "jobs",
+    label: "Jobs",
+    description: "Open active job workflow and status tracking.",
+    url: "/jobs",
+    permission: "jobs.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.todaySchedule),
+  },
+  {
+    key: "quotes",
+    label: "Quotes",
+    description: "Review estimates and approvals.",
+    url: "/quotes",
+    permission: "quotes.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.quoteVisibility),
+  },
+  {
+    key: "invoices",
+    label: "Invoices",
+    description: "Review invoice status, balances, and sends.",
+    url: "/invoices",
+    permission: "invoices.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.invoiceVisibility),
+  },
+  {
+    key: "finances",
+    label: "Finances",
+    description: "Open cash, payment, and collection visibility.",
+    url: "/finances",
+    permission: "payments.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.paymentVisibility || snapshot?.modulePermissions.revenueCollections || snapshot?.modulePermissions.cash),
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    description: "Open workspace, team, and account settings.",
+    url: "/settings",
+    permission: "settings.read",
+    isAvailable: (snapshot) => Boolean(snapshot?.modulePermissions.settingsVisibility),
+  },
+];
+
+function loadStoredDashboardShortcuts(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_SHORTCUTS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((value): value is string => typeof value === "string");
+  } catch {
+    return null;
+  }
+}
+
+function getAvailableDashboardShortcuts(snapshot: HomeDashboardSnapshot | null | undefined): DashboardShortcutAction[] {
+  const backendActions = ((snapshot?.quickActions ?? []) as DashboardShortcutAction[]).map((action) => ({
+    ...action,
+    behavior: "link" as const,
+  }));
+  const shortcuts = [...backendActions];
+
+  DASHBOARD_STATIC_SHORTCUTS.forEach((shortcut) => {
+    if (!shortcut.isAvailable(snapshot, backendActions)) return;
+    if (shortcuts.some((action) => action.key === shortcut.key)) return;
+    const { isAvailable: _isAvailable, ...action } = shortcut;
+    shortcuts.push(action);
+  });
+
+  return shortcuts;
+}
+
+function getDefaultDashboardShortcuts(availableActions: DashboardShortcutAction[]): DashboardShortcutAction[] {
+  const availableByKey = new Map(availableActions.map((action) => [action.key, action]));
+  const defaults = DEFAULT_DASHBOARD_SHORTCUT_KEYS
+    .map((key) => availableByKey.get(key))
+    .filter((action): action is DashboardShortcutAction => Boolean(action));
+  return defaults.length > 0 ? defaults : availableActions.slice(0, 4);
 }
 
 function WidgetErrorState({ title, error, onRetry }: { title: string; error?: Error | null; onRetry?: () => void }) {
@@ -217,6 +379,7 @@ export function HomeWeeklyAppointmentOverviewCard({
   selectedDate,
   onSelectDate,
   onChangeWeek,
+  nativeIOS = false,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
   loading?: boolean;
@@ -225,6 +388,7 @@ export function HomeWeeklyAppointmentOverviewCard({
   selectedDate?: string | null;
   onSelectDate?: (date: string | null) => void;
   onChangeWeek?: (weekStartDate: string | null, selectedDate?: string | null) => void;
+  nativeIOS?: boolean;
 }) {
   if (loading) return <CardLoadingShell title="Weekly Appointment Overview" rows={7} />;
   if (error) return <WidgetErrorState title="Weekly Appointment Overview" error={error} onRetry={onRetry} />;
@@ -267,6 +431,123 @@ export function HomeWeeklyAppointmentOverviewCard({
         </CardHeader>
         <CardContent>
           <EmptyState icon={CalendarClock} title="No week selected" description="Choose a week to review your appointment load." />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (nativeIOS) {
+    return (
+      <Card className="overflow-hidden rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_14px_32px_rgba(15,23,42,0.07)]">
+        <CardHeader className="border-b border-slate-100/90 px-3.5 pb-3 pt-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700">Week pulse</p>
+              <CardTitle className="mt-1 text-[1.2rem] tracking-[-0.03em]">Today and next jobs</CardTitle>
+              <CardDescription className="mt-1 text-[12px] leading-5 text-slate-500">
+                {formatDateLabel(overview.weekStart, "MMM d")} - {formatDateLabel(overview.weekEnd, "MMM d")}
+              </CardDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-full border-slate-200 bg-white/88"
+                onClick={() => onChangeWeek?.(shiftDateKey(overview.days[0]?.date ?? activeDay.date, -7), shiftDateKey(activeDay.date, -7))}
+                aria-label="Previous week"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-full border-slate-200 bg-white/88"
+                onClick={() => onChangeWeek?.(shiftDateKey(overview.days[0]?.date ?? activeDay.date, 7), shiftDateKey(activeDay.date, 7))}
+                aria-label="Next week"
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 px-3.5 py-3.5">
+          <div className="grid grid-cols-7 gap-1.5">
+            {overview.days.map((day) => {
+              const isActive = day.date === activeDay.date;
+              return (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => {
+                    void triggerSelectionFeedback();
+                    onSelectDate?.(day.date);
+                  }}
+                  className={cn(
+                    "native-touch-surface flex min-h-[4.25rem] flex-col items-center justify-between rounded-[0.95rem] border px-0.5 py-1.5 text-center transition-all",
+                    isActive
+                      ? "border-primary/35 bg-primary text-primary-foreground shadow-[0_10px_22px_rgba(249,115,22,0.2)]"
+                      : "border-slate-200/75 bg-slate-50/80 text-slate-600 active:bg-slate-100"
+                  )}
+                  aria-pressed={isActive}
+                >
+                  <span className={cn("text-[8px] font-semibold uppercase tracking-[0.12em]", isActive ? "text-primary-foreground/75" : "text-slate-500")}>
+                    {day.shortLabel}
+                  </span>
+                  <span className="text-[15px] font-semibold leading-none tabular-nums">{formatDateLabel(day.date, "d")}</span>
+                  <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", isActive ? "bg-white/18" : "bg-white text-slate-700")}>
+                    {day.appointmentCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-[1.2rem] border border-slate-200/75 bg-slate-50/75 px-3.5 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Selected day</p>
+                <p className="mt-1 text-lg font-semibold tracking-[-0.03em] text-slate-950">
+                  {activeDay.label}, {formatDateLabel(activeDay.date, "MMM d")}
+                </p>
+                <p className="mt-1 text-[12px] leading-5 text-slate-500">
+                  {activeDay.appointmentCount} appointment{activeDay.appointmentCount === 1 ? "" : "s"} · {formatDashboardCurrency(activeDay.bookedValue)} booked
+                </p>
+              </div>
+              <Button asChild variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-full border-slate-200 bg-white/90">
+                <Link to={activeDay.calendarUrl} aria-label={`Open ${activeDay.label} in calendar`}>
+                  <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            {activeDay.previewItems.length === 0 ? (
+              <div className="rounded-[1.15rem] border border-dashed border-slate-200/80 bg-white/80 px-3.5 py-4 text-sm text-slate-500">
+                No jobs queued for this day.
+              </div>
+            ) : (
+              activeDay.previewItems.slice(0, 4).map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.url}
+                  className="native-touch-surface flex min-h-[4.35rem] items-start gap-3 rounded-[1.15rem] border border-white/80 bg-white/94 px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.05)] active:scale-[0.99]"
+                >
+                  <div className="shrink-0 rounded-[0.9rem] bg-slate-100 px-2.5 py-2 text-center">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">Start</p>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-800">{formatDateLabel(item.startTime, "h:mm a")}</p>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.title}</p>
+                    <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">
+                      {item.clientName}
+                      {item.vehicleLabel ? ` · ${item.vehicleLabel}` : ""}
+                    </p>
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -623,12 +904,12 @@ export function HomeUpcomingAttentionPanel({
   error,
   onRetry,
   onDismiss,
-  onSnooze,
+  nativeIOS = false,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
   range: HomeDashboardRange;
   onDismiss?: (itemId: string) => void;
-  onSnooze?: (itemId: string) => void;
+  nativeIOS?: boolean;
 } & WidgetStateProps) {
   if (loading) return <CardLoadingShell title="Upcoming Jobs / Needs Attention" rows={6} />;
   if (error) return <WidgetErrorState title="Upcoming Jobs / Needs Attention" error={error} onRetry={onRetry} />;
@@ -639,6 +920,52 @@ export function HomeUpcomingAttentionPanel({
   const scheduleCount = scheduleItems.length;
   const queueCount = queueItems.length;
   const priorityMoneyAtRisk = queueItems.reduce((sum, item) => sum + (item.amountAtRisk ?? 0), 0);
+
+  if (nativeIOS) {
+    return (
+      <Card className="overflow-hidden rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_14px_32px_rgba(15,23,42,0.07)]">
+        <CardHeader className="border-b border-slate-100/90 px-3.5 pb-3 pt-3.5">
+          <CardTitle className="text-[1.15rem] tracking-[-0.03em]">Needs attention</CardTitle>
+          <CardDescription className="text-[12px] leading-5 text-slate-500">
+            {scheduleCount} upcoming · {queueCount} action item{queueCount === 1 ? "" : "s"} · {formatDashboardCompactCurrency(priorityMoneyAtRisk)} at risk
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2.5 px-3.5 py-3.5">
+          {scheduleItems.length === 0 && queueItems.length === 0 ? (
+            <div className="rounded-[1.15rem] border border-dashed border-slate-200/80 bg-slate-50/80 px-3.5 py-4 text-sm text-slate-500">
+              No upcoming jobs or urgent action items in this view.
+            </div>
+          ) : null}
+          {scheduleItems.slice(0, 2).map((item) => (
+            <Link
+              key={item.id}
+              to={item.urls.appointment}
+              className="native-touch-surface flex min-h-[4.25rem] items-start gap-3 rounded-[1.15rem] border border-amber-100 bg-amber-50/70 px-3.5 py-3 active:scale-[0.99]"
+            >
+              <div className="shrink-0 rounded-[0.85rem] bg-white/80 px-2.5 py-2 text-center">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-700">Next</p>
+                <p className="mt-1 text-[11px] font-semibold text-amber-900">{formatDateLabel(item.startTime, "h:mm a")}</p>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.title}</p>
+                <p className="mt-1 line-clamp-1 text-[12px] text-slate-500">
+                  {item.client.name} · {item.vehicle.label}
+                </p>
+              </div>
+              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-amber-700/70" />
+            </Link>
+          ))}
+          {queueItems.slice(0, 3).map((item) => (
+            <NativeAttentionQueueItem
+              key={item.id}
+              item={item}
+              onDismiss={item.supportsDismiss ? onDismiss : undefined}
+            />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={dashboardPanelClassName}>
@@ -753,18 +1080,11 @@ export function HomeUpcomingAttentionPanel({
                         <Link to={item.ctaUrl}>{item.ctaLabel}</Link>
                       </Button>
                     </div>
-                    {(item.supportsSnooze || item.supportsDismiss) && (onSnooze || onDismiss) ? (
+                    {item.supportsDismiss && onDismiss ? (
                       <div className="mt-3 flex gap-2">
-                        {item.supportsSnooze && onSnooze ? (
-                          <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onSnooze(item.id)}>
-                            Snooze
-                          </Button>
-                        ) : null}
-                        {item.supportsDismiss && onDismiss ? (
-                          <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onDismiss(item.id)}>
-                            Dismiss
-                          </Button>
-                        ) : null}
+                        <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-slate-50/80 text-xs text-slate-700" onClick={() => onDismiss(item.id)}>
+                          Dismiss
+                        </Button>
                       </div>
                     ) : null}
                     </div>
@@ -776,6 +1096,143 @@ export function HomeUpcomingAttentionPanel({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function NativeAttentionQueueItem({
+  item,
+  onDismiss,
+}: {
+  item: HomeDashboardSnapshot["actionQueue"]["items"][number];
+  onDismiss?: (itemId: string) => void;
+}) {
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const gestureRef = useRef({
+    active: false,
+    dragging: false,
+    pointerId: null as number | null,
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+  });
+
+  const completeDismiss = () => {
+    if (!onDismiss || removing) return;
+    void triggerSelectionFeedback();
+    setRemoving(true);
+    window.setTimeout(() => onDismiss(item.id), 170);
+  };
+
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[1.15rem] transition-[max-height,opacity,transform] duration-200",
+        removing ? "max-h-0 scale-[0.98] opacity-0" : "max-h-56 opacity-100"
+      )}
+    >
+      {onDismiss ? (
+        <div className="absolute inset-0 flex items-center justify-end rounded-[1.15rem] bg-emerald-500 px-4 text-sm font-semibold text-white">
+          Dismiss
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "rounded-[1.15rem] border border-slate-200/80 bg-slate-50/90 px-3.5 py-3 shadow-[0_8px_18px_rgba(15,23,42,0.04)] transition-[transform,background-color,box-shadow] duration-150",
+          dragging && "transition-none",
+          onDismiss && "active:bg-white"
+        )}
+        style={{ transform: `translate3d(${offset}px,0,0)`, touchAction: "pan-y" }}
+        onPointerDown={(event) => {
+          if (!onDismiss || event.pointerType === "mouse") return;
+          gestureRef.current = {
+            active: true,
+            dragging: false,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startTime: performance.now(),
+          };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const gesture = gestureRef.current;
+          if (!onDismiss || !gesture.active || gesture.pointerId !== event.pointerId) return;
+          const dx = event.clientX - gesture.startX;
+          const dy = event.clientY - gesture.startY;
+          if (!gesture.dragging) {
+            if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+            if (Math.abs(dx) <= Math.abs(dy) * 1.25) return;
+            gesture.dragging = true;
+            setDragging(true);
+          }
+          event.preventDefault();
+          setOffset(Math.max(-124, Math.min(124, dx * 0.82)));
+        }}
+        onPointerUp={(event) => {
+          const gesture = gestureRef.current;
+          event.currentTarget.releasePointerCapture?.(event.pointerId);
+          if (!gesture.active || gesture.pointerId !== event.pointerId) return;
+          const elapsed = Math.max(1, performance.now() - gesture.startTime);
+          const velocity = Math.abs(offset) / elapsed;
+          const shouldDismiss = gesture.dragging && onDismiss && (Math.abs(offset) > 82 || velocity > 0.65);
+          gestureRef.current.active = false;
+          gestureRef.current.dragging = false;
+          gestureRef.current.pointerId = null;
+          setDragging(false);
+          if (shouldDismiss) {
+            setOffset(offset < 0 ? -420 : 420);
+            completeDismiss();
+          } else {
+            setOffset(0);
+          }
+        }}
+        onPointerCancel={() => {
+          gestureRef.current.active = false;
+          gestureRef.current.dragging = false;
+          gestureRef.current.pointerId = null;
+          setDragging(false);
+          setOffset(0);
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                  item.urgency === "critical"
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : item.urgency === "high"
+                      ? "border-orange-200 bg-orange-50 text-orange-700"
+                      : "border-slate-200 bg-white text-slate-600"
+                )}
+              >
+                {item.urgency}
+              </span>
+              {item.amountAtRisk != null ? (
+                <Badge variant="outline" className="border-slate-200 bg-white text-[10px]">
+                  {formatDashboardCurrency(item.amountAtRisk)}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.label}</p>
+            <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-500">{item.reason}</p>
+          </div>
+          <Button asChild size="sm" className="min-h-9 shrink-0 rounded-full bg-slate-950 px-3 text-xs text-white hover:bg-slate-800">
+            <Link to={item.ctaUrl}>{item.ctaLabel}</Link>
+          </Button>
+        </div>
+        {onDismiss ? (
+          <div className="mt-3 flex gap-2">
+            <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full border border-slate-200 bg-white/80 text-xs text-slate-700" onClick={completeDismiss}>
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -990,6 +1447,15 @@ export function HomeBookingsOverviewCard({
   const depositCoverageBase = bookings.depositsCollectedAmount + bookings.depositsDueAmount;
   const depositCoveragePercent =
     depositCoverageBase > 0 ? Math.max(0, Math.min(100, Math.round((bookings.depositsCollectedAmount / depositCoverageBase) * 100))) : null;
+  const addOnInsights = bookings.addOnInsights ?? {
+    appointmentCount: 0,
+    appointmentsWithAddOns: 0,
+    attachmentRate: 0,
+    addOnRevenue: 0,
+    addOnCount: 0,
+    averageAddOnRevenuePerBooking: 0,
+    topAddOns: [],
+  };
   const stats = [
     {
       label: "Bookings this week",
@@ -1111,6 +1577,46 @@ export function HomeBookingsOverviewCard({
                   <p className="text-lg font-semibold tracking-tight text-orange-800">{formatDashboardCurrency(bookings.depositsDueAmount)}</p>
                 </Link>
               </div>
+            </div>
+            <div className={cn(dashboardInsetClassName, "p-4")}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Add-on lift</p>
+                  <p className="mt-1 text-sm text-slate-500">Monthly add-on attachment and booked add-on revenue.</p>
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {addOnInsights.attachmentRate}% attach
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[0.95rem] bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Revenue</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">{formatDashboardCurrency(addOnInsights.addOnRevenue)}</p>
+                </div>
+                <div className="rounded-[0.95rem] bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Bookings</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
+                    {addOnInsights.appointmentsWithAddOns}/{Math.max(addOnInsights.appointmentCount, 0)}
+                  </p>
+                </div>
+                <div className="rounded-[0.95rem] bg-white/80 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Avg lift</p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
+                    {formatDashboardCompactCurrency(addOnInsights.averageAddOnRevenuePerBooking)}
+                  </p>
+                </div>
+              </div>
+              {addOnInsights.topAddOns.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {addOnInsights.topAddOns.map((addon) => (
+                    <Badge key={addon.id} variant="outline" className="rounded-full bg-white px-3 py-1 text-slate-700">
+                      {addon.name} · {addon.count} · {formatDashboardCompactCurrency(addon.revenue)}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">Add-ons selected on appointments this month will show up here.</p>
+              )}
             </div>
           </>
         )}
@@ -1268,51 +1774,168 @@ export function HomeCompactQuickActions({
   loading,
   error,
   onRetry,
-}: { snapshot?: HomeDashboardSnapshot | null } & WidgetStateProps) {
+  nativeIOS = false,
+}: { snapshot?: HomeDashboardSnapshot | null; nativeIOS?: boolean } & WidgetStateProps) {
+  const { setOpen: setCommandPaletteOpen } = useCommandPalette();
+  const [customizing, setCustomizing] = useState(false);
+  const [selectedShortcutKeys, setSelectedShortcutKeys] = useState<string[] | null>(() => loadStoredDashboardShortcuts());
+  const availableActions = useMemo(() => getAvailableDashboardShortcuts(snapshot), [snapshot]);
+  const defaultActions = useMemo(() => getDefaultDashboardShortcuts(availableActions), [availableActions]);
+  const visibleActions = useMemo(() => {
+    if (!selectedShortcutKeys) return defaultActions;
+    const availableByKey = new Map(availableActions.map((action) => [action.key, action]));
+    return selectedShortcutKeys
+      .map((key) => availableByKey.get(key))
+      .filter((action): action is DashboardShortcutAction => Boolean(action));
+  }, [availableActions, defaultActions, selectedShortcutKeys]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedShortcutKeys) return;
+    window.localStorage.setItem(DASHBOARD_SHORTCUTS_STORAGE_KEY, JSON.stringify(selectedShortcutKeys));
+  }, [selectedShortcutKeys]);
+
   if (loading) return <CardLoadingShell title="Shortcuts" rows={2} compact />;
   if (error) return <WidgetErrorState title="Shortcuts" error={error} onRetry={onRetry} />;
 
-  const allowedKeys = new Set(["new_appointment", "new_quote", "new_invoice", "add_client"]);
-  const actions = (snapshot?.quickActions ?? []).filter((action) => allowedKeys.has(action.key));
-
-  if (actions.length === 0) return null;
+  if (availableActions.length === 0) return null;
 
   return (
-    <Card className={cn(dashboardPanelClassName, "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78")}>
+    <Card
+      className={cn(
+        dashboardPanelClassName,
+        "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78",
+        nativeIOS && "rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
+      )}
+    >
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base tracking-[-0.02em] text-slate-800">Shortcuts</CardTitle>
-            <CardDescription className="text-slate-500">Secondary entry points for common admin work.</CardDescription>
+            <CardTitle className={cn("text-base tracking-[-0.02em] text-slate-800", nativeIOS && "text-[1.05rem]")}>Shortcuts</CardTitle>
           </div>
-          <span className="rounded-full border border-slate-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-            {actions.length} actions
-          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-full border-slate-200 bg-white/88 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950",
+              nativeIOS && "h-10 w-10",
+              customizing && "border-slate-300 bg-slate-950 text-white hover:bg-slate-900 hover:text-white"
+            )}
+            onClick={() => setCustomizing((current) => !current)}
+            aria-expanded={customizing}
+            aria-label={customizing ? "Done customizing shortcuts" : "Customize shortcuts"}
+            title={customizing ? "Done customizing shortcuts" : "Customize shortcuts"}
+          >
+            <Settings className={cn("h-4 w-4 transition-transform", customizing && "rotate-45")} aria-hidden="true" />
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <p className="text-sm text-slate-500">Keep the dashboard focused on the week. Use shortcuts for quick admin tasks, not primary navigation.</p>
-        <div className="grid gap-2 sm:flex sm:flex-wrap lg:justify-end">
-        {actions.map((action) => (
-          <Button
-            key={action.key}
-            asChild
-            variant={action.key === "new_appointment" ? "default" : "outline"}
-            className={cn(
-              "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
-              action.key === "new_appointment"
-                ? "bg-slate-950 text-white hover:bg-slate-800"
-                : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50"
-            )}
-          >
-            <Link to={action.url}>{action.label}</Link>
-          </Button>
-        ))}
+      <CardContent className="space-y-3">
+        {customizing ? (
+          <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/82 p-3">
+            <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-4", nativeIOS && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2")}>
+              {availableActions.map((action) => {
+                const activeKeys = selectedShortcutKeys ?? defaultActions.map((item) => item.key);
+                const checked = activeKeys.includes(action.key);
+                return (
+                  <label
+                    key={action.key}
+                    className={cn(
+                      "flex min-h-[58px] cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
+                      checked
+                        ? "border-slate-300 bg-slate-950 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => {
+                        const current = selectedShortcutKeys ?? defaultActions.map((item) => item.key);
+                        if (event.target.checked) {
+                          setSelectedShortcutKeys([...current.filter((key) => key !== action.key), action.key]);
+                        } else {
+                          setSelectedShortcutKeys(current.filter((key) => key !== action.key));
+                        }
+                      }}
+                      className="h-4 w-4 accent-slate-950"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-semibold leading-tight">{action.label}</span>
+                      <span className={cn("mt-1 block text-[11px] font-medium leading-snug", checked ? "text-white/72" : "text-slate-500")}>
+                        {action.description}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-full text-xs text-slate-500"
+                onClick={() => {
+                  setSelectedShortcutKeys(null);
+                  if (typeof window !== "undefined") {
+                    window.localStorage.removeItem(DASHBOARD_SHORTCUTS_STORAGE_KEY);
+                  }
+                }}
+              >
+                Reset shortcuts
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={cn("grid gap-2 sm:flex sm:flex-wrap", nativeIOS && "grid-cols-2 sm:grid")}>
+          {visibleActions.length > 0 ? (
+            (nativeIOS ? visibleActions.slice(0, 6) : visibleActions).map((action) => {
+              const primary = action.key === "new_appointment";
+              const className = cn(
+                "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
+                primary
+                  ? "bg-slate-950 text-white hover:bg-slate-800"
+                  : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50",
+                nativeIOS && "min-h-[3.25rem] rounded-[1rem] px-3 text-sm shadow-[0_8px_18px_rgba(15,23,42,0.04)] sm:w-full sm:justify-center"
+              );
+
+              if (action.behavior === "command") {
+                return (
+                  <Button
+                    key={action.key}
+                    type="button"
+                    variant="outline"
+                    className={className}
+                    onClick={() => {
+                      void triggerSelectionFeedback();
+                      setCommandPaletteOpen(true);
+                    }}
+                  >
+                    {action.label}
+                  </Button>
+                );
+              }
+
+              return (
+                <Button
+                  key={action.key}
+                  asChild
+                  variant={primary ? "default" : "outline"}
+                  className={className}
+                >
+                  <Link to={action.url}>{action.label}</Link>
+                </Button>
+              );
+            })
+          ) : (
+            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/72 px-3 py-3 text-sm text-slate-500">
+              No shortcuts selected.
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
-
-
-

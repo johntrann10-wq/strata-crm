@@ -237,9 +237,13 @@ export default function VehicleDetailPage() {
     useEffect(() => {
       if (deleteResult.data) {
         toast.success("Vehicle archived");
-        navigate(returnTo);
+        navigate(returnTo, {
+          state: {
+            archivedVehicleId: vehicleId ?? null,
+          },
+        });
       }
-    }, [deleteResult.data, navigate, returnTo]);
+    }, [deleteResult.data, navigate, returnTo, vehicleId]);
 
     useEffect(() => {
       if (deleteResult.error) {

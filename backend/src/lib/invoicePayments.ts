@@ -1,11 +1,17 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { invoices, payments, appointments } from "../db/schema.js";
 import { getAppointmentFinanceMirrorUpdates, getAppointmentFinanceSummaryMap } from "./appointmentFinance.js";
-import { BadRequestError, NotFoundError } from "./errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "./errors.js";
 import { logger } from "./logger.js";
 
 type DbExecutor = any;
+
+type ActiveInvoicePaymentSummary = {
+  total: number;
+  totalCents: number;
+  lastPaidAt: Date | null;
+};
 
 type RecordInvoicePaymentInput = {
   businessId: string;
@@ -22,6 +28,22 @@ type RecordInvoicePaymentInput = {
 };
 
 let cachedPaymentColumns: Set<string> | null = null;
+
+function toMoneyCents(amount: number): number {
+  if (!Number.isFinite(amount)) return Number.NaN;
+  return Math.round(amount * 100);
+}
+
+function normalizeOptionalDate(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
 
 export function isPaymentSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -84,24 +106,92 @@ export function buildLegacyPaymentInsertValues(
   return legacyValues;
 }
 
-export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExecutor = db) {
+export async function getActiveInvoicePaymentSummary(
+  invoiceId: string,
+  tx: DbExecutor = db
+): Promise<ActiveInvoicePaymentSummary> {
   try {
     const [sumRow] = await tx
-      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .select({
+        total: sql<string>`coalesce(sum(${payments.amount}), 0)`,
+        lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
+      })
       .from(payments)
       .where(and(eq(payments.invoiceId, invoiceId), sql`${payments.reversedAt} is null`));
-    return Number(sumRow?.total ?? 0);
+    const total = Number(sumRow?.total ?? 0);
+    return {
+      total,
+      totalCents: toMoneyCents(total),
+      lastPaidAt: normalizeOptionalDate(sumRow?.lastPaidAt ?? null),
+    };
   } catch (error) {
     if (!isPaymentSchemaDriftError(error)) throw error;
-    logger.warn("Payments schema drift detected on total aggregation; falling back to legacy sum", {
+    logger.warn("Payments schema drift detected on payment aggregation; falling back to legacy sum", {
       invoiceId,
       error,
     });
     const [sumRow] = await tx
-      .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
+      .select({
+        total: sql<string>`coalesce(sum(${payments.amount}), 0)`,
+        lastPaidAt: sql<Date | null>`max(${payments.paidAt})`,
+      })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    return Number(sumRow?.total ?? 0);
+    const total = Number(sumRow?.total ?? 0);
+    return {
+      total,
+      totalCents: toMoneyCents(total),
+      lastPaidAt: normalizeOptionalDate(sumRow?.lastPaidAt ?? null),
+    };
+  }
+}
+
+export async function getActiveInvoicePaymentTotal(invoiceId: string, tx: DbExecutor = db) {
+  const summary = await getActiveInvoicePaymentSummary(invoiceId, tx);
+  return summary.total;
+}
+
+async function findRecentMatchingActivePayment(
+  input: RecordInvoicePaymentInput,
+  amount: string,
+  paidAt: Date,
+  tx: DbExecutor
+) {
+  if (input.idempotencyKey) return null;
+
+  const notes = input.notes?.trim() || null;
+  const referenceNumber = input.referenceNumber?.trim() || null;
+  const duplicateWindowStart = new Date(Math.max(0, paidAt.getTime() - 30_000));
+
+  try {
+    const [existing] = await tx
+      .select({
+        id: payments.id,
+      })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.businessId, input.businessId),
+          eq(payments.invoiceId, input.invoiceId),
+          eq(payments.amount, amount),
+          eq(payments.method, input.method),
+          gte(payments.paidAt, duplicateWindowStart),
+          sql`${payments.reversedAt} is null`,
+          notes ? eq(payments.notes, notes) : isNull(payments.notes),
+          referenceNumber ? eq(payments.referenceNumber, referenceNumber) : isNull(payments.referenceNumber)
+        )
+      )
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+    return existing ?? null;
+  } catch (error) {
+    if (!isPaymentSchemaDriftError(error)) throw error;
+    logger.warn("Skipping duplicate payment guard because payments schema is missing required fields", {
+      invoiceId: input.invoiceId,
+      businessId: input.businessId,
+      error,
+    });
+    return null;
   }
 }
 
@@ -181,6 +271,33 @@ export async function recordInvoicePayment(
   input: RecordInvoicePaymentInput,
   tx: DbExecutor = db
 ) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new BadRequestError("Payment amount must be greater than zero.");
+  }
+
+  const paidAt = input.paidAt ?? new Date();
+  if (Number.isNaN(paidAt.getTime())) {
+    throw new BadRequestError("Payment date is invalid.");
+  }
+
+  const amountCents = toMoneyCents(input.amount);
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    throw new BadRequestError("Payment amount is invalid.");
+  }
+
+  const normalizedAmount = (amountCents / 100).toFixed(2);
+  const normalizedNotes = input.notes?.trim() || null;
+  const normalizedReferenceNumber = input.referenceNumber?.trim() || null;
+  const normalizedIdempotencyKey = input.idempotencyKey?.trim() || null;
+
+  await tx.execute(sql`
+    select 1
+    from ${invoices}
+    where ${invoices.id} = ${input.invoiceId}
+      and ${invoices.businessId} = ${input.businessId}
+    for update
+  `);
+
   const [invoice] = await tx
     .select()
     .from(invoices)
@@ -190,16 +307,40 @@ export async function recordInvoicePayment(
   if (invoice.status === "void") throw new BadRequestError("Cannot add payment to a void invoice.");
 
   const invoiceTotal = Number(invoice.total ?? 0);
-  const paidSoFar = await getActiveInvoicePaymentTotal(input.invoiceId, tx);
-  const newTotal = paidSoFar + input.amount;
-  if (newTotal > invoiceTotal) {
-    throw new BadRequestError(
-      `Payment total would exceed invoice total (${invoiceTotal}). Already paid: ${paidSoFar}.`
+  const invoiceTotalCents = toMoneyCents(invoiceTotal);
+  if (!Number.isFinite(invoiceTotalCents) || invoiceTotalCents < 0) {
+    throw new BadRequestError("Invoice total is invalid and cannot accept payments.");
+  }
+
+  const existingDuplicate = await findRecentMatchingActivePayment(
+    {
+      ...input,
+      idempotencyKey: normalizedIdempotencyKey,
+      notes: normalizedNotes,
+      referenceNumber: normalizedReferenceNumber,
+    },
+    normalizedAmount,
+    paidAt,
+    tx
+  );
+  if (existingDuplicate) {
+    throw new ConflictError(
+      "A matching payment was just recorded for this invoice. Refresh the invoice before trying again."
     );
   }
 
-  const amount = String(input.amount);
-  const paidAt = input.paidAt ?? new Date();
+  const paidSummary = await getActiveInvoicePaymentSummary(input.invoiceId, tx);
+  if (!Number.isFinite(paidSummary.totalCents) || paidSummary.totalCents < 0) {
+    throw new BadRequestError("Existing invoice payment totals are invalid.");
+  }
+
+  const newTotalCents = paidSummary.totalCents + amountCents;
+  if (newTotalCents > invoiceTotalCents) {
+    throw new BadRequestError(
+      `Payment total would exceed invoice total (${invoiceTotal.toFixed(2)}). Already paid: ${paidSummary.total.toFixed(2)}.`
+    );
+  }
+
   let payment;
   try {
     [payment] = await tx
@@ -207,12 +348,12 @@ export async function recordInvoicePayment(
       .values({
         businessId: input.businessId,
         invoiceId: input.invoiceId,
-        amount,
+        amount: normalizedAmount,
         method: input.method,
         paidAt,
-        idempotencyKey: input.idempotencyKey ?? null,
-        notes: input.notes ?? null,
-        referenceNumber: input.referenceNumber ?? null,
+        idempotencyKey: normalizedIdempotencyKey,
+        notes: normalizedNotes,
+        referenceNumber: normalizedReferenceNumber,
         stripeCheckoutSessionId: input.stripeCheckoutSessionId ?? null,
         stripePaymentIntentId: input.stripePaymentIntentId ?? null,
         stripeChargeId: input.stripeChargeId ?? null,
@@ -226,7 +367,17 @@ export async function recordInvoicePayment(
       error,
     });
     const paymentColumns = await getPaymentColumns();
-    const legacyValues = buildLegacyPaymentInsertValues(paymentColumns, input, amount, paidAt);
+    const legacyValues = buildLegacyPaymentInsertValues(
+      paymentColumns,
+      {
+        ...input,
+        idempotencyKey: normalizedIdempotencyKey,
+        notes: normalizedNotes,
+        referenceNumber: normalizedReferenceNumber,
+      },
+      normalizedAmount,
+      paidAt
+    );
     [payment] = await tx
       .insert(payments)
       .values(legacyValues)
@@ -235,8 +386,8 @@ export async function recordInvoicePayment(
 
   if (!payment) throw new BadRequestError("Failed to create payment.");
 
-  const newStatus = newTotal >= invoiceTotal ? "paid" : "partial";
-  const newPaidAt = newTotal >= invoiceTotal ? paidAt : invoice.paidAt;
+  const newStatus = newTotalCents >= invoiceTotalCents ? "paid" : "partial";
+  const newPaidAt = newStatus === "paid" ? paidAt : invoice.paidAt;
 
   await tx
     .update(invoices)
@@ -261,7 +412,8 @@ export async function recordInvoicePayment(
 export async function syncAppointmentAfterPaymentReversal(
   invoiceId: string,
   newInvoiceStatus: string,
+  paidAt: Date | null,
   tx: DbExecutor = db
 ): Promise<void> {
-  await syncAppointmentPaymentState(invoiceId, newInvoiceStatus, null, tx);
+  await syncAppointmentPaymentState(invoiceId, newInvoiceStatus, paidAt, tx);
 }

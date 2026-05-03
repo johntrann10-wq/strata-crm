@@ -3,6 +3,7 @@ import type { PermissionKey } from "./permissions.js";
 import {
   applyActionQueuePriority,
   buildActionQueue,
+  buildAddOnInsights,
   buildBookingsOverview,
   buildMonthlyRevenueChart,
   buildPipelineStages,
@@ -431,6 +432,34 @@ describe("home dashboard domain logic", () => {
     expect(days[4]).toMatchObject({ dayOfMonth: 5, expenseAmount: 125, netAmount: -125 });
   });
 
+  it("ignores invalid monthly revenue dates instead of degrading the chart", () => {
+    const days = buildMonthlyRevenueChart({
+      monthStart: new Date("2026-04-01T07:00:00.000Z"),
+      monthEnd: new Date("2026-04-30T06:59:59.999Z"),
+      timezone: "America/Los_Angeles",
+      monthlyRevenueGoal: null,
+      bookedAppointments: [
+        {
+          bookedAt: "not-a-date",
+          subtotal: "500",
+          taxRate: "0",
+          taxAmount: "0",
+          applyTax: false,
+          adminFeeRate: "0",
+          adminFeeAmount: "0",
+          applyAdminFee: false,
+          totalPrice: "500",
+        },
+      ],
+      standaloneInvoices: [{ bookedAt: "also-not-a-date", total: "300" }],
+      collectedPayments: [{ paidAt: "still-not-a-date", amount: 250 }],
+      expenseRows: [{ expenseDate: "bad-expense-date", amount: "125" }],
+    });
+
+    expect(days.length).toBeGreaterThan(0);
+    expect(days.every((day) => day.bookedRevenue === 0 && day.collectedRevenue === 0 && day.expenseAmount === 0)).toBe(true);
+  });
+
   it("prefers computed appointment finance totals over stale dashboard totalPrice values", () => {
     const days = buildWeeklyAppointmentOverview({
       weekStart: new Date("2026-04-06T07:00:00.000Z"),
@@ -618,6 +647,12 @@ describe("home dashboard domain logic", () => {
       depositsCollectedAmount: 300,
       depositsDueAmount: 150,
       depositsDueCount: 1,
+      addOnInsights: buildAddOnInsights({
+        appointmentCount: 2,
+        rows: [
+          { appointmentId: "1", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 1, unitPrice: "45" },
+        ],
+      }),
     });
 
     expect(overview).toMatchObject({
@@ -631,6 +666,15 @@ describe("home dashboard domain logic", () => {
       depositsCollectedAmount: 300,
       depositsDueAmount: 150,
       depositsDueCount: 1,
+      addOnInsights: {
+        appointmentCount: 2,
+        appointmentsWithAddOns: 1,
+        attachmentRate: 50,
+        addOnRevenue: 45,
+        addOnCount: 1,
+        averageAddOnRevenuePerBooking: 22.5,
+        topAddOns: [{ id: "addon-1", name: "Engine Bay", count: 1, revenue: 45 }],
+      },
       links: {
         bookingsThisWeek: "/calendar?view=week&date=2026-04-06",
         bookingsThisMonth: "/calendar?view=month&date=2026-04-01",
@@ -641,6 +685,30 @@ describe("home dashboard domain logic", () => {
         depositsCollected: "/finances",
         depositsDue: "/calendar?view=week&date=2026-04-06",
       },
+    });
+  });
+
+  it("summarizes add-on attachment and top add-ons for dashboard booking insight", () => {
+    const insights = buildAddOnInsights({
+      appointmentCount: 4,
+      rows: [
+        { appointmentId: "apt-1", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 1, unitPrice: "45" },
+        { appointmentId: "apt-1", serviceId: "addon-2", serviceName: "Pet Hair", quantity: 1, unitPrice: "60" },
+        { appointmentId: "apt-2", serviceId: "addon-1", serviceName: "Engine Bay", quantity: 2, unitPrice: "45" },
+      ],
+    });
+
+    expect(insights).toEqual({
+      appointmentCount: 4,
+      appointmentsWithAddOns: 2,
+      attachmentRate: 50,
+      addOnRevenue: 195,
+      addOnCount: 4,
+      averageAddOnRevenuePerBooking: 48.75,
+      topAddOns: [
+        { id: "addon-1", name: "Engine Bay", count: 3, revenue: 135 },
+        { id: "addon-2", name: "Pet Hair", count: 1, revenue: 60 },
+      ],
     });
   });
 
@@ -724,6 +792,7 @@ describe("home dashboard domain logic", () => {
       depositsCollectedAmount: 0,
       depositsDueAmount: 0,
       depositsDueCount: 0,
+      addOnInsights: buildAddOnInsights({ appointmentCount: 2, rows: [] }),
     });
 
     expect(overview.averageTicketValue).toBe(170.5);

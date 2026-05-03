@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, CheckCircle, Search, Send, Loader2, FileText, AlertCircle } from "lucide-react";
+import { Plus, CheckCircle, Search, Send, Loader2, FileText, AlertCircle, ChevronRight } from "lucide-react";
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router";
 import type { AuthOutletContext } from "./_app";
 import { api } from "../api";
@@ -16,10 +16,21 @@ import { ListViewToolbar } from "../components/shared/ListViewToolbar";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { StatusBadge } from "../components/shared/StatusBadge";
 import { formatFreshness, isOlderThanDays, safeDate } from "../lib/queueDateUtils";
+import { selectorTabsListClassName, selectorTabsTriggerClassName } from "../components/shared/selectorStyles";
+import { isNativeIOSApp } from "@/lib/mobileShell";
+import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 
 const QUOTE_TABS = ["all", "accepted", "aging", "followup", "lost"] as const;
 type QuoteTab = (typeof QUOTE_TABS)[number];
 type QuoteRecord = Record<string, any>;
+
+const QUOTE_TAB_OPTIONS: Array<{ value: QuoteTab; label: string; shortLabel: string }> = [
+  { value: "all", label: "All Quotes", shortLabel: "All" },
+  { value: "accepted", label: "Ready to Book", shortLabel: "Ready" },
+  { value: "aging", label: "Aging", shortLabel: "Aging" },
+  { value: "followup", label: "Follow-up", shortLabel: "Follow-up" },
+  { value: "lost", label: "Lost Quotes", shortLabel: "Lost" },
+];
 
 type QuoteQueueCollections = {
   acceptedRows: QuoteRecord[];
@@ -134,6 +145,7 @@ export default function QuotesIndexPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { businessId, currentLocationId } = useOutletContext<AuthOutletContext>();
+  const nativeIOS = isNativeIOSApp();
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendingQuoteId, setSendingQuoteId] = useState<string | null>(null);
   const initialSearch = searchParams.get("q") ?? "";
@@ -193,8 +205,17 @@ export default function QuotesIndexPage() {
   const allRows = Array.isArray(allQuotes) ? allQuotes : [];
   const lostRows = Array.isArray(lostQuotes) ? lostQuotes : [];
   const { acceptedRows, agingRows, followUpRows, openPipelineValue } = getQuoteQueueCollections(allRows);
+  const activeTabCount = getQuoteTabResultCount(activeTab, allRows, acceptedRows, agingRows, followUpRows, lostRows);
   const [, runSendQuote] = useAction(api.quote.send);
   const [, runSendFollowUp] = useAction(api.quote.sendFollowUp);
+
+  const handleTabChange = (value: string) => {
+    if (!(QUOTE_TABS as readonly string[]).includes(value)) return;
+    void triggerImpactFeedback("light");
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", value);
+    setSearchParams(next, { preventScrollReset: true });
+  };
 
   const handleSendQuote = async (quoteId: string) => {
     setSendingQuoteId(quoteId);
@@ -257,13 +278,23 @@ export default function QuotesIndexPage() {
   };
 
   return (
-    <div className="page-content page-section max-w-6xl">
+    <div
+      className={cn(
+        nativeIOS
+          ? "mx-auto w-full max-w-3xl space-y-4 px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2"
+          : "page-content page-section max-w-6xl"
+      )}
+    >
       <PageHeader
         title="Quotes"
-        subtitle="Track approvals, revive stalled estimates, and move accepted work into appointments and invoices."
         actions={
-          <Button asChild>
-            <Link to="/quotes/new">
+          <Button asChild className={cn(nativeIOS && "h-11 w-full rounded-[20px] shadow-[0_10px_25px_rgba(249,115,22,0.16)] sm:w-auto")}>
+            <Link
+              to="/quotes/new"
+              onClick={() => {
+                void triggerImpactFeedback("light");
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               New Quote
             </Link>
@@ -271,97 +302,126 @@ export default function QuotesIndexPage() {
         }
       />
 
-      <section className="overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Open pipeline</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{formatCurrency(openPipelineValue)}</p>
-          </div>
-          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ready to book</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{acceptedRows.length}</p>
-          </div>
-          <div className="rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cooling off</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950">{agingRows.length}</p>
-          </div>
-          <div className="rounded-[22px] border border-white/80 bg-slate-950 px-4 py-4 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">Follow-up queue</p>
-            <p className="mt-2 text-[1.7rem] font-semibold tracking-[-0.04em]">{followUpRows.length}</p>
-          </div>
+      <section
+        className={cn(
+          "overflow-hidden rounded-[28px] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_24%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)]",
+          nativeIOS && "rounded-[30px] border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95))] p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]"
+        )}
+      >
+        <div className={cn("grid gap-3 md:grid-cols-4", nativeIOS && "grid-cols-2 md:grid-cols-2")}>
+          <QuoteMetricCard label="Pipeline" value={formatCurrency(openPipelineValue)} nativeIOS={nativeIOS} />
+          <QuoteMetricCard label="Ready" value={String(acceptedRows.length)} nativeIOS={nativeIOS} />
+          <QuoteMetricCard label="Aging" value={String(agingRows.length)} nativeIOS={nativeIOS} />
+          <QuoteMetricCard label="Follow-up" value={String(followUpRows.length)} nativeIOS={nativeIOS} highlight />
         </div>
       </section>
 
-      <ListViewToolbar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Search clients, vehicles, or quote id..."
-        loading={allFetching && allRows.length > 0}
-        resultCount={getQuoteTabResultCount(activeTab, allRows, acceptedRows, agingRows, followUpRows, lostRows)}
-        noun="quotes"
-        filtersLabel={
-          [
-            activeTab !== "all" ? `View: ${activeTab}` : null,
-            debouncedSearch ? `Search: ${debouncedSearch}` : null,
-          ]
-            .filter(Boolean)
-            .join(" - ") || null
-        }
-        onClear={() => {
-          setSearch("");
-          setDebouncedSearch("");
-          const next = new URLSearchParams(searchParams);
-          next.delete("q");
-          next.set("tab", "all");
-          setSearchParams(next, { replace: true, preventScrollReset: true });
-        }}
-      />
+      {nativeIOS ? (
+        <div className="rounded-[28px] border border-white/80 bg-white/92 p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search clients, vehicles, quote id"
+              className="h-12 rounded-[20px] border-white/80 bg-slate-50/80 pl-10 text-[16px] shadow-inner"
+            />
+          </div>
+          {(activeTab !== "all" || debouncedSearch) ? (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="truncate text-xs font-medium text-slate-500">
+                {activeTabCount} {activeTabCount === 1 ? "quote" : "quotes"} in view
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-9 rounded-full px-3 text-xs"
+                onClick={() => {
+                  setSearch("");
+                  setDebouncedSearch("");
+                  const next = new URLSearchParams(searchParams);
+                  next.delete("q");
+                  next.set("tab", "all");
+                  setSearchParams(next, { replace: true, preventScrollReset: true });
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <ListViewToolbar
+          search={search}
+          onSearchChange={setSearch}
+          placeholder="Search clients, vehicles, or quote id..."
+          loading={allFetching && allRows.length > 0}
+          resultCount={activeTabCount}
+          noun="quotes"
+          filtersLabel={
+            [
+              activeTab !== "all" ? `View: ${activeTab}` : null,
+              debouncedSearch ? `Search: ${debouncedSearch}` : null,
+            ]
+              .filter(Boolean)
+              .join(" - ") || null
+          }
+          onClear={() => {
+            setSearch("");
+            setDebouncedSearch("");
+            const next = new URLSearchParams(searchParams);
+            next.delete("q");
+            next.set("tab", "all");
+            setSearchParams(next, { replace: true, preventScrollReset: true });
+          }}
+        />
+      )}
 
       <Tabs
         value={activeTab}
-        onValueChange={(value) => {
-          const next = new URLSearchParams(searchParams);
-          next.set("tab", value);
-          setSearchParams(next, { preventScrollReset: true });
-        }}
+        onValueChange={handleTabChange}
       >
-        <TabsList className="flex w-full gap-2 overflow-x-auto rounded-xl bg-transparent p-0 sm:grid sm:w-auto sm:grid-cols-5 xl:w-full">
-          <TabsTrigger value="all" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            All Quotes
-          </TabsTrigger>
-          <TabsTrigger value="accepted" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            Ready to Book
-            {acceptedRows.length > 0 && (
-              <span className="ml-1 rounded bg-green-100 text-green-700 px-1.5 py-0.5 text-xs font-medium">
-                {acceptedRows.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="aging" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            Aging
-            {agingRows.length > 0 && (
-              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
-                {agingRows.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="followup" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            Follow-up
-            {followUpRows.length > 0 && (
-              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
-                {followUpRows.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="lost" className="shrink-0 rounded-full border border-border bg-background px-3 py-1.5 data-[state=active]:border-primary data-[state=active]:bg-primary/10 sm:rounded-md sm:border-0 sm:bg-transparent sm:px-3 sm:py-1.5">
-            Lost Quotes
-            {lostRows.length > 0 && (
-              <span className="ml-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-xs font-medium">
-                {lostRows.length}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+        {nativeIOS ? (
+          <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex gap-2">
+              {QUOTE_TAB_OPTIONS.map((option) => {
+                const count = getQuoteTabResultCount(option.value, allRows, acceptedRows, agingRows, followUpRows, lostRows);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleTabChange(option.value)}
+                    className={cn(
+                      "h-11 shrink-0 rounded-full border px-4 text-sm font-semibold transition active:scale-[0.98]",
+                      activeTab === option.value
+                        ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                        : "border-white/80 bg-white/92 text-slate-500 shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
+                    )}
+                  >
+                    {option.shortLabel}
+                    {option.value !== "all" && count > 0 ? <span className="ml-1.5 text-xs opacity-80">{count}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <TabsList className={selectorTabsListClassName("w-full")}>
+            {QUOTE_TAB_OPTIONS.map((option) => {
+              const count = getQuoteTabResultCount(option.value, allRows, acceptedRows, agingRows, followUpRows, lostRows);
+              return (
+                <TabsTrigger key={option.value} value={option.value} className={selectorTabsTriggerClassName()}>
+                  {option.label}
+                  {option.value !== "all" && count > 0 ? (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700">
+                      {count}
+                    </span>
+                  ) : null}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        )}
 
         <TabsContent value="all">
           {agingRows.length > 0 ? (
@@ -371,7 +431,7 @@ export default function QuotesIndexPage() {
                 title="Quotes are cooling off"
                 detail={`${agingRows.length} quotes are older than 3 days`}
                 amount={formatCurrency(agingRows.reduce((sum, quote) => sum + Number((quote as any).total ?? 0), 0))}
-                href={`/quotes/${String((agingRows[0] as any).id)}`}
+                href={linkWithQueueState(`/quotes/${String((agingRows[0] as any).id)}`)}
                 actionLabel="Open oldest quote"
               />
             </div>
@@ -417,6 +477,7 @@ export default function QuotesIndexPage() {
                       freshness,
                     ]}
                     href={detailHref}
+                    nativeIOS={nativeIOS}
                     actions={
                       <>
                         {canSend ? (
@@ -626,6 +687,7 @@ export default function QuotesIndexPage() {
                       accent="success"
                       lines={[row.acceptedAt ? `Accepted ${new Date(row.acceptedAt as string).toLocaleDateString()}` : "Accepted -"]}
                       href={detailHref}
+                      nativeIOS={nativeIOS}
                       actions={
                         <>
                           {bookHref ? (
@@ -744,6 +806,7 @@ export default function QuotesIndexPage() {
                       freshness || getDaysAgo(row.createdAt as string),
                     ]}
                     href={detailHref}
+                    nativeIOS={nativeIOS}
                     actions={
                       <Button
                         size="sm"
@@ -852,6 +915,7 @@ export default function QuotesIndexPage() {
                     accent="warn"
                     lines={[freshness || "No outreach recorded"]}
                     href={detailHref}
+                    nativeIOS={nativeIOS}
                     actions={
                       <Button
                         size="sm"
@@ -966,6 +1030,7 @@ export default function QuotesIndexPage() {
                       getDaysAgo(q.createdAt as string),
                     ]}
                     href={detailHref}
+                    nativeIOS={nativeIOS}
                     actions={
                       <Button
                         size="sm"
@@ -1031,6 +1096,35 @@ export default function QuotesIndexPage() {
   );
 }
 
+function QuoteMetricCard({
+  label,
+  value,
+  highlight = false,
+  nativeIOS = false,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  nativeIOS?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]",
+        highlight && "bg-slate-950 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]",
+        nativeIOS && "rounded-[24px] px-3.5 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
+      )}
+    >
+      <p className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400", highlight && "text-orange-300", nativeIOS && "text-[10px] tracking-[0.14em]")}>
+        {label}
+      </p>
+      <p className={cn("mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950", highlight && "text-white", nativeIOS && "text-xl leading-none")}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function FollowupCard({
   title,
   detail,
@@ -1072,6 +1166,7 @@ function QuoteMobileCard({
   href,
   actions,
   accent = "default",
+  nativeIOS = false,
 }: {
   title: string;
   subtitle: string;
@@ -1081,6 +1176,7 @@ function QuoteMobileCard({
   href: string;
   actions?: ReactNode;
   accent?: "default" | "warn" | "success";
+  nativeIOS?: boolean;
 }) {
   const toneClass =
     accent === "warn"
@@ -1090,28 +1186,39 @@ function QuoteMobileCard({
         : "border-border/70 bg-card/98";
 
   return (
-    <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}>
+    <div
+      className={cn(
+        "rounded-2xl border p-4 shadow-sm",
+        toneClass,
+        nativeIOS && "rounded-[26px] border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)] active:scale-[0.99]",
+        nativeIOS && accent === "warn" && "border-amber-200/80 bg-amber-50/70",
+        nativeIOS && accent === "success" && "border-emerald-200/80 bg-emerald-50/70"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <Link to={href} className="block min-w-0">
-            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
-            <p className="mt-1 truncate text-sm text-muted-foreground">{subtitle}</p>
+            <p className={cn("truncate text-sm font-semibold text-foreground", nativeIOS && "text-[17px] leading-6 tracking-[-0.02em]")}>{title}</p>
+            <p className={cn("mt-1 truncate text-sm text-muted-foreground", nativeIOS && "text-[13px]")}>{subtitle}</p>
           </Link>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <StatusBadge status={status} type="quote" />
-          <span className="text-sm font-semibold tabular-nums text-foreground">{amount}</span>
+          <span className={cn("text-sm font-semibold tabular-nums text-foreground", nativeIOS && "text-[15px]")}>{amount}</span>
         </div>
       </div>
-      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+      <div className={cn("mt-3 space-y-1 text-xs text-muted-foreground", nativeIOS && "text-[12px] leading-5")}>
         {lines.filter(Boolean).map((line) => (
           <p key={line}>{line}</p>
         ))}
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className={cn("mt-4 flex flex-wrap items-center gap-2", nativeIOS && "[&_button]:min-h-10 [&_a]:min-h-10 [&_a]:rounded-full [&_button]:rounded-full")}>
         {actions}
         <Button asChild size="sm" variant="ghost" className="h-8 px-3 text-xs">
-          <Link to={href}>Open</Link>
+          <Link to={href}>
+            Open
+            {nativeIOS ? <ChevronRight className="ml-1 h-3.5 w-3.5" /> : null}
+          </Link>
         </Button>
       </div>
     </div>

@@ -132,9 +132,60 @@ CREATE TABLE IF NOT EXISTS users (
   last_name text,
   email_verified boolean DEFAULT false,
   google_profile_id text,
+  apple_subject text,
+  apple_email text,
+  apple_email_is_private_relay boolean NOT NULL DEFAULT false,
+  auth_token_version integer NOT NULL DEFAULT 1,
+  account_deletion_requested_at timestamptz,
+  account_deletion_request_note text,
+  deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS auth_token_version integer NOT NULL DEFAULT 1;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS account_deletion_requested_at timestamptz;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS account_deletion_request_note text;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS apple_subject text;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS apple_email text;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS apple_email_is_private_relay boolean NOT NULL DEFAULT false;
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_apple_subject_unique
+  ON users (apple_subject);
+
+CREATE TABLE IF NOT EXISTS account_deletion_audits (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  deleted_user_id uuid NOT NULL,
+  email_hash text NOT NULL,
+  email_domain text,
+  auth_providers text NOT NULL DEFAULT '[]',
+  owned_business_count integer NOT NULL DEFAULT 0,
+  business_membership_count integer NOT NULL DEFAULT 0,
+  linked_staff_profile_count integer NOT NULL DEFAULT 0,
+  retained_data_summary text NOT NULL DEFAULT '[]',
+  deletion_mode text NOT NULL,
+  requested_at timestamptz NOT NULL,
+  completed_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS account_deletion_audits_deleted_user_unique
+  ON account_deletion_audits (deleted_user_id);
 
 CREATE TABLE IF NOT EXISTS businesses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -152,12 +203,18 @@ CREATE TABLE IF NOT EXISTS businesses (
   default_tax_rate decimal(5,2) DEFAULT 0,
   default_admin_fee decimal(12,2) DEFAULT 0,
   default_admin_fee_enabled boolean DEFAULT false,
+  default_appointment_start_time text DEFAULT '09:00',
   appointment_buffer_minutes integer DEFAULT 15,
   calendar_block_capacity_per_slot integer DEFAULT 1,
   lead_capture_enabled boolean DEFAULT false,
   lead_auto_response_enabled boolean DEFAULT true,
   lead_auto_response_email_enabled boolean DEFAULT true,
   lead_auto_response_sms_enabled boolean DEFAULT false,
+  notification_appointment_confirmation_email_enabled boolean DEFAULT true,
+  notification_appointment_reminder_email_enabled boolean DEFAULT true,
+  notification_abandoned_quote_email_enabled boolean DEFAULT true,
+  notification_review_request_email_enabled boolean DEFAULT true,
+  notification_lapsed_client_email_enabled boolean DEFAULT true,
   missed_call_text_back_enabled boolean DEFAULT false,
   automation_uncontacted_leads_enabled boolean DEFAULT false,
   automation_uncontacted_lead_hours integer DEFAULT 2,
@@ -193,6 +250,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   booking_trust_bullet_tertiary text,
   booking_notes_prompt text,
   booking_brand_logo_url text,
+  booking_brand_logo_transform text,
   booking_brand_primary_color_token text DEFAULT 'orange',
   booking_brand_accent_color_token text DEFAULT 'amber',
   booking_brand_background_tone_token text DEFAULT 'ivory',
@@ -206,12 +264,16 @@ CREATE TABLE IF NOT EXISTS businesses (
   booking_available_days text,
   booking_available_start_time text,
   booking_available_end_time text,
+  booking_daily_hours text,
   booking_blackout_dates text,
+  booking_closed_on_us_holidays boolean DEFAULT false,
   booking_slot_interval_minutes integer DEFAULT 15,
   booking_buffer_minutes integer,
   booking_capacity_per_slot integer,
   booking_urgency_enabled boolean DEFAULT false,
   booking_urgency_text text,
+  monthly_revenue_goal decimal(12,2),
+  monthly_jobs_goal integer,
   integration_webhook_enabled boolean DEFAULT false,
   integration_webhook_url text,
   integration_webhook_secret text,
@@ -249,11 +311,17 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_account_id text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS stripe_connect_details_submitted boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee decimal(12,2) DEFAULT 0;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_admin_fee_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS default_appointment_start_time text DEFAULT '09:00';
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS calendar_block_capacity_per_slot integer DEFAULT 1;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_capture_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_auto_response_enabled boolean DEFAULT true;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_auto_response_email_enabled boolean DEFAULT true;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS lead_auto_response_sms_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notification_appointment_confirmation_email_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notification_appointment_reminder_email_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notification_abandoned_quote_email_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notification_review_request_email_enabled boolean DEFAULT true;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notification_lapsed_client_email_enabled boolean DEFAULT true;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS missed_call_text_back_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_uncontacted_leads_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS automation_uncontacted_lead_hours integer DEFAULT 2;
@@ -288,6 +356,7 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_primary tex
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_secondary text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_trust_bullet_tertiary text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_notes_prompt text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_brand_logo_transform text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_require_email boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_require_phone boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_require_vehicle boolean DEFAULT true;
@@ -297,11 +366,16 @@ ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_show_durations boolean D
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_days text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_start_time text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_available_end_time text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_daily_hours text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_blackout_dates text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_closed_on_us_holidays boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_slot_interval_minutes integer DEFAULT 15;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_urgency_enabled boolean DEFAULT false;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS booking_urgency_text text;
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS monthly_revenue_goal decimal(12,2);
+ALTER TABLE businesses ADD COLUMN IF NOT EXISTS monthly_jobs_goal integer;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_enabled boolean DEFAULT false;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_url text;
 ALTER TABLE businesses ADD COLUMN IF NOT EXISTS integration_webhook_secret text;
@@ -468,6 +542,7 @@ CREATE TABLE IF NOT EXISTS services (
   booking_available_days text,
   booking_available_start_time text,
   booking_available_end_time text,
+  booking_daily_hours text,
   booking_buffer_minutes integer,
   booking_capacity_per_slot integer,
   booking_featured boolean DEFAULT false,
@@ -517,6 +592,7 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_service_mode text DEFAULT 
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_days text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_start_time text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_available_end_time text;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_daily_hours text;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_buffer_minutes integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_capacity_per_slot integer;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_featured boolean DEFAULT false;
@@ -755,6 +831,26 @@ CREATE TABLE IF NOT EXISTS activity_logs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS media_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  entity_type text NOT NULL,
+  entity_id uuid NOT NULL,
+  label text NOT NULL,
+  file_name text NOT NULL,
+  content_type text NOT NULL,
+  byte_size integer NOT NULL,
+  width integer,
+  height integer,
+  data_url text NOT NULL,
+  created_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS media_assets_entity_lookup_idx
+  ON media_assets (business_id, entity_type, entity_id, created_at);
+
 CREATE TABLE IF NOT EXISTS notification_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id uuid NOT NULL REFERENCES businesses(id),
@@ -784,6 +880,24 @@ ALTER TABLE IF EXISTS notification_logs
 
 CREATE UNIQUE INDEX IF NOT EXISTS notification_logs_provider_message_unique
   ON notification_logs (channel, provider_message_id);
+
+CREATE TABLE IF NOT EXISTS dashboard_preferences (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  widget_order text NOT NULL DEFAULT '[]',
+  hidden_widgets text NOT NULL DEFAULT '[]',
+  default_range text DEFAULT NULL,
+  default_team_member_id uuid DEFAULT NULL,
+  dismissed_queue_items text NOT NULL DEFAULT '{}',
+  snoozed_queue_items text NOT NULL DEFAULT '{}',
+  last_seen_at timestamptz DEFAULT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS dashboard_preferences_business_user_unique
+  ON dashboard_preferences (business_id, user_id);
 
 CREATE TABLE IF NOT EXISTS stripe_webhook_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -13,6 +13,13 @@ export type ParsedOperatingHours = {
   closeMinutes: number;
 };
 
+export type BookingDailyHoursEntry = {
+  dayIndex: number;
+  enabled: boolean;
+  openTime: string | null;
+  closeTime: string | null;
+};
+
 const DAY_INDEX_BY_LABEL: Record<string, number> = {
   sun: 0,
   sunday: 0,
@@ -154,6 +161,114 @@ export function normalizeBookingDayIndexes(value: Array<number> | null | undefin
   return next.size > 0 ? next : null;
 }
 
+export function normalizeBookingDailyHours(value: unknown): BookingDailyHoursEntry[] {
+  if (!Array.isArray(value)) return [];
+  const byDay = new Map<number, BookingDailyHoursEntry>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as {
+      dayIndex?: unknown;
+      enabled?: unknown;
+      openTime?: unknown;
+      closeTime?: unknown;
+    };
+    const dayIndex = Number(candidate.dayIndex);
+    if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6) continue;
+    const openTime =
+      typeof candidate.openTime === "string" && parseTimeToMinutes(candidate.openTime) != null
+        ? candidate.openTime
+        : null;
+    const closeTime =
+      typeof candidate.closeTime === "string" && parseTimeToMinutes(candidate.closeTime) != null
+        ? candidate.closeTime
+        : null;
+    const openMinutes = openTime ? parseTimeToMinutes(openTime) : null;
+    const closeMinutes = closeTime ? parseTimeToMinutes(closeTime) : null;
+    const hasValidWindow = openMinutes != null && closeMinutes != null && closeMinutes > openMinutes;
+    byDay.set(dayIndex, {
+      dayIndex,
+      enabled: candidate.enabled === false ? false : hasValidWindow,
+      openTime: hasValidWindow ? openTime : null,
+      closeTime: hasValidWindow ? closeTime : null,
+    });
+  }
+  return Array.from(byDay.values()).sort((left, right) => left.dayIndex - right.dayIndex);
+}
+
+export function parseBookingDailyHours(raw: string | null | undefined): BookingDailyHoursEntry[] {
+  if (!raw) return [];
+  try {
+    return normalizeBookingDailyHours(JSON.parse(raw) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+function toDateKeyFromParts(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function toDateKeyFromUtcDate(date: Date): string {
+  return toDateKeyFromParts(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function observedDateKey(year: number, monthIndex: number, day: number): string {
+  const date = new Date(Date.UTC(year, monthIndex, day));
+  const dayOfWeek = date.getUTCDay();
+  if (dayOfWeek === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } else if (dayOfWeek === 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  return toDateKeyFromUtcDate(date);
+}
+
+function nthWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number, occurrence: number): string {
+  const firstDay = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
+  const offset = (weekday - firstDay + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, 1 + offset + (occurrence - 1) * 7);
+}
+
+function lastWeekdayOfMonthDateKey(year: number, monthIndex: number, weekday: number): string {
+  const lastDate = new Date(Date.UTC(year, monthIndex + 1, 0));
+  const offset = (lastDate.getUTCDay() - weekday + 7) % 7;
+  return toDateKeyFromParts(year, monthIndex, lastDate.getUTCDate() - offset);
+}
+
+export function getUsHolidayDateKeys(year: number): Set<string> {
+  const holidays = new Set<string>();
+  const addFixed = (monthIndex: number, day: number) => {
+    holidays.add(toDateKeyFromParts(year, monthIndex, day));
+    holidays.add(observedDateKey(year, monthIndex, day));
+  };
+
+  addFixed(0, 1); // New Year's Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 0, 1, 3)); // Martin Luther King Jr. Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 1, 1, 3)); // Presidents Day
+  holidays.add(lastWeekdayOfMonthDateKey(year, 4, 1)); // Memorial Day
+  addFixed(5, 19); // Juneteenth
+  addFixed(6, 4); // Independence Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 8, 1, 1)); // Labor Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 9, 1, 2)); // Columbus Day / Indigenous Peoples' Day
+  addFixed(10, 11); // Veterans Day
+  holidays.add(nthWeekdayOfMonthDateKey(year, 10, 4, 4)); // Thanksgiving Day
+  addFixed(11, 25); // Christmas Day
+
+  return holidays;
+}
+
+export function isUsHolidayDateKey(value: string): boolean {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  if (!Number.isInteger(year)) return false;
+  return (
+    getUsHolidayDateKeys(year).has(value) ||
+    getUsHolidayDateKeys(year - 1).has(value) ||
+    getUsHolidayDateKeys(year + 1).has(value)
+  );
+}
+
 function getTimeZoneParts(date: Date, timezone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -256,22 +371,35 @@ export function buildSlotsForDate(params: {
   availableDayIndexes?: Set<number> | null;
   openTime?: string | null;
   closeTime?: string | null;
+  dailyHours?: BookingDailyHoursEntry[] | null;
   timezone?: string | null;
   now?: Date;
 }): Date[] {
   const parsedHours = parseOperatingHours(params.operatingHours);
-  const hours = {
-    dayIndexes: params.availableDayIndexes?.size ? params.availableDayIndexes : parsedHours.dayIndexes,
-    openMinutes: parseTimeToMinutes(params.openTime ?? "") ?? parsedHours.openMinutes,
-    closeMinutes: parseTimeToMinutes(params.closeTime ?? "") ?? parsedHours.closeMinutes,
-  };
   const timezone = params.timezone?.trim() || null;
   const date = timezone ? startOfDayInTimeZone(params.date, timezone) : new Date(params.date);
   if (!timezone) {
     date.setHours(0, 0, 0, 0);
   }
   const dayOfWeek = timezone ? getDayOfWeekInTimeZone(date, timezone) : date.getDay();
-  if (!hours.dayIndexes.has(dayOfWeek)) return [];
+  const dailyHours = normalizeBookingDailyHours(params.dailyHours);
+  const dayHours = dailyHours.find((entry) => entry.dayIndex === dayOfWeek) ?? null;
+  const dayIndexes = params.availableDayIndexes?.size
+    ? params.availableDayIndexes
+    : dailyHours.length > 0
+      ? new Set(dailyHours.filter((entry) => entry.enabled).map((entry) => entry.dayIndex))
+      : parsedHours.dayIndexes;
+  if (!dayIndexes.has(dayOfWeek)) return [];
+  if (dayHours && !dayHours.enabled) return [];
+  const openMinutes =
+    parseTimeToMinutes(params.openTime ?? "") ??
+    parseTimeToMinutes(dayHours?.openTime ?? "") ??
+    parsedHours.openMinutes;
+  const closeMinutes =
+    parseTimeToMinutes(params.closeTime ?? "") ??
+    parseTimeToMinutes(dayHours?.closeTime ?? "") ??
+    parsedHours.closeMinutes;
+  if (closeMinutes <= openMinutes) return [];
 
   const durationMinutes = toBookingDurationMinutes(params.durationMinutes);
   const incrementMinutes = clampInteger(params.incrementMinutes ?? DEFAULT_SLOT_INCREMENT_MINUTES, 15, 120);
@@ -281,8 +409,8 @@ export function buildSlotsForDate(params: {
   const zonedDateParts = timezone ? getTimeZoneParts(date, timezone) : null;
 
   const slots: Date[] = [];
-  const lastPossibleStart = hours.closeMinutes - durationMinutes;
-  for (let minutes = hours.openMinutes; minutes <= lastPossibleStart; minutes += incrementMinutes) {
+  const lastPossibleStart = closeMinutes - durationMinutes;
+  for (let minutes = openMinutes; minutes <= lastPossibleStart; minutes += incrementMinutes) {
     const slot = timezone && zonedDateParts
       ? zonedDateTimeToUtc(
           timezone,

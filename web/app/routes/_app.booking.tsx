@@ -1,13 +1,23 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+} from "react";
 import { useOutletContext } from "react-router";
-import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
+import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Share2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
 import { useAction, useFindMany, useFindOne } from "../../hooks/useApi";
 import type { AuthOutletContext } from "../../routes/_app";
 import { BookingBrandLogo } from "@/components/booking/BookingBrandLogo";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -48,6 +58,8 @@ import {
   resolveEffectiveBookingRequestSettings,
   type BookingRequestSettings,
 } from "@/lib/bookingRequestSettings";
+import { shareNativeContent, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
+import { buildPreviewBookingUrl, buildPublicBookingUrl, openExternalUrl } from "@/lib/publicAppUrl";
 
 type BuilderTab = "branding" | "experience" | "request" | "fields";
 type PreviewMode = "live" | "request_timing" | "request_review";
@@ -349,6 +361,127 @@ function ToggleRow({
   );
 }
 
+function StableBuilderSelect(props: React.ComponentProps<typeof Select>) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<{
+    window: { left: number; top: number };
+    elements: Array<{ element: HTMLElement; left: number; top: number }>;
+  }>({
+    window: { left: 0, top: 0 },
+    elements: [],
+  });
+
+  const getScrollTargets = () => {
+    if (typeof window === "undefined") return [];
+    const targets = new Set<HTMLElement>();
+    const addTarget = (element: Element | null | undefined) => {
+      if (element instanceof HTMLElement) targets.add(element);
+    };
+
+    addTarget(document.scrollingElement);
+    addTarget(document.documentElement);
+    addTarget(document.body);
+    addTarget(rootRef.current?.closest(".app-native-scroll"));
+    document.querySelectorAll(".app-native-scroll").forEach(addTarget);
+
+    let current = rootRef.current?.parentElement ?? null;
+    while (current) {
+      if (current.scrollHeight > current.clientHeight || current.scrollWidth > current.clientWidth) {
+        addTarget(current);
+      }
+      current = current.parentElement;
+    }
+
+    return Array.from(targets);
+  };
+
+  const rememberScrollPosition = () => {
+    if (typeof window === "undefined") return;
+    scrollPositionRef.current = {
+      window: { left: window.scrollX, top: window.scrollY },
+      elements: getScrollTargets().map((element) => ({
+        element,
+        left: element.scrollLeft,
+        top: element.scrollTop,
+      })),
+    };
+  };
+
+  const restoreScrollPosition = () => {
+    if (typeof window === "undefined") return;
+    const snapshot = scrollPositionRef.current;
+    const restore = () => {
+      const { left, top } = snapshot.window;
+      window.scrollTo({ left, top, behavior: "auto" });
+      document.scrollingElement?.scrollTo({ left, top, behavior: "auto" });
+      snapshot.elements.forEach(({ element, left: elementLeft, top: elementTop }) => {
+        element.scrollTo({ left: elementLeft, top: elementTop, behavior: "auto" });
+      });
+    };
+    requestAnimationFrame(() => {
+      restore();
+      requestAnimationFrame(restore);
+    });
+    for (const delay of [0, 16, 60, 140, 280]) {
+      window.setTimeout(restore, delay);
+    }
+  };
+
+  const stabilizeInteraction = () => {
+    rememberScrollPosition();
+    restoreScrollPosition();
+  };
+
+  const children = Children.map(props.children, (child) => {
+    if (!isValidElement(child) || child.type !== SelectContent) return child;
+    const selectContent = child as ReactElement<
+      React.ComponentProps<typeof SelectContent> & { avoidViewportScroll?: boolean }
+    >;
+    return cloneElement(
+      selectContent,
+      {
+        avoidViewportScroll: true,
+        onCloseAutoFocus: (event) => {
+          event.preventDefault();
+          stabilizeInteraction();
+          selectContent.props.onCloseAutoFocus?.(event);
+        },
+      }
+    );
+  });
+
+  return (
+    <div
+      ref={rootRef}
+      onPointerDownCapture={stabilizeInteraction}
+      onMouseDownCapture={stabilizeInteraction}
+      onFocusCapture={stabilizeInteraction}
+      onClickCapture={stabilizeInteraction}
+      onKeyDownCapture={(event) => {
+        if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)) {
+          stabilizeInteraction();
+        }
+      }}
+    >
+      <Select
+        {...props}
+        onOpenChange={(open) => {
+          stabilizeInteraction();
+          props.onOpenChange?.(open);
+          restoreScrollPosition();
+        }}
+        onValueChange={(value) => {
+          stabilizeInteraction();
+          props.onValueChange?.(value);
+          restoreScrollPosition();
+        }}
+      >
+        {children}
+      </Select>
+    </div>
+  );
+}
+
 function getUnsupportedBookingBuilderKeys(message: string | undefined): string[] {
   if (!message) return [];
   const trimmed = message.trim();
@@ -544,10 +677,8 @@ export default function BookingBuilderPage() {
     setServiceForm((current) => (formsMatch(current, next) ? current : next));
   }, [selectedService]);
 
-  const bookingUrl = useMemo(() => {
-    if (!businessId || typeof window === "undefined") return "";
-    return `${window.location.origin}/book/${businessId}`;
-  }, [businessId]);
+  const bookingUrl = useMemo(() => buildPublicBookingUrl(businessId), [businessId]);
+  const previewBaseUrl = useMemo(() => buildPreviewBookingUrl(businessId), [businessId]);
   const previewQuery = useMemo(() => {
     const params = new URLSearchParams({
       builderPreview: "1",
@@ -561,8 +692,8 @@ export default function BookingBuilderPage() {
     return params.toString();
   }, [previewMode, previewNonce]);
   const previewUrl = useMemo(
-    () => (bookingUrl ? `${bookingUrl}?${previewQuery}` : "about:blank"),
-    [bookingUrl, previewQuery]
+    () => (previewBaseUrl ? `${previewBaseUrl}?${previewQuery}` : "about:blank"),
+    [previewBaseUrl, previewQuery]
   );
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
   const bookingTheme = useMemo(() => resolveBookingBrandTheme(toBrandingTokens(form)), [form]);
@@ -800,9 +931,35 @@ export default function BookingBuilderPage() {
     try {
       await navigator.clipboard.writeText(bookingUrl);
       toast.success("Booking URL copied.");
+      void triggerNotificationFeedback("success");
     } catch {
       toast.error("Could not copy the booking URL.");
+      void triggerNotificationFeedback("error");
     }
+  };
+
+  const shareBookingUrl = async () => {
+    if (!bookingUrl) return;
+    const result = await shareNativeContent({
+      title: "Strata booking page",
+      text: businessRecord?.name ? `${businessRecord.name} booking page` : "Share the live Strata booking page.",
+      url: bookingUrl,
+    });
+
+    if (result === "shared") {
+      toast.success("Booking link shared.");
+      void triggerNotificationFeedback("success");
+      return;
+    }
+    if (result === "copied") {
+      toast.success("Booking link copied.");
+      void triggerNotificationFeedback("success");
+      return;
+    }
+    if (result === "cancelled") return;
+
+    toast.error("Could not share the booking link.");
+    void triggerNotificationFeedback("error");
   };
 
   const handleLogoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -824,56 +981,88 @@ export default function BookingBuilderPage() {
 
   if (!businessId) {
     return (
-      <div className="page-content page-section max-w-6xl">
-        <PageHeader title="Booking builder" />
-        <Card><CardContent className="p-6 text-sm text-slate-600">Pick a business first before configuring booking.</CardContent></Card>
+      <div className="min-h-screen bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))]">
+        <div className="mx-auto max-w-6xl px-3 py-5 sm:px-6 lg:px-8">
+          <Card className="rounded-[1.35rem] border-slate-200/80 bg-white/95 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+            <CardContent className="p-6 text-sm text-slate-600">Pick a business first before configuring booking.</CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   if (!canRead) {
     return (
-      <div className="page-content page-section max-w-6xl">
-        <PageHeader title="Booking builder" />
-        <Card><CardContent className="p-6 text-sm text-slate-600">You do not have permission to view booking settings.</CardContent></Card>
+      <div className="min-h-screen bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))]">
+        <div className="mx-auto max-w-6xl px-3 py-5 sm:px-6 lg:px-8">
+          <Card className="rounded-[1.35rem] border-slate-200/80 bg-white/95 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+            <CardContent className="p-6 text-sm text-slate-600">You do not have permission to view booking settings.</CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="page-content page-section max-w-[1400px]">
-      <PageHeader
-        title="Booking builder"
-        right={
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/85 px-4 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Status</p>
-                <p className="text-sm font-semibold text-slate-950">{form.bookingEnabled ? "Live" : "Disabled"}</p>
-              </div>
-              <Switch checked={form.bookingEnabled} onCheckedChange={(next) => updateField("bookingEnabled", next)} disabled={!canEdit} />
+    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,1))]">
+      <div className="mx-auto max-w-[1440px] px-3 py-5 pb-10 sm:px-6 lg:px-8">
+        <div className="mb-5 overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/85 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_18px_42px_rgba(15,23,42,0.06)] backdrop-blur-md">
+          <div className="flex flex-col gap-4 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.13),transparent_40%),linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0))] px-3 py-3 sm:px-5 sm:py-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn("inline-flex h-9 items-center rounded-full border px-3 text-sm font-semibold", form.bookingEnabled ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-600")}>
+                {form.bookingEnabled ? "Live" : "Disabled"}
+              </span>
+              <span className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
+                {services.length} booking service{services.length === 1 ? "" : "s"}
+              </span>
+              <span className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700">
+                {form.bookingDefaultFlow === "self_book" ? "Direct booking default" : "Request-first default"}
+              </span>
+              {dirty ? (
+                <span className="inline-flex h-9 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800">
+                  Unsaved changes
+                </span>
+              ) : null}
             </div>
-            <Button type="button" variant="outline" onClick={() => bookingUrl && window.open(bookingUrl, "_blank", "noopener,noreferrer")} disabled={!bookingUrl}>
-              <ExternalLink className="mr-2 h-4 w-4" />
-              View live
-            </Button>
-            <Button type="button" onClick={saveChanges} disabled={!canEdit || !dirty || saving} className={cn("min-w-[150px]", bookingTheme.primaryButtonClassName)}>
-              {saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save changes
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:justify-end">
+              <div className="flex h-10 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 shadow-[0_10px_28px_rgba(15,23,42,0.04)] sm:min-w-36">
+                <span className="text-sm font-semibold text-slate-700">Online</span>
+                <Switch checked={form.bookingEnabled} onCheckedChange={(next) => updateField("bookingEnabled", next)} disabled={!canEdit} />
+              </div>
+              <Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => void shareBookingUrl()} disabled={!bookingUrl}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Share
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl"
+                onClick={() => {
+                  if (!bookingUrl) return;
+                  void triggerSelectionFeedback();
+                  openExternalUrl(bookingUrl);
+                }}
+                disabled={!bookingUrl}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View live
+              </Button>
+              <Button type="button" onClick={saveChanges} disabled={!canEdit || !dirty || saving} className={cn("h-10 min-w-[150px] rounded-xl", bookingTheme.primaryButtonClassName)}>
+                {saving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save changes
+              </Button>
+            </div>
           </div>
-        }
-      />
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <Card className="border-slate-200/80 bg-white/92 shadow-[0_28px_80px_rgba(15,23,42,0.08)] lg:w-[280px]">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base">Flow editor</CardTitle>
-            <CardDescription>Business-level booking controls with a live public preview on the right.</CardDescription>
+      <div className="grid gap-5 xl:grid-cols-[minmax(420px,520px)_minmax(0,1fr)]">
+        <Card className="overflow-hidden rounded-[1.35rem] border-slate-200/80 bg-white/94 shadow-[0_18px_54px_rgba(15,23,42,0.06)]">
+          <CardHeader className="border-b border-slate-200/70 bg-slate-50/65 px-4 py-4 sm:px-5">
+            <CardTitle className="text-base tracking-[-0.01em]">Builder controls</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="p-4 sm:p-5">
             <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as BuilderTab)} className="gap-4">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl bg-slate-100/80 p-1 sm:grid-cols-4">
                 <TabsTrigger value="branding">Branding</TabsTrigger>
                 <TabsTrigger value="experience">Experience</TabsTrigger>
                 <TabsTrigger value="request">Request</TabsTrigger>
@@ -946,22 +1135,22 @@ export default function BookingBuilderPage() {
                     </div>
                   </div>
                 </Field>
-                <Field label="Primary color"><Select value={form.bookingBrandPrimaryColorToken} onValueChange={(next) => updateField("bookingBrandPrimaryColorToken", next as BookingBrandPrimaryColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandPrimaryColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
-                <Field label="Accent color"><Select value={form.bookingBrandAccentColorToken} onValueChange={(next) => updateField("bookingBrandAccentColorToken", next as BookingBrandAccentColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandAccentColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
-                <Field label="Background tone"><Select value={form.bookingBrandBackgroundToneToken} onValueChange={(next) => updateField("bookingBrandBackgroundToneToken", next as BookingBrandBackgroundToneToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandBackgroundToneOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
-                <Field label="Button style"><Select value={form.bookingBrandButtonStyleToken} onValueChange={(next) => updateField("bookingBrandButtonStyleToken", next as BookingBrandButtonStyleToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandButtonStyleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></Field>
+                <Field label="Primary color"><StableBuilderSelect value={form.bookingBrandPrimaryColorToken} onValueChange={(next) => updateField("bookingBrandPrimaryColorToken", next as BookingBrandPrimaryColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandPrimaryColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></StableBuilderSelect></Field>
+                <Field label="Accent color"><StableBuilderSelect value={form.bookingBrandAccentColorToken} onValueChange={(next) => updateField("bookingBrandAccentColorToken", next as BookingBrandAccentColorToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandAccentColorOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></StableBuilderSelect></Field>
+                <Field label="Background tone"><StableBuilderSelect value={form.bookingBrandBackgroundToneToken} onValueChange={(next) => updateField("bookingBrandBackgroundToneToken", next as BookingBrandBackgroundToneToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandBackgroundToneOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></StableBuilderSelect></Field>
+                <Field label="Button style"><StableBuilderSelect value={form.bookingBrandButtonStyleToken} onValueChange={(next) => updateField("bookingBrandButtonStyleToken", next as BookingBrandButtonStyleToken)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{bookingBrandButtonStyleOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></StableBuilderSelect></Field>
                 <Field label="Meta line 1"><Input value={form.bookingTrustBulletPrimary} onChange={(e) => updateField("bookingTrustBulletPrimary", e.target.value)} placeholder="5.0" disabled={!canEdit} /></Field>
                 <Field label="Meta line 2"><Input value={form.bookingTrustBulletSecondary} onChange={(e) => updateField("bookingTrustBulletSecondary", e.target.value)} placeholder="200+ clients" disabled={!canEdit} /></Field>
                 <Field label="Meta line 3"><Input value={form.bookingTrustBulletTertiary} onChange={(e) => updateField("bookingTrustBulletTertiary", e.target.value)} placeholder="Verified" disabled={!canEdit} /></Field>
               </TabsContent>
 
               <TabsContent value="experience" className="space-y-3">
-                <Field label="Booking flow"><Select value={form.bookingDefaultFlow} onValueChange={(next) => updateField("bookingDefaultFlow", next as "request" | "self_book")} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="request">Request</SelectItem><SelectItem value="self_book">Self book</SelectItem></SelectContent></Select></Field>
+                <Field label="Booking flow"><StableBuilderSelect value={form.bookingDefaultFlow} onValueChange={(next) => updateField("bookingDefaultFlow", next as "request" | "self_book")} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="request">Request</SelectItem><SelectItem value="self_book">Self book</SelectItem></SelectContent></StableBuilderSelect></Field>
                 <Field label="Confirmation message"><Textarea value={form.bookingConfirmationMessage} onChange={(e) => updateField("bookingConfirmationMessage", e.target.value)} rows={4} disabled={!canEdit} /></Field>
                 <Field label="Notes prompt"><Input value={form.bookingNotesPrompt} onChange={(e) => updateField("bookingNotesPrompt", e.target.value)} disabled={!canEdit} /></Field>
                 <ToggleRow id="urgency-enabled" label="Urgency cues" description="Enable urgency messaging on the public booking page." checked={form.bookingUrgencyEnabled} onCheckedChange={(next) => updateField("bookingUrgencyEnabled", next)} disabled={!canEdit} />
                 <Field label="Urgency message"><Input value={form.bookingUrgencyText} onChange={(e) => updateField("bookingUrgencyText", e.target.value)} placeholder="Only 3 spots left this week" disabled={!canEdit} /></Field>
-                <Field label="Slot interval"><Select value={String(form.bookingSlotIntervalMinutes)} onValueChange={(next) => updateField("bookingSlotIntervalMinutes", Number(next) as 15 | 30 | 45 | 60)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="15">15 minutes</SelectItem><SelectItem value="30">30 minutes</SelectItem><SelectItem value="45">45 minutes</SelectItem><SelectItem value="60">60 minutes</SelectItem></SelectContent></Select></Field>
+                <Field label="Slot interval"><StableBuilderSelect value={String(form.bookingSlotIntervalMinutes)} onValueChange={(next) => updateField("bookingSlotIntervalMinutes", Number(next) as 15 | 30 | 45 | 60)} disabled={!canEdit}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="15">15 minutes</SelectItem><SelectItem value="30">30 minutes</SelectItem><SelectItem value="45">45 minutes</SelectItem><SelectItem value="60">60 minutes</SelectItem></SelectContent></StableBuilderSelect></Field>
                 <Field label="Buffer minutes"><Input inputMode="numeric" value={form.bookingBufferMinutes} onChange={(e) => updateField("bookingBufferMinutes", e.target.value)} placeholder="15" disabled={!canEdit} /></Field>
                 <Field label="Capacity per slot"><Input inputMode="numeric" value={form.bookingCapacityPerSlot} onChange={(e) => updateField("bookingCapacityPerSlot", e.target.value)} placeholder="1" disabled={!canEdit} /></Field>
                 <Field label="Booking URL">
@@ -1089,14 +1278,14 @@ export default function BookingBuilderPage() {
                   {canReadServices ? (
                     <>
                       <Field label="Service">
-                        <Select value={selectedServiceId} onValueChange={setSelectedServiceId} disabled={servicesFetching || services.length === 0}>
+                        <StableBuilderSelect value={selectedServiceId} onValueChange={setSelectedServiceId} disabled={servicesFetching || services.length === 0}>
                           <SelectTrigger><SelectValue placeholder={services.length ? "Choose a service" : "No booking services yet"} /></SelectTrigger>
                           <SelectContent>
                             {services.map((service) => (
                               <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
                             ))}
                           </SelectContent>
-                        </Select>
+                        </StableBuilderSelect>
                       </Field>
                       {selectedService ? (
                         <div className="space-y-3">
@@ -1108,7 +1297,7 @@ export default function BookingBuilderPage() {
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <Field label="Booking mode">
-                              <Select
+                              <StableBuilderSelect
                                 value={serviceForm.bookingFlowType}
                                 onValueChange={(value) =>
                                   setServiceForm((current) => ({ ...current, bookingFlowType: value as BookingBuilderServiceFormState["bookingFlowType"] }))
@@ -1121,7 +1310,7 @@ export default function BookingBuilderPage() {
                                   <SelectItem value="request">Request review</SelectItem>
                                   <SelectItem value="self_book">Direct book</SelectItem>
                                 </SelectContent>
-                              </Select>
+                              </StableBuilderSelect>
                             </Field>
                             <Field label="Minimum notice (hours)">
                               <Input
@@ -1135,7 +1324,7 @@ export default function BookingBuilderPage() {
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <Field label="Exact time">
-                              <Select
+                              <StableBuilderSelect
                                 value={serviceForm.bookingRequestRequireExactTime}
                                 onValueChange={(value) =>
                                   setServiceForm((current) => ({ ...current, bookingRequestRequireExactTime: value as BookingBuilderServiceFormState["bookingRequestRequireExactTime"] }))
@@ -1148,10 +1337,10 @@ export default function BookingBuilderPage() {
                                   <SelectItem value="true">Require exact time</SelectItem>
                                   <SelectItem value="false">Do not require exact time</SelectItem>
                                 </SelectContent>
-                              </Select>
+                              </StableBuilderSelect>
                             </Field>
                             <Field label="Time windows">
-                              <Select
+                              <StableBuilderSelect
                                 value={serviceForm.bookingRequestAllowTimeWindows}
                                 onValueChange={(value) =>
                                   setServiceForm((current) => ({ ...current, bookingRequestAllowTimeWindows: value as BookingBuilderServiceFormState["bookingRequestAllowTimeWindows"] }))
@@ -1164,10 +1353,10 @@ export default function BookingBuilderPage() {
                                   <SelectItem value="true">Allow windows</SelectItem>
                                   <SelectItem value="false">Exact time only</SelectItem>
                                 </SelectContent>
-                              </Select>
+                              </StableBuilderSelect>
                             </Field>
                             <Field label="Flexibility choice">
-                              <Select
+                              <StableBuilderSelect
                                 value={serviceForm.bookingRequestAllowFlexibility}
                                 onValueChange={(value) =>
                                   setServiceForm((current) => ({ ...current, bookingRequestAllowFlexibility: value as BookingBuilderServiceFormState["bookingRequestAllowFlexibility"] }))
@@ -1180,10 +1369,10 @@ export default function BookingBuilderPage() {
                                   <SelectItem value="true">Allow flexibility</SelectItem>
                                   <SelectItem value="false">Hide flexibility</SelectItem>
                                 </SelectContent>
-                              </Select>
+                              </StableBuilderSelect>
                             </Field>
                             <Field label="Alternate slots">
-                              <Select
+                              <StableBuilderSelect
                                 value={serviceForm.bookingRequestAllowAlternateSlots}
                                 onValueChange={(value) =>
                                   setServiceForm((current) => ({ ...current, bookingRequestAllowAlternateSlots: value as BookingBuilderServiceFormState["bookingRequestAllowAlternateSlots"] }))
@@ -1196,7 +1385,7 @@ export default function BookingBuilderPage() {
                                   <SelectItem value="true">Allow alternates</SelectItem>
                                   <SelectItem value="false">No alternates</SelectItem>
                                 </SelectContent>
-                              </Select>
+                              </StableBuilderSelect>
                             </Field>
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -1299,18 +1488,18 @@ export default function BookingBuilderPage() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden border-slate-200/80 bg-white/92 shadow-[0_30px_90px_rgba(15,23,42,0.08)]">
-          <CardHeader className="border-b border-slate-200/80 bg-slate-50/85">
+        <Card className="overflow-hidden rounded-[1.35rem] border-slate-200/80 bg-white/94 shadow-[0_18px_54px_rgba(15,23,42,0.06)] xl:sticky xl:top-4 xl:self-start">
+          <CardHeader className="border-b border-slate-200/70 bg-slate-50/65 px-4 py-4 sm:px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
-                <CardTitle className="text-base">Live preview</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-base tracking-[-0.01em]">Live preview</CardTitle>
+                <p className="text-sm leading-6 text-slate-600">
                   {previewMode === "live"
                     ? "Uses the real public booking page in preview mode and refreshes after save."
                     : previewMode === "request_timing"
                       ? "Preview the preferred date and time step for request-mode services."
                       : "Preview the request review state with service, vehicle, and requested timing context."}
-                </CardDescription>
+                </p>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
@@ -1341,13 +1530,13 @@ export default function BookingBuilderPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="bg-slate-100/70 p-3 sm:p-4">
+          <CardContent className="bg-slate-100/70 p-2 sm:p-4">
             {fetching ? (
-              <div className="flex h-[760px] items-center justify-center rounded-[28px] border border-slate-200 bg-white"><LoaderCircle className="h-6 w-6 animate-spin text-slate-400" /></div>
+              <div className="flex h-[640px] items-center justify-center rounded-[1.5rem] border border-slate-200 bg-white xl:h-[760px]"><LoaderCircle className="h-6 w-6 animate-spin text-slate-400" /></div>
             ) : error ? (
-              <div className="flex h-[760px] items-center justify-center rounded-[28px] border border-red-200 bg-white px-6 text-center text-sm text-red-600">{error.message}</div>
+              <div className="flex h-[640px] items-center justify-center rounded-[1.5rem] border border-red-200 bg-white px-6 text-center text-sm text-red-600 xl:h-[760px]">{error.message}</div>
             ) : (
-              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+              <div className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.08)]">
                 <div className="border-b border-slate-200 bg-white px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -1359,7 +1548,7 @@ export default function BookingBuilderPage() {
                     </div>
                   </div>
                 </div>
-                <iframe title="Booking builder preview" src={previewUrl} className="h-[760px] w-full border-0 bg-white" loading="lazy" />
+                <iframe title="Booking builder preview" src={previewUrl} className="h-[640px] w-full border-0 bg-white xl:h-[760px]" loading="lazy" />
               </div>
             )}
           </CardContent>
@@ -1449,7 +1638,7 @@ export default function BookingBuilderPage() {
             <div className="space-y-5 px-6 py-6">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <Field label="Fit mode">
-                  <Select
+                  <StableBuilderSelect
                     value={logoEditorTransform.fitMode}
                     onValueChange={(value) =>
                       setLogoEditorTransform((current) =>
@@ -1468,11 +1657,11 @@ export default function BookingBuilderPage() {
                         </SelectItem>
                       ))}
                     </SelectContent>
-                  </Select>
+                  </StableBuilderSelect>
                 </Field>
 
                 <Field label="Background plate">
-                  <Select
+                  <StableBuilderSelect
                     value={logoEditorTransform.backgroundPlate}
                     onValueChange={(value) =>
                       setLogoEditorTransform((current) =>
@@ -1491,7 +1680,7 @@ export default function BookingBuilderPage() {
                         </SelectItem>
                       ))}
                     </SelectContent>
-                  </Select>
+                  </StableBuilderSelect>
                 </Field>
               </div>
 
@@ -1615,6 +1804,7 @@ export default function BookingBuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

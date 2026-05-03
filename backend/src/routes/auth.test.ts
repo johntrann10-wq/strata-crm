@@ -32,6 +32,13 @@ describe("auth route helper logic", () => {
     );
   });
 
+  it("uses a query token for the native app return path", async () => {
+    const { buildPostAuthRedirectUrl } = await import("./auth.js");
+    expect(buildPostAuthRedirectUrl("https://app.strata.test", "/app-return?next=%2Fsigned-in", "abc123")).toBe(
+      "https://app.strata.test/app-return?next=%2Fsigned-in&authToken=abc123"
+    );
+  });
+
   it("uses the configured frontend origin for security-sensitive links", async () => {
     const { resolveFrontendBaseUrl } = await import("./auth.js");
     const previous = process.env.FRONTEND_URL;
@@ -92,6 +99,71 @@ describe("auth route helper logic", () => {
       }
     );
     expect(updates).toBeNull();
+  });
+
+  it("links Apple sign-in metadata onto an existing email account", async () => {
+    const { resolveAppleAccountUpdates } = await import("./auth.js");
+    const updates = resolveAppleAccountUpdates(
+      {
+        appleSubject: null,
+        appleEmail: null,
+        appleEmailIsPrivateRelay: null,
+        firstName: null,
+        lastName: "Existing",
+        emailVerified: false,
+      },
+      {
+        appleSubject: "apple-sub-123",
+        appleEmail: "driver@privaterelay.appleid.com",
+        appleEmailIsPrivateRelay: true,
+        firstName: "Jamie",
+        lastName: "Fresh",
+        emailVerified: true,
+      }
+    );
+    expect(updates).toMatchObject({
+      appleSubject: "apple-sub-123",
+      appleEmail: "driver@privaterelay.appleid.com",
+      appleEmailIsPrivateRelay: true,
+      firstName: "Jamie",
+      emailVerified: true,
+    });
+    expect(updates?.lastName).toBeUndefined();
+    expect(updates?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("builds a stable fallback email when Apple does not resend an email", async () => {
+    const { buildAppleSubjectFallbackEmail, resolveAppleAccountEmail } = await import("./auth.js");
+    const fallback = buildAppleSubjectFallbackEmail("apple-sub-after-delete");
+
+    expect(fallback).toMatch(/^apple-[a-f0-9]{24}@accounts\.stratacrm\.local$/);
+    expect(buildAppleSubjectFallbackEmail("apple-sub-after-delete")).toBe(fallback);
+    expect(resolveAppleAccountEmail(null, "apple-sub-after-delete")).toBe(fallback);
+    expect(resolveAppleAccountEmail("owner@example.com", "apple-sub-after-delete")).toBe("owner@example.com");
+  });
+
+  it("rejects Apple sign-in when the email is linked to a different Apple account", async () => {
+    const { resolveAppleAccountUpdates } = await import("./auth.js");
+    expect(() =>
+      resolveAppleAccountUpdates(
+        {
+          appleSubject: "apple-sub-123",
+          appleEmail: "shop@example.com",
+          appleEmailIsPrivateRelay: false,
+          firstName: "Jamie",
+          lastName: "Existing",
+          emailVerified: true,
+        },
+        {
+          appleSubject: "apple-sub-999",
+          appleEmail: "shop@example.com",
+          appleEmailIsPrivateRelay: false,
+          firstName: "Jamie",
+          lastName: "Existing",
+          emailVerified: true,
+        }
+      )
+    ).toThrowError("This email is already linked to a different Apple account.");
   });
 
   it("rejects a Google sign-in when the email is linked to a different Google profile", async () => {

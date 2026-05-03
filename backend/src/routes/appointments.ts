@@ -31,12 +31,13 @@ import { renderAppointmentHtml } from "../lib/appointmentTemplate.js";
 import { scheduleGoogleCalendarAppointmentSync } from "../lib/googleCalendar.js";
 import { enqueueTwilioTemplateSms } from "../lib/twilio.js";
 import { calculateAppointmentFinanceSummary, getAppointmentFinanceMirrorUpdates, getAppointmentFinanceSummaryMap } from "../lib/appointmentFinance.js";
-import { updateLeadNotesStatus } from "../lib/leads.js";
+import { parseLeadRecord, updateLeadNotesStatus } from "../lib/leads.js";
 import { safeCreateNotification, upsertAppointmentSourceLink } from "../lib/notifications.js";
 
 export const appointmentsRouter = Router({ mergeParams: true });
 
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
+const TERMINAL_APPOINTMENT_STATUSES = new Set(["completed", "cancelled", "no-show"]);
 
 const appointmentConfirmationLimiter = createRateLimiter({
   id: "appointment_confirmation_send",
@@ -81,6 +82,20 @@ function businessId(req: Request): string {
   return req.businessId;
 }
 
+async function isConnectedStripeAccountReady(accountId: string | null | undefined): Promise<boolean> {
+  if (!accountId?.trim()) return false;
+  try {
+    const account = await retrieveConnectAccount({ accountId: accountId.trim() });
+    return account?.ready === true;
+  } catch (error) {
+    logger.warn("Could not verify Stripe connected account readiness for appointment deposit link", {
+      stripeConnectAccountId: accountId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 function parseStoredObject(value: string | null | undefined): Record<string, unknown> {
   if (!value?.trim()) return {};
   try {
@@ -91,6 +106,40 @@ function parseStoredObject(value: string | null | undefined): Record<string, unk
   } catch {
     return {};
   }
+}
+
+function buildSourceVehicleSummary(params: {
+  year: number | null | undefined;
+  make: string | null | undefined;
+  model: string | null | undefined;
+}): string | null {
+  const summary = [params.year, params.make, params.model].filter(Boolean).join(" ").trim();
+  return summary || null;
+}
+
+function mergeAppointmentNoteSections(...sections: Array<string | null | undefined>): string | null {
+  const lines: string[] = [];
+  for (const section of sections) {
+    const trimmedSection = String(section ?? "").trim();
+    if (!trimmedSection) continue;
+    for (const rawLine of trimmedSection.split(/\r?\n+/)) {
+      const line = rawLine.trim();
+      if (!line || lines.includes(line)) continue;
+      lines.push(line);
+    }
+  }
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+function compactSourceMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([, value]) => {
+      if (value == null) return false;
+      if (typeof value === "string") return value.trim() !== "";
+      if (Array.isArray(value)) return value.length > 0;
+      return true;
+    })
+  );
 }
 
 function buildAppointmentSourceHref(params: {
@@ -908,6 +957,7 @@ async function buildAppointmentConfirmationPayload(
         totalPrice: string | null;
         depositAmount: string | null;
         publicTokenVersion: number | null;
+        stripeConnectAccountId: string | null;
       }
     | undefined;
   try {
@@ -930,11 +980,12 @@ async function buildAppointmentConfirmationPayload(
         vehicleModel: vehicles.model,
         locationName: locations.name,
         locationAddress: locations.address,
-          locationTimezone: locations.timezone,
-          totalPrice: appointments.totalPrice,
-          depositAmount: appointments.depositAmount,
-          publicTokenVersion: appointments.publicTokenVersion,
-        })
+        locationTimezone: locations.timezone,
+        totalPrice: appointments.totalPrice,
+        depositAmount: appointments.depositAmount,
+        publicTokenVersion: appointments.publicTokenVersion,
+        stripeConnectAccountId: businesses.stripeConnectAccountId,
+      })
       .from(appointments)
       .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
       .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
@@ -972,6 +1023,7 @@ async function buildAppointmentConfirmationPayload(
           totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
           publicTokenVersion: appointments.publicTokenVersion,
+          stripeConnectAccountId: businesses.stripeConnectAccountId,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -1009,6 +1061,7 @@ async function buildAppointmentConfirmationPayload(
           totalPrice: appointments.totalPrice,
           depositAmount: appointments.depositAmount,
           publicTokenVersion: appointments.publicTokenVersion,
+          stripeConnectAccountId: businesses.stripeConnectAccountId,
         })
         .from(appointments)
         .leftJoin(clients, and(eq(appointments.clientId, clients.id), eq(clients.businessId, bid)))
@@ -1060,6 +1113,8 @@ async function buildAppointmentConfirmationPayload(
   const depositAmount = Number(appointmentRow.depositAmount ?? 0);
   const depositSatisfied = finance?.depositSatisfied === true;
   const hasDepositDue = Number.isFinite(depositAmount) && depositAmount > 0 && !depositSatisfied;
+  const stripeAccountReady = await isConnectedStripeAccountReady(appointmentRow.stripeConnectAccountId);
+  const canCollectDepositOnline = hasDepositDue && stripeAccountReady;
 
   return {
     appointmentId: appointmentRow.id,
@@ -1092,9 +1147,11 @@ async function buildAppointmentConfirmationPayload(
       serviceRows.length > 0 ? `Services: ${serviceRows.map((service) => service.name).join(", ")}` : null,
     confirmationUrl: publicAppointmentUrl,
     portalUrl: buildPublicAppUrl(`/portal/${encodeURIComponent(publicToken)}`),
-    confirmationActionLabel: hasDepositDue ? "View appointment and pay deposit" : "View appointment",
+    confirmationActionLabel: canCollectDepositOnline ? "View appointment and pay deposit" : "View appointment",
     paymentStatus: hasDepositDue
-      ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
+      ? canCollectDepositOnline
+        ? `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment.`
+        : `A deposit of $${depositAmount.toFixed(2)} is still due for this appointment. Contact the shop for payment options.`
       : depositSatisfied
         ? "Deposit already collected."
         : "No deposit is required for this appointment.",
@@ -1592,12 +1649,46 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
   let effectiveClientId = parsed.data.clientId ?? null;
   let effectiveVehicleId = parsed.data.vehicleId ?? null;
   let sourceLeadClientId = parsed.data.sourceLeadClientId ?? null;
+  let sourceLeadClient: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
+    notes: string | null;
+    internalNotes: string | null;
+  } | null = null;
   let sourceBookingRequest: {
     id: string;
     clientId: string | null;
     vehicleId: string | null;
     appointmentId: string | null;
     status: string;
+    serviceSummary: string | null;
+    requestedDate: string | null;
+    requestedTimeStart: Date | null;
+    requestedTimeEnd: Date | null;
+    requestedTimeLabel: string | null;
+    serviceMode: string | null;
+    source: string | null;
+    campaign: string | null;
+    notes: string | null;
+    serviceAddress: string | null;
+    serviceCity: string | null;
+    serviceState: string | null;
+    serviceZip: string | null;
+    clientFirstName: string | null;
+    clientLastName: string | null;
+    clientEmail: string | null;
+    clientPhone: string | null;
+    vehicleYear: number | null;
+    vehicleMake: string | null;
+    vehicleModel: string | null;
+    vehicleColor: string | null;
   } | null = null;
 
   if (parsed.data.quoteId) {
@@ -1622,11 +1713,24 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
 
   if (sourceLeadClientId) {
     const [leadClient] = await db
-      .select({ id: clients.id })
+      .select({
+        id: clients.id,
+        firstName: clients.firstName,
+        lastName: clients.lastName,
+        email: clients.email,
+        phone: clients.phone,
+        address: clients.address,
+        city: clients.city,
+        state: clients.state,
+        zip: clients.zip,
+        notes: clients.notes,
+        internalNotes: clients.internalNotes,
+      })
       .from(clients)
       .where(and(eq(clients.id, sourceLeadClientId), eq(clients.businessId, bid)))
       .limit(1);
     if (!leadClient) throw new BadRequestError("Lead source record was not found.");
+    sourceLeadClient = leadClient;
     effectiveClientId ??= leadClient.id;
   }
 
@@ -1638,6 +1742,27 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
         vehicleId: bookingRequests.vehicleId,
         appointmentId: bookingRequests.appointmentId,
         status: bookingRequests.status,
+        serviceSummary: bookingRequests.serviceSummary,
+        requestedDate: bookingRequests.requestedDate,
+        requestedTimeStart: bookingRequests.requestedTimeStart,
+        requestedTimeEnd: bookingRequests.requestedTimeEnd,
+        requestedTimeLabel: bookingRequests.requestedTimeLabel,
+        serviceMode: bookingRequests.serviceMode,
+        source: bookingRequests.source,
+        campaign: bookingRequests.campaign,
+        notes: bookingRequests.notes,
+        serviceAddress: bookingRequests.serviceAddress,
+        serviceCity: bookingRequests.serviceCity,
+        serviceState: bookingRequests.serviceState,
+        serviceZip: bookingRequests.serviceZip,
+        clientFirstName: bookingRequests.clientFirstName,
+        clientLastName: bookingRequests.clientLastName,
+        clientEmail: bookingRequests.clientEmail,
+        clientPhone: bookingRequests.clientPhone,
+        vehicleYear: bookingRequests.vehicleYear,
+        vehicleMake: bookingRequests.vehicleMake,
+        vehicleModel: bookingRequests.vehicleModel,
+        vehicleColor: bookingRequests.vehicleColor,
       })
       .from(bookingRequests)
       .where(and(eq(bookingRequests.id, parsed.data.sourceBookingRequestId), eq(bookingRequests.businessId, bid)))
@@ -1686,6 +1811,138 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
   if (sourceBookingRequest?.vehicleId && effectiveVehicleId && sourceBookingRequest.vehicleId !== effectiveVehicleId) {
     throw new BadRequestError("Booking request source does not match the selected vehicle.");
   }
+
+  const resolvedSourceType =
+    parsed.data.sourceType ??
+    (sourceBookingRequest ? "booking_request" : sourceLeadClientId ? "lead" : undefined);
+  if (resolvedSourceType && !effectiveClientId) {
+    throw new BadRequestError("This source record is missing a customer. Choose a client before creating the appointment.");
+  }
+
+  const sourceLeadRecord = sourceLeadClient ? parseLeadRecord(sourceLeadClient.notes) : null;
+  const bookingRequestAddress = sourceBookingRequest
+    ? [sourceBookingRequest.serviceAddress, sourceBookingRequest.serviceCity, sourceBookingRequest.serviceState, sourceBookingRequest.serviceZip]
+        .filter(Boolean)
+        .join(", ")
+    : "";
+  const leadSourceAddress = sourceLeadClient
+    ? [sourceLeadClient.address, sourceLeadClient.city, sourceLeadClient.state, sourceLeadClient.zip]
+        .filter(Boolean)
+        .join(", ")
+    : "";
+  const resolvedSourceMetadata = compactSourceMetadata({
+    ...(parsed.data.sourceMetadata ?? {}),
+    sourceLabel:
+      parsed.data.sourceMetadata?.sourceLabel ??
+      (resolvedSourceType === "booking_request"
+        ? "Booking Request"
+        : resolvedSourceType === "lead"
+          ? "Lead"
+          : undefined),
+    sourceSummary:
+      parsed.data.sourceMetadata?.sourceSummary ??
+      sourceBookingRequest?.requestedTimeLabel ??
+      (sourceLeadRecord?.isLead ? sourceLeadRecord.summary : undefined) ??
+      undefined,
+    requestedServices:
+      parsed.data.sourceMetadata?.requestedServices ??
+      sourceBookingRequest?.serviceSummary ??
+      (sourceLeadRecord?.isLead ? sourceLeadRecord.serviceInterest : undefined) ??
+      undefined,
+    leadSource:
+      parsed.data.sourceMetadata?.leadSource ??
+      sourceBookingRequest?.source ??
+      (sourceLeadRecord?.isLead ? sourceLeadRecord.source : undefined) ??
+      undefined,
+    requestedAddress:
+      parsed.data.sourceMetadata?.requestedAddress ??
+      (bookingRequestAddress || leadSourceAddress || undefined),
+    customerName:
+      parsed.data.sourceMetadata?.customerName ??
+      ([sourceBookingRequest?.clientFirstName, sourceBookingRequest?.clientLastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() ||
+        [sourceLeadClient?.firstName, sourceLeadClient?.lastName].filter(Boolean).join(" ").trim() ||
+        undefined),
+    customerPhone:
+      parsed.data.sourceMetadata?.customerPhone ??
+      sourceBookingRequest?.clientPhone ??
+      sourceLeadClient?.phone ??
+      undefined,
+    customerEmail:
+      parsed.data.sourceMetadata?.customerEmail ??
+      sourceBookingRequest?.clientEmail ??
+      sourceLeadClient?.email ??
+      undefined,
+    originalCustomerNotes:
+      parsed.data.sourceMetadata?.originalCustomerNotes ??
+      sourceBookingRequest?.notes ??
+      (sourceLeadRecord?.isLead ? sourceLeadRecord.summary : undefined) ??
+      undefined,
+    originalInternalNotes:
+      parsed.data.sourceMetadata?.originalInternalNotes ??
+      sourceLeadClient?.internalNotes ??
+      undefined,
+    vehicleSummary:
+      parsed.data.sourceMetadata?.vehicleSummary ??
+      buildSourceVehicleSummary({
+        year: sourceBookingRequest?.vehicleYear ?? undefined,
+        make: sourceBookingRequest?.vehicleMake ?? undefined,
+        model: sourceBookingRequest?.vehicleModel ?? undefined,
+      }) ??
+      (sourceLeadRecord?.isLead ? sourceLeadRecord.vehicle : undefined) ??
+      undefined,
+    vehicleYear: parsed.data.sourceMetadata?.vehicleYear ?? sourceBookingRequest?.vehicleYear ?? undefined,
+    vehicleMake: parsed.data.sourceMetadata?.vehicleMake ?? sourceBookingRequest?.vehicleMake ?? undefined,
+    vehicleModel: parsed.data.sourceMetadata?.vehicleModel ?? sourceBookingRequest?.vehicleModel ?? undefined,
+    vehicleColor: parsed.data.sourceMetadata?.vehicleColor ?? sourceBookingRequest?.vehicleColor ?? undefined,
+    mobileServiceRequested:
+      parsed.data.sourceMetadata?.mobileServiceRequested ??
+      (sourceBookingRequest?.serviceMode === "mobile" ? true : undefined),
+    mobileServiceAddress:
+      parsed.data.sourceMetadata?.mobileServiceAddress ??
+      (sourceBookingRequest?.serviceMode === "mobile" ? bookingRequestAddress || undefined : undefined),
+    campaign: parsed.data.sourceMetadata?.campaign ?? sourceBookingRequest?.campaign ?? undefined,
+    sourceDetail: parsed.data.sourceMetadata?.sourceDetail ?? sourceBookingRequest?.source ?? undefined,
+    requestedDate: parsed.data.sourceMetadata?.requestedDate ?? sourceBookingRequest?.requestedDate ?? undefined,
+    requestedTimeStart:
+      parsed.data.sourceMetadata?.requestedTimeStart ??
+      sourceBookingRequest?.requestedTimeStart?.toISOString() ??
+      undefined,
+    requestedTimeEnd:
+      parsed.data.sourceMetadata?.requestedTimeEnd ??
+      sourceBookingRequest?.requestedTimeEnd?.toISOString() ??
+      undefined,
+    requestedTimeLabel:
+      parsed.data.sourceMetadata?.requestedTimeLabel ??
+      sourceBookingRequest?.requestedTimeLabel ??
+      undefined,
+    requestedServiceMode:
+      parsed.data.sourceMetadata?.requestedServiceMode ??
+      sourceBookingRequest?.serviceMode ??
+      undefined,
+  });
+  const effectiveNotes = parsed.data.notes?.trim()
+    ? parsed.data.notes.trim()
+    : typeof resolvedSourceMetadata.originalCustomerNotes === "string"
+      ? resolvedSourceMetadata.originalCustomerNotes.trim()
+      : null;
+  const effectiveInternalNotes = mergeAppointmentNoteSections(
+    parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null,
+    resolvedSourceType === "booking_request" ? "Created from Booking Request" : resolvedSourceType === "lead" ? "Created from Lead" : null,
+    typeof resolvedSourceMetadata.requestedServices === "string"
+      ? `Requested services: ${resolvedSourceMetadata.requestedServices}`
+      : null,
+    typeof resolvedSourceMetadata.sourceSummary === "string" ? resolvedSourceMetadata.sourceSummary : null,
+    typeof resolvedSourceMetadata.leadSource === "string"
+      ? `Lead source: ${resolvedSourceMetadata.leadSource}`
+      : null,
+    typeof resolvedSourceMetadata.requestedAddress === "string"
+      ? `Requested service address: ${resolvedSourceMetadata.requestedAddress}`
+      : null,
+    typeof resolvedSourceMetadata.campaign === "string" ? `Campaign: ${resolvedSourceMetadata.campaign}` : null
+  );
 
   if (parsed.data.assignedStaffId) {
     const [staffRow] = await db.select().from(staff).where(and(eq(staff.id, parsed.data.assignedStaffId), eq(staff.businessId, bid))).limit(1);
@@ -1841,8 +2098,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
           adminFeeRate: String(baseFinance.adminFeeRate),
           adminFeeAmount: String(baseFinance.adminFeeAmount),
           applyAdminFee: baseFinance.applyAdminFee,
-          notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
-          internalNotes: parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null,
+          notes: effectiveNotes,
+          internalNotes: effectiveInternalNotes,
           totalPrice: String(baseFinance.totalPrice),
           createdAt,
           updatedAt: createdAt,
@@ -1889,8 +2146,8 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
       if (columns.has("admin_fee_rate")) fallbackValues.adminFeeRate = String(baseFinance.adminFeeRate);
       if (columns.has("admin_fee_amount")) fallbackValues.adminFeeAmount = String(baseFinance.adminFeeAmount);
       if (columns.has("apply_admin_fee")) fallbackValues.applyAdminFee = baseFinance.applyAdminFee;
-      if (columns.has("notes")) fallbackValues.notes = parsed.data.notes?.trim() ? parsed.data.notes.trim() : null;
-      if (columns.has("internal_notes")) fallbackValues.internalNotes = parsed.data.internalNotes?.trim() ? parsed.data.internalNotes.trim() : null;
+      if (columns.has("notes")) fallbackValues.notes = effectiveNotes;
+      if (columns.has("internal_notes")) fallbackValues.internalNotes = effectiveInternalNotes;
       if (columns.has("total_price")) fallbackValues.totalPrice = String(baseFinance.totalPrice);
       if (columns.has("status")) fallbackValues.status = "scheduled";
       if (columns.has("created_at")) fallbackValues.createdAt = createdAt;
@@ -1998,20 +2255,17 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
   } catch (error) {
     logger.warn("Appointment created but activity log write failed", { appointmentId: created.id, businessId: bid, error });
   }
-  const sourceType =
-    parsed.data.sourceType ??
-    (sourceBookingRequest ? "booking_request" : sourceLeadClientId ? "lead" : undefined);
-  if (sourceType) {
+  if (resolvedSourceType) {
     await upsertAppointmentSourceLink({
       appointmentId: created.id,
       businessId: bid,
-      sourceType,
+      sourceType: resolvedSourceType,
       leadClientId: sourceLeadClientId,
       bookingRequestId: sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId ?? null,
       metadata: {
-        ...(parsed.data.sourceMetadata ?? {}),
+        ...resolvedSourceMetadata,
         path:
-          sourceType === "booking_request" && (sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId)
+          resolvedSourceType === "booking_request" && (sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId)
             ? `/appointments/requests?request=${encodeURIComponent(sourceBookingRequest?.id ?? String(parsed.data.sourceBookingRequestId))}`
             : sourceLeadClientId
               ? `/clients/${encodeURIComponent(sourceLeadClientId)}?from=${encodeURIComponent("/leads")}`
@@ -2021,11 +2275,11 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
 
     await createActivityLog({
       businessId: bid,
-      action: "appointment.created_from_source",
-      entityType: "appointment",
-      entityId: created.id,
-      metadata: {
-        sourceType,
+        action: "appointment.created_from_source",
+        entityType: "appointment",
+        entityId: created.id,
+        metadata: {
+        sourceType: resolvedSourceType,
         leadClientId: sourceLeadClientId,
         bookingRequestId: sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId ?? null,
       },
@@ -2079,15 +2333,15 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
       businessId: bid,
       type: "appointment_created",
       title:
-        sourceType === "booking_request"
+        resolvedSourceType === "booking_request"
           ? "Appointment created from booking request"
-          : sourceType === "lead"
+          : resolvedSourceType === "lead"
             ? "Appointment created from lead"
             : "Appointment created",
       message:
-        sourceType === "booking_request"
+        resolvedSourceType === "booking_request"
           ? "The booking request has been converted into a scheduled appointment."
-          : sourceType === "lead"
+          : resolvedSourceType === "lead"
             ? "The lead has been moved onto the calendar."
             : "A new appointment was added to the calendar.",
       entityType: "appointment",
@@ -2095,7 +2349,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
       bucket: "calendar",
       dedupeKey: `appointment-created:${created.id}`,
       metadata: {
-        sourceType: sourceType ?? null,
+        sourceType: resolvedSourceType ?? null,
         leadClientId: sourceLeadClientId,
         bookingRequestId: sourceBookingRequest?.id ?? parsed.data.sourceBookingRequestId ?? null,
         path: `/appointments/${encodeURIComponent(created.id)}`,
@@ -2990,10 +3244,14 @@ appointmentsRouter.get("/:id/public-html", wrapAsync(async (req: Request, res: R
 
   let publicPaymentUrl: string | null = null;
   const depositAmount = Number(appointment.depositAmount ?? 0);
-  if (
+  const hasDepositDue =
     Number.isFinite(depositAmount) &&
     depositAmount > 0 &&
-    !depositSatisfied
+    !depositSatisfied;
+  const stripeAccountReady = await isConnectedStripeAccountReady(appointment.stripeConnectAccountId);
+  if (
+    hasDepositDue &&
+    stripeAccountReady
   ) {
     publicPaymentUrl = buildPublicDocumentUrl(
       `/api/appointments/${appointment.id}/public-pay?token=${encodeURIComponent(token)}`
@@ -3224,11 +3482,20 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, require
   const status = statusParsed.data;
   const bid = businessId(req);
   const [existing] = await db
-    .select({ id: appointments.id })
+    .select({ id: appointments.id, status: appointments.status })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
+  if (
+    existing.status &&
+    TERMINAL_APPOINTMENT_STATUSES.has(existing.status) &&
+    existing.status !== status
+  ) {
+    throw new BadRequestError(
+      `This appointment is already ${existing.status.replace(/-/g, " ")} and cannot be changed to ${status.replace(/-/g, " ")}.`
+    );
+  }
   const updates: Record<string, unknown> = { status, updatedAt: new Date() };
   if (status === "cancelled") updates.cancelledAt = new Date();
   if (status === "completed") updates.completedAt = new Date();
@@ -3389,21 +3656,26 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
   res.status(204).send();
 }
 
-appointmentsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), deleteAppointmentRecord);
-appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, requirePermission("appointments.write"), deleteAppointmentRecord);
+appointmentsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(deleteAppointmentRecord));
+appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(deleteAppointmentRecord));
 
 appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
-    .select({ id: appointments.id })
+    .select({ id: appointments.id, status: appointments.status })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
+  if (existing.status === "cancelled" || existing.status === "no-show") {
+    throw new BadRequestError(
+      `This appointment is already ${existing.status.replace(/-/g, " ")} and cannot be marked complete.`
+    );
+  }
   const [updated] = await db
     .update(appointments)
     .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-    .where(eq(appointments.id, req.params.id))
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .returning();
   if (updated) {
     await createRequestActivityLog(req, {
@@ -3445,11 +3717,14 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePerm
 appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
-    .select({ id: appointments.id })
+    .select({ id: appointments.id, status: appointments.status })
     .from(appointments)
     .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .limit(1);
   if (!existing) throw new NotFoundError("Appointment not found.");
+  if (existing.status === "completed") {
+    throw new BadRequestError("Completed appointments cannot be cancelled.");
+  }
   const [updated] = await db
     .update(appointments)
     .set({
@@ -3458,7 +3733,7 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermis
       publicTokenVersion: sql`coalesce(${appointments.publicTokenVersion}, 1) + 1`,
       updatedAt: new Date(),
     })
-    .where(eq(appointments.id, req.params.id))
+    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
     .returning();
   if (updated) {
     await createRequestActivityLog(req, {

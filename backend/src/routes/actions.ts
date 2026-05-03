@@ -46,6 +46,26 @@ import { sendDelayedBillingReminderEmails } from "../lib/billingPrompts.js";
 
 export const actionsRouter = Router({ mergeParams: true });
 
+export function toNullableIsoString(value: unknown): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (typeof value === "object" && "toISOString" in value && typeof value.toISOString === "function") {
+    try {
+      const iso = value.toISOString();
+      return typeof iso === "string" && iso.trim() ? iso : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 const homeDashboardSchema = z.object({
   range: z.enum(["today", "week", "month"]).optional(),
   teamMemberId: z.string().uuid().nullable().optional(),
@@ -1284,11 +1304,11 @@ actionsRouter.post("/getAutomationSummary", requireAuth, requireTenant, requireP
     const notificationRow = notificationMap.get(templateSlug);
     return {
       sentLast30Days: row?.total ?? 0,
-      lastSentAt: row?.lastSentAt?.toISOString() ?? null,
+      lastSentAt: toNullableIsoString(row?.lastSentAt),
       skippedLast30Days: skippedRow?.total ?? 0,
-      lastSkippedAt: skippedRow?.lastSentAt?.toISOString() ?? null,
+      lastSkippedAt: toNullableIsoString(skippedRow?.lastSentAt),
       failedLast30Days: notificationRow?.failedLast30Days ?? 0,
-      lastFailedAt: notificationRow?.lastFailedAt?.toISOString() ?? null,
+      lastFailedAt: toNullableIsoString(notificationRow?.lastFailedAt),
     };
   };
 
@@ -1560,13 +1580,13 @@ actionsRouter.post("/getWorkerHealth", requireAuth, requireTenant, requirePermis
     automations: {
       sentLast24Hours: automationActivityRows[0]?.totalSent ?? 0,
       skippedLast24Hours: automationActivityRows[0]?.totalSkipped ?? 0,
-      lastActivityAt: automationActivityRows[0]?.lastActivityAt?.toISOString() ?? null,
-      lastSkippedAt: automationActivityRows[0]?.lastSkippedAt?.toISOString() ?? null,
+      lastActivityAt: toNullableIsoString(automationActivityRows[0]?.lastActivityAt),
+      lastSkippedAt: toNullableIsoString(automationActivityRows[0]?.lastSkippedAt),
       failedLast24Hours: automationFailureRows[0]?.total ?? 0,
-      lastFailureAt: automationFailureRows[0]?.lastFailureAt?.toISOString() ?? null,
+      lastFailureAt: toNullableIsoString(automationFailureRows[0]?.lastFailureAt),
     },
     integrations: {
-      lastAttemptAt: integrationAttemptRows[0]?.lastAttemptAt?.toISOString() ?? null,
+      lastAttemptAt: toNullableIsoString(integrationAttemptRows[0]?.lastAttemptAt),
       pendingJobs: integrationQueueRows[0]?.pendingJobs ?? 0,
       processingJobs: integrationQueueRows[0]?.processingJobs ?? 0,
       failedJobs: integrationQueueRows[0]?.failedJobs ?? 0,

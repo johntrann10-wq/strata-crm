@@ -464,7 +464,8 @@ export default function QuoteDetailPage() {
 
   const relatedRecords = buildQuoteRelatedRecords(quote as QuoteDetailRecord & { appointmentId?: string | null }, currentLocationId);
   const clientName = getQuoteClientName(quote as QuoteDetailRecord);
-  const totalLineItems = quote.lineItems.edges.length;
+  const lineItems = quote.lineItems.edges.map(({ node }: any) => node);
+  const totalLineItems = lineItems.length;
   const expiresSoon =
     !!quote.expiresAt &&
     new Date(quote.expiresAt).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000 &&
@@ -644,7 +645,7 @@ export default function QuoteDetailPage() {
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Line Items Card */}
-          <Card>
+          <Card className="overflow-hidden border-border/70">
             <CardHeader className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
                 <CardTitle className="text-base font-semibold">Proposed services</CardTitle>
@@ -652,200 +653,342 @@ export default function QuoteDetailPage() {
                   Make the scope and pricing easy for the client to review before approving.
                 </p>
               </div>
-              {quote.status === "draft" && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-9 w-9 self-start sm:h-7 sm:w-7"
-                  onClick={() => setAddQliOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              )}
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                <Badge variant="outline" className="w-fit self-start sm:self-auto">
+                  {totalLineItems} item{totalLineItems === 1 ? "" : "s"}
+                </Badge>
+                {quote.status === "draft" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() => setAddQliOpen(true)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add item
+                  </Button>
+                )}
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4 p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">
-                      Description
-                    </th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">
-                      Qty
-                    </th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">
-                      Unit Price
-                    </th>
-                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">
-                      Total
-                    </th>
-                    <th className="w-16 px-2 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {quote.lineItems.edges.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-4 py-6 text-center text-muted-foreground"
-                      >
-                        No line items
-                      </td>
-                    </tr>
-                  ) : (
-                    quote.lineItems.edges.map(({ node }: any) =>
-                      editingQliId === node.id ? (
-                        <tr key={node.id} className="border-b last:border-0">
-                          <td className="px-2 py-1.5">
-                            <Input
-                              value={editQliValues.description}
-                              onChange={(e) =>
-                                setEditQliValues((v) => ({ ...v, description: e.target.value }))
-                              }
-                              className="h-7 text-sm"
-                            />
-                          </td>
-                          <td className="px-2 py-1.5">
+            <CardContent className="p-0">
+              <div className="space-y-3 px-4 py-4 sm:hidden">
+                {lineItems.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                    No line items yet. Add services or custom work to shape this quote.
+                  </div>
+                ) : (
+                  lineItems.map((node: any) =>
+                    editingQliId === node.id ? (
+                      <div key={node.id} className="space-y-3 rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+                        <Input
+                          value={editQliValues.description}
+                          onChange={(e) =>
+                            setEditQliValues((v) => ({ ...v, description: e.target.value }))
+                          }
+                          className="h-10 text-sm"
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Qty</p>
                             <Input
                               type="number"
                               value={editQliValues.qty}
                               onChange={(e) =>
                                 setEditQliValues((v) => ({ ...v, qty: parseFloat(e.target.value) || 0 }))
                               }
-                              className="h-7 text-sm w-16 text-right"
+                              className="h-10 text-right text-sm"
                             />
-                          </td>
-                          <td className="px-2 py-1.5">
+                          </div>
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Unit price</p>
                             <Input
                               type="number"
                               value={editQliValues.unitPrice}
                               onChange={(e) =>
                                 setEditQliValues((v) => ({ ...v, unitPrice: parseFloat(e.target.value) || 0 }))
                               }
-                              className="h-7 text-sm w-24 text-right"
+                              className="h-10 text-right text-sm"
                             />
-                          </td>
-                          <td className="text-right px-4 py-1.5 text-muted-foreground">
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2 text-sm">
+                          <span className="text-muted-foreground">Line total</span>
+                          <span className="font-semibold tabular-nums text-foreground">
                             {formatCurrency(editQliValues.qty * editQliValues.unitPrice)}
-                          </td>
-                          <td className="px-2 py-1.5">
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingQliId(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => void handleSaveQli()}
+                            disabled={updatingQli}
+                          >
+                            {updatingQli ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={node.id} className="rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <p className="break-words font-medium text-foreground">{node.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {node.taxable ? "Taxable line item" : "Non-taxable line item"}
+                            </p>
+                          </div>
+                          {quote.status === "draft" ? (
                             <div className="flex items-center gap-1">
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-6 w-6"
-                                onClick={() => void handleSaveQli()}
-                                disabled={updatingQli}
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setEditingQliId(node.id);
+                                  setEditQliValues({
+                                    description: node.description,
+                                    qty: node.quantity ?? 1,
+                                    unitPrice: node.unitPrice ?? 0,
+                                  });
+                                }}
                               >
-                                {updatingQli ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Check className="h-3 w-3" />
-                                )}
+                                <Pencil className="h-4 w-4" />
                               </Button>
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-6 w-6"
-                                onClick={() => setEditingQliId(null)}
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => void handleDeleteQli(node.id)}
+                                disabled={deletingQli}
                               >
-                                <X className="h-3 w-3" />
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        <tr key={node.id} className="border-b last:border-0">
-                          <td className="px-4 py-3">
-                            <div className="space-y-1">
-                              <div className="font-medium text-foreground">{node.description}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {node.taxable ? "Taxable line item" : "Non-taxable line item"}
-                              </div>
+                          ) : null}
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div className="rounded-lg bg-muted/20 px-3 py-2">
+                            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Qty</p>
+                            <p className="mt-1 text-sm font-medium tabular-nums text-foreground">{node.quantity}</p>
+                          </div>
+                          <div className="rounded-lg bg-muted/20 px-3 py-2">
+                            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Unit price</p>
+                            <p className="mt-1 text-sm font-medium tabular-nums text-foreground">{formatCurrency(node.unitPrice)}</p>
+                          </div>
+                          <div className="col-span-2 rounded-lg border border-border/60 bg-background px-3 py-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Line total</p>
+                              <p className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(node.total)}</p>
                             </div>
-                          </td>
-                          <td className="text-right px-4 py-2">{node.quantity}</td>
-                          <td className="text-right px-4 py-2">
-                            {formatCurrency(node.unitPrice)}
-                          </td>
-                          <td className="text-right px-4 py-2 font-semibold">
-                            {formatCurrency(node.total)}
-                          </td>
-                          <td className="px-2 py-2">
-                            {quote.status === "draft" && (
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )
+                )}
+              </div>
+
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-[640px] w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">
+                        Description
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground">
+                        Qty
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground">
+                        Unit Price
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground">
+                        Total
+                      </th>
+                      <th className="w-16 px-2 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineItems.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-4 py-8 text-center text-muted-foreground"
+                        >
+                          No line items yet. Add services or custom work to shape this quote.
+                        </td>
+                      </tr>
+                    ) : (
+                      lineItems.map((node: any) =>
+                        editingQliId === node.id ? (
+                          <tr key={node.id} className="border-b last:border-0">
+                            <td className="px-2 py-1.5">
+                              <Input
+                                value={editQliValues.description}
+                                onChange={(e) =>
+                                  setEditQliValues((v) => ({ ...v, description: e.target.value }))
+                                }
+                                className="h-8 text-sm"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <Input
+                                type="number"
+                                value={editQliValues.qty}
+                                onChange={(e) =>
+                                  setEditQliValues((v) => ({ ...v, qty: parseFloat(e.target.value) || 0 }))
+                                }
+                                className="h-8 w-16 text-right text-sm"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <Input
+                                type="number"
+                                value={editQliValues.unitPrice}
+                                onChange={(e) =>
+                                  setEditQliValues((v) => ({ ...v, unitPrice: parseFloat(e.target.value) || 0 }))
+                                }
+                                className="h-8 w-24 text-right text-sm"
+                              />
+                            </td>
+                            <td className="px-4 py-1.5 text-right text-muted-foreground tabular-nums">
+                              {formatCurrency(editQliValues.qty * editQliValues.unitPrice)}
+                            </td>
+                            <td className="px-2 py-1.5">
                               <div className="flex items-center gap-1">
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-6 w-6"
-                                  onClick={() => {
-                                    setEditingQliId(node.id);
-                                    setEditQliValues({
-                                      description: node.description,
-                                      qty: node.quantity ?? 1,
-                                      unitPrice: node.unitPrice ?? 0,
-                                    });
-                                  }}
+                                  className="h-7 w-7"
+                                  onClick={() => void handleSaveQli()}
+                                  disabled={updatingQli}
                                 >
-                                  <Pencil className="h-3 w-3" />
+                                  {updatingQli ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Check className="h-3.5 w-3.5" />
+                                  )}
                                 </Button>
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-6 w-6 text-destructive hover:text-destructive"
-                                  onClick={() => void handleDeleteQli(node.id)}
-                                  disabled={deletingQli}
+                                  className="h-7 w-7"
+                                  onClick={() => setEditingQliId(null)}
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  <X className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
-                            )}
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={node.id} className="border-b last:border-0">
+                            <td className="px-4 py-3">
+                              <div className="space-y-1">
+                                <div className="font-medium text-foreground">{node.description}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {node.taxable ? "Taxable line item" : "Non-taxable line item"}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right tabular-nums">{node.quantity}</td>
+                            <td className="px-4 py-2 text-right tabular-nums">
+                              {formatCurrency(node.unitPrice)}
+                            </td>
+                            <td className="px-4 py-2 text-right font-semibold tabular-nums">
+                              {formatCurrency(node.total)}
+                            </td>
+                            <td className="px-2 py-2">
+                              {quote.status === "draft" && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() => {
+                                      setEditingQliId(node.id);
+                                      setEditQliValues({
+                                        description: node.description,
+                                        qty: node.quantity ?? 1,
+                                        unitPrice: node.unitPrice ?? 0,
+                                      });
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    onClick={() => void handleDeleteQli(node.id)}
+                                    disabled={deletingQli}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )
                       )
-                    )
-                  )}
-                </tbody>
-                <tfoot className="border-t bg-muted/20">
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="text-right px-4 py-2 text-muted-foreground"
-                    >
-                      Subtotal
-                    </td>
-                    <td className="text-right px-4 py-2">
-                      {formatCurrency(quote.subtotal)}
-                    </td>
-                  </tr>
-                  {(quote.taxRate ?? 0) > 0 && (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="text-right px-4 py-2 text-muted-foreground"
-                      >
-                        Tax ({quote.taxRate}%)
-                      </td>
-                      <td className="text-right px-4 py-2">
-                        {formatCurrency(quote.taxAmount)}
-                      </td>
-                    </tr>
-                  )}
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="text-right px-4 py-2 font-bold"
-                    >
-                      Total
-                    </td>
-                    <td className="text-right px-4 py-2 font-bold">
-                      {formatCurrency(quote.total)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-              <div className="px-4 pb-4 text-xs text-muted-foreground">
-                {totalLineItems} line item{totalLineItems === 1 ? "" : "s"} total
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="border-t border-border/70 bg-muted/20 px-4 py-4 sm:px-6 sm:py-5">
+                <div className="ml-auto w-full max-w-md rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                        Quote totals
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Review subtotal, tax, and final price before sending.
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                        Total
+                      </p>
+                      <p className="text-xl font-semibold tabular-nums text-foreground">
+                        {formatCurrency(quote.total)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium tabular-nums">{formatCurrency(quote.subtotal)}</span>
+                    </div>
+
+                    {(quote.taxRate ?? 0) > 0 && (
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground">Tax ({quote.taxRate}%)</span>
+                        <span className="font-medium tabular-nums">{formatCurrency(quote.taxAmount)}</span>
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                      <span>Total</span>
+                      <span className="tabular-nums">{formatCurrency(quote.total)}</span>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    {totalLineItems > 0
+                      ? `${totalLineItems} line item${totalLineItems === 1 ? "" : "s"} scoped in this quote`
+                      : "Add services or custom work to build the quote total"}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

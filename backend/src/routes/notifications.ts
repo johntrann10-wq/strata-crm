@@ -1,11 +1,12 @@
 import { Router, Request, Response } from "express";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { notifications } from "../db/schema.js";
+import { notificationPushDevices, notifications } from "../db/schema.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import {
   ensureNotificationInfrastructure,
-  getVisibleUnreadNotificationCounts,
+  getNotificationScope,
+  parseNotificationMetadata,
 } from "../lib/notifications.js";
 import { wrapAsync } from "../lib/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -26,6 +27,8 @@ type NotificationListRow = {
   updatedAt: Date;
 };
 
+type NotificationAccessRow = Pick<NotificationListRow, "type" | "entityType" | "metadata">;
+
 function businessId(req: Request): string {
   if (!req.businessId) throw new ForbiddenError("No business.");
   return req.businessId;
@@ -38,16 +41,52 @@ function notificationVisibilityFilter(req: Request) {
   return isNull(notifications.userId);
 }
 
-function parseNotificationMetadata(metadata: string | null | undefined): Record<string, unknown> {
-  if (!metadata?.trim()) return {};
-  try {
-    const parsed = JSON.parse(metadata) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
+function getResolvedPermissions(req: Request): Set<string> {
+  if (!req.membershipRole || !Array.isArray(req.permissions)) {
+    throw new ForbiddenError("You do not have permission to perform this action.");
   }
+  return new Set(req.permissions);
+}
+
+function canAccessNotification(permissions: Set<string>, row: NotificationAccessRow): boolean {
+  const scope = getNotificationScope({
+    type: row.type,
+    entityType: row.entityType,
+    metadata: parseNotificationMetadata(row.metadata),
+  });
+  switch (scope) {
+    case "leads":
+      return permissions.has("customers.read");
+    case "calendar":
+      return permissions.has("appointments.read");
+    case "finance":
+      return permissions.has("payments.read") || permissions.has("invoices.read");
+    default:
+      return permissions.has("dashboard.view");
+  }
+}
+
+function normalizePushBuckets(input: unknown, permissions: Set<string>): Array<"leads" | "calendar" | "finance"> {
+  const requested = Array.isArray(input) ? input : ["leads", "calendar", "finance"];
+  const allowed = new Set<"leads" | "calendar" | "finance">();
+  if (permissions.has("customers.read")) allowed.add("leads");
+  if (permissions.has("appointments.read")) allowed.add("calendar");
+  if (permissions.has("payments.read") || permissions.has("invoices.read")) allowed.add("finance");
+
+  const normalized = requested.filter((item): item is "leads" | "calendar" | "finance" =>
+    (item === "leads" || item === "calendar" || item === "finance") && allowed.has(item)
+  );
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : Array.from(allowed);
+}
+
+function normalizeAuthorizationStatus(input: unknown): string | null {
+  return typeof input === "string" && input.trim() ? input.trim().slice(0, 40) : null;
+}
+
+function normalizeDeviceToken(input: unknown): string {
+  if (typeof input !== "string") return "";
+  const normalized = input.trim().toLowerCase();
+  return /^[a-f0-9]{32,}$/.test(normalized) ? normalized : "";
 }
 
 function serializeNotificationRecord(row: NotificationListRow) {
@@ -65,14 +104,18 @@ function serializeNotificationRecord(row: NotificationListRow) {
   };
 }
 
-notificationsRouter.get(
-  "/",
-  requireAuth,
-  requireTenant,
-  wrapAsync(async (req: Request, res: Response) => {
-    await ensureNotificationInfrastructure();
-    const first = Math.min(Math.max(Number(req.query.first) || 12, 1), 50);
-    const list = await db
+async function listVisibleNotifications(params: {
+  businessId: string;
+  visibilityFilter: ReturnType<typeof notificationVisibilityFilter>;
+  permissions: Set<string>;
+  first: number;
+}): Promise<NotificationListRow[]> {
+  const pageSize = Math.min(Math.max(params.first * 4, 24), 100);
+  const visible: NotificationListRow[] = [];
+  let offset = 0;
+
+  while (visible.length < params.first) {
+    const rows = await db
       .select({
         id: notifications.id,
         type: notifications.type,
@@ -86,11 +129,38 @@ notificationsRouter.get(
         updatedAt: notifications.updatedAt,
       })
       .from(notifications)
-      .where(and(eq(notifications.businessId, businessId(req)), notificationVisibilityFilter(req)))
+      .where(and(eq(notifications.businessId, params.businessId), params.visibilityFilter))
       .orderBy(desc(notifications.createdAt))
-      .limit(first);
+      .limit(pageSize)
+      .offset(offset);
 
-    res.json({ records: list.map(serializeNotificationRecord) });
+    if (rows.length === 0) break;
+    visible.push(...rows.filter((row) => canAccessNotification(params.permissions, row)));
+    if (rows.length < pageSize) break;
+    offset += rows.length;
+  }
+
+  return visible.slice(0, params.first);
+}
+
+notificationsRouter.get(
+  "/",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    await ensureNotificationInfrastructure();
+    const first = Math.min(Math.max(Number(req.query.first) || 12, 1), 50);
+    const permissions = getResolvedPermissions(req);
+    const list = await listVisibleNotifications({
+      businessId: businessId(req),
+      visibilityFilter: notificationVisibilityFilter(req),
+      permissions,
+      first,
+    });
+
+    res.json({
+      records: list.map(serializeNotificationRecord),
+    });
   })
 );
 
@@ -99,10 +169,35 @@ notificationsRouter.get(
   requireAuth,
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
-    const counts = await getVisibleUnreadNotificationCounts({
-      businessId: businessId(req),
-      userId: req.userId ?? null,
-    });
+    await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+    const unreadRows = await db
+      .select({
+        type: notifications.type,
+        entityType: notifications.entityType,
+        metadata: notifications.metadata,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.businessId, businessId(req)),
+          notificationVisibilityFilter(req),
+          eq(notifications.isRead, false)
+        )
+      );
+
+    const counts = { total: 0, leads: 0, calendar: 0 };
+    for (const row of unreadRows) {
+      if (!canAccessNotification(permissions, row)) continue;
+      counts.total += 1;
+      const scope = getNotificationScope({
+        type: row.type,
+        entityType: row.entityType,
+        metadata: parseNotificationMetadata(row.metadata),
+      });
+      if (scope === "leads") counts.leads += 1;
+      if (scope === "calendar") counts.calendar += 1;
+    }
     res.json(counts);
   })
 );
@@ -114,6 +209,28 @@ notificationsRouter.post(
   wrapAsync(async (req: Request, res: Response) => {
     if (!req.params.id?.trim()) throw new BadRequestError("Notification id is required.");
     await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+
+    const [existing] = await db
+      .select({
+        id: notifications.id,
+        type: notifications.type,
+        entityType: notifications.entityType,
+        metadata: notifications.metadata,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.id, req.params.id),
+          eq(notifications.businessId, businessId(req)),
+          notificationVisibilityFilter(req)
+        )
+      )
+      .limit(1);
+
+    if (!existing || !canAccessNotification(permissions, existing)) {
+      throw new NotFoundError("Notification not found.");
+    }
 
     const [updated] = await db
       .update(notifications)
@@ -142,6 +259,32 @@ notificationsRouter.post(
   requireTenant,
   wrapAsync(async (req: Request, res: Response) => {
     await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+    const unreadRows = await db
+      .select({
+        id: notifications.id,
+        type: notifications.type,
+        entityType: notifications.entityType,
+        metadata: notifications.metadata,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.businessId, businessId(req)),
+          notificationVisibilityFilter(req),
+          eq(notifications.isRead, false)
+        )
+      );
+
+    const authorizedIds = unreadRows
+      .filter((row) => canAccessNotification(permissions, row))
+      .map((row) => row.id);
+
+    if (authorizedIds.length === 0) {
+      res.json({ ok: true });
+      return;
+    }
+
     const now = new Date();
     await db
       .update(notifications)
@@ -152,8 +295,88 @@ notificationsRouter.post(
       .where(
         and(
           eq(notifications.businessId, businessId(req)),
-          notificationVisibilityFilter(req),
-          eq(notifications.isRead, false)
+          inArray(notifications.id, authorizedIds)
+        )
+      );
+
+    res.json({ ok: true });
+  })
+);
+
+notificationsRouter.post(
+  "/push-device",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    if (!req.userId) throw new ForbiddenError("Sign in is required.");
+    await ensureNotificationInfrastructure();
+    const permissions = getResolvedPermissions(req);
+    const deviceToken = normalizeDeviceToken(req.body?.deviceToken);
+    if (!deviceToken) throw new BadRequestError("A valid iOS device token is required.");
+
+    const platform = req.body?.platform === "ios" ? "ios" : "ios";
+    const enabledBuckets = normalizePushBuckets(req.body?.enabledBuckets, permissions);
+    const now = new Date();
+
+    const [device] = await db
+      .insert(notificationPushDevices)
+      .values({
+        businessId: businessId(req),
+        userId: req.userId,
+        platform,
+        deviceToken,
+        appBundleId: "app.stratacrm.mobile",
+        enabled: true,
+        enabledBuckets: JSON.stringify(enabledBuckets),
+        authorizationStatus: normalizeAuthorizationStatus(req.body?.authorizationStatus),
+        lastRegisteredAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          notificationPushDevices.businessId,
+          notificationPushDevices.userId,
+          notificationPushDevices.deviceToken,
+        ],
+        set: {
+          enabled: true,
+          enabledBuckets: JSON.stringify(enabledBuckets),
+          authorizationStatus: normalizeAuthorizationStatus(req.body?.authorizationStatus),
+          lastRegisteredAt: now,
+          lastError: null,
+          updatedAt: now,
+        },
+      })
+      .returning({ id: notificationPushDevices.id });
+
+    res.json({ ok: true, id: device?.id ?? null });
+  })
+);
+
+notificationsRouter.post(
+  "/push-device/disable",
+  requireAuth,
+  requireTenant,
+  wrapAsync(async (req: Request, res: Response) => {
+    if (!req.userId) throw new ForbiddenError("Sign in is required.");
+    await ensureNotificationInfrastructure();
+    const deviceToken = normalizeDeviceToken(req.body?.deviceToken);
+    if (!deviceToken) throw new BadRequestError("A valid iOS device token is required.");
+    const now = new Date();
+
+    await db
+      .update(notificationPushDevices)
+      .set({
+        enabled: false,
+        authorizationStatus: normalizeAuthorizationStatus(req.body?.authorizationStatus) ?? "disabled",
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(notificationPushDevices.businessId, businessId(req)),
+          eq(notificationPushDevices.userId, req.userId),
+          eq(notificationPushDevices.deviceToken, deviceToken)
         )
       );
 

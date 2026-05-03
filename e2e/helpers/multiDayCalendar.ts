@@ -225,6 +225,7 @@ function filterAppointmentsForRange(appointments: AppointmentRecord[], startGte?
 }
 
 export async function mockMultiDayApp(page: Page): Promise<MockState> {
+  const context = page.context();
   const state: MockState = {
     appointments: baseAppointments(),
     createPayloads: [],
@@ -253,6 +254,40 @@ export async function mockMultiDayApp(page: Page): Promise<MockState> {
 
   page.on("pageerror", (error) => {
     console.log("[multi-day-qa][pageerror]", error.message);
+  });
+
+  await context.route(/.*\/api\/notifications(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ records: [] }),
+    });
+  });
+
+  await context.route(/.*\/api\/notifications\/unread-count(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 0, leads: 0, calendar: 0 }),
+    });
+  });
+
+  await context.route("**/api/notifications/read-all", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  await context.route(/.*\/api\/notifications\/[^/]+\/read$/, async (route) => {
+    const url = new URL(route.request().url());
+    const id = url.pathname.split("/").at(-2) ?? "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, id }),
+    });
   });
 
   await page.route("**/api/auth/sign-in", async (route) => {
@@ -414,6 +449,43 @@ export async function mockMultiDayApp(page: Page): Promise<MockState> {
 
     if (path === "/quotes" || path === "/invoices" || path === "/activity-logs" || path === "/appointment-services") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ records: [] }) });
+      return;
+    }
+
+    if (path === "/notifications") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ records: [] }),
+      });
+      return;
+    }
+
+    if (path === "/notifications/unread-count") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ total: 0, leads: 0, calendar: 0 }),
+      });
+      return;
+    }
+
+    if (path === "/notifications/read-all" && method === "POST") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+      return;
+    }
+
+    if (/^\/notifications\/[^/]+\/read$/.test(path) && method === "POST") {
+      const id = path.split("/")[2] ?? "";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, id }),
+      });
       return;
     }
 

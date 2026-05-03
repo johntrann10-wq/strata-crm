@@ -27,7 +27,8 @@ import { isIntegrationFeatureEnabled } from "./integrationFeatureFlags.js";
 const QUICKBOOKS_SCOPE = "com.intuit.quickbooks.accounting";
 const QUICKBOOKS_AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
-const QUICKBOOKS_API_BASE = "https://quickbooks.api.intuit.com/v3/company";
+const QUICKBOOKS_PRODUCTION_API_BASE = "https://quickbooks.api.intuit.com/v3/company";
+const QUICKBOOKS_SANDBOX_API_BASE = "https://sandbox-quickbooks.api.intuit.com/v3/company";
 const QUICKBOOKS_MINOR_VERSION = "75";
 const QUICKBOOKS_PROVIDER = "quickbooks_online";
 
@@ -88,6 +89,13 @@ export function isQuickBooksConfigured() {
 
 export function getQuickBooksScope() {
   return QUICKBOOKS_SCOPE;
+}
+
+export function getQuickBooksApiBase() {
+  const environment = process.env.QUICKBOOKS_ENVIRONMENT?.trim().toLowerCase();
+  return environment === "sandbox" || environment === "development" || environment === "dev"
+    ? QUICKBOOKS_SANDBOX_API_BASE
+    : QUICKBOOKS_PRODUCTION_API_BASE;
 }
 
 export function createQuickBooksIntegrationStateToken(input: QuickBooksIntegrationState) {
@@ -232,7 +240,7 @@ async function quickBooksRequest<T>(
   if (!config?.realmId) throw new BadRequestError("QuickBooks realm is missing.");
 
   const { connection: hydratedConnection, accessToken } = await ensureQuickBooksAccessToken(connection);
-  const url = `${QUICKBOOKS_API_BASE}/${encodeURIComponent(config.realmId)}${path}${
+  const url = `${getQuickBooksApiBase()}/${encodeURIComponent(config.realmId)}${path}${
     path.includes("?") ? "&" : "?"
   }minorversion=${QUICKBOOKS_MINOR_VERSION}`;
   const response = await fetch(url, {
@@ -664,6 +672,20 @@ async function recordQuickBooksConnectionFailure(connectionId: string, error: un
     .where(eq(integrationConnections.id, connectionId));
 }
 
+function runQueuedQuickBooksJobSoon(job: IntegrationJobRecord | null) {
+  if (!job || (job.status !== "pending" && job.status !== "failed")) return;
+  setTimeout(() => {
+    void runQuickBooksIntegrationJob(job).catch((error) => {
+      logger.warn("QuickBooks immediate job run failed", {
+        businessId: job.businessId,
+        jobId: job.id,
+        jobType: job.jobType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, 0);
+}
+
 export async function disconnectQuickBooksBusiness(businessId: string, userId: string) {
   const disconnected = await disconnectBusinessIntegrationConnection(businessId, QUICKBOOKS_PROVIDER);
   if (disconnected) {
@@ -694,7 +716,7 @@ export async function enqueueQuickBooksCustomerSync(input: {
     .where(and(eq(clients.businessId, input.businessId), eq(clients.id, input.clientId)))
     .limit(1);
   if (!client) return null;
-  return enqueueIntegrationJob({
+  const job = await enqueueIntegrationJob({
     businessId: input.businessId,
     provider: QUICKBOOKS_PROVIDER,
     connectionId: connection.id,
@@ -703,6 +725,8 @@ export async function enqueueQuickBooksCustomerSync(input: {
     payload: { clientId: client.id },
     createdByUserId: input.userId ?? null,
   });
+  runQueuedQuickBooksJobSoon(job);
+  return job;
 }
 
 export async function enqueueQuickBooksInvoiceSync(input: {
@@ -719,7 +743,7 @@ export async function enqueueQuickBooksInvoiceSync(input: {
     .where(and(eq(invoices.businessId, input.businessId), eq(invoices.id, input.invoiceId)))
     .limit(1);
   if (!invoice) return null;
-  return enqueueIntegrationJob({
+  const job = await enqueueIntegrationJob({
     businessId: input.businessId,
     provider: QUICKBOOKS_PROVIDER,
     connectionId: connection.id,
@@ -728,6 +752,8 @@ export async function enqueueQuickBooksInvoiceSync(input: {
     payload: { invoiceId: invoice.id },
     createdByUserId: input.userId ?? null,
   });
+  runQueuedQuickBooksJobSoon(job);
+  return job;
 }
 
 export async function enqueueQuickBooksPaymentSync(input: {
@@ -744,7 +770,7 @@ export async function enqueueQuickBooksPaymentSync(input: {
     .where(and(eq(payments.businessId, input.businessId), eq(payments.id, input.paymentId), isNull(payments.reversedAt)))
     .limit(1);
   if (!payment) return null;
-  return enqueueIntegrationJob({
+  const job = await enqueueIntegrationJob({
     businessId: input.businessId,
     provider: QUICKBOOKS_PROVIDER,
     connectionId: connection.id,
@@ -753,6 +779,8 @@ export async function enqueueQuickBooksPaymentSync(input: {
     payload: { paymentId: payment.id },
     createdByUserId: input.userId ?? null,
   });
+  runQueuedQuickBooksJobSoon(job);
+  return job;
 }
 
 export async function enqueueQuickBooksFullResync(input: {

@@ -35,6 +35,54 @@ export function dayEnd(date: Date): Date {
   return value;
 }
 
+export function parseCalendarDateInput(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const parsed = new Date(year, monthIndex, day);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(monthIndex) ||
+    !Number.isInteger(day) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== monthIndex ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  parsed.setHours(0, 0, 0, 0);
+  return parsed;
+}
+
+export function parseCalendarDateTimeInput(dateValue: string, timeValue: string): Date | null {
+  const baseDate = parseCalendarDateInput(dateValue);
+  if (!baseDate) return null;
+
+  const match = /^(\d{2}):(\d{2})$/.exec(timeValue.trim());
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  baseDate.setHours(hours, minutes, 0, 0);
+  return baseDate;
+}
+
 export function getWorkStart(appointment: CalendarJobLike): Date {
   return new Date(appointment.startTime);
 }
@@ -129,7 +177,7 @@ export function getMultiDayDayKind(
     case "pickup_ready":
       return "pickup_ready";
     default:
-      return "active_work";
+      return "waiting";
   }
 }
 

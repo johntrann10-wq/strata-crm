@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import {
   getActiveCalendarAppointments,
@@ -7,14 +7,18 @@ import {
   getOverviewCalendarAppointments,
   getHistoricalCalendarAppointments,
   getVisibleCalendarAppointments,
+  getJobSpanEnd,
   getWorkEnd,
   getWorkStart,
   hasLaborOnDay,
+  hasPresenceOnDay,
+  isMultiDayJob,
 } from "@/lib/calendarJobSpans";
 import { getCalendarBlockLabel, isCalendarBlockAppointment, isFullDayCalendarBlock } from "@/lib/calendarBlocks";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 import {
   getMultiDayDayKind,
   getMultiDayDayLabel,
@@ -28,6 +32,25 @@ export const START_HOUR = 7;
 export const END_HOUR = 20;
 export const HOUR_HEIGHT = 72;
 export const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
+export const SLOT_INTERVAL_MINUTES = 15;
+export const MAX_SLOT_OFFSET_MINUTES = (END_HOUR - START_HOUR) * 60 - SLOT_INTERVAL_MINUTES;
+
+export function clampSlotMinutes(totalMinutesFromStart: number): number {
+  const snapped = Math.round(totalMinutesFromStart / SLOT_INTERVAL_MINUTES) * SLOT_INTERVAL_MINUTES;
+  return Math.max(0, Math.min(MAX_SLOT_OFFSET_MINUTES, snapped));
+}
+
+export function buildSlotDate(baseDate: Date, totalMinutesFromStart: number): Date {
+  const clampedMinutes = clampSlotMinutes(totalMinutesFromStart);
+  const slotDate = new Date(baseDate);
+  slotDate.setHours(
+    START_HOUR + Math.floor(clampedMinutes / 60),
+    clampedMinutes % 60,
+    0,
+    0
+  );
+  return slotDate;
+}
 
 type StatusStyle = {
   surface: string;
@@ -115,6 +138,82 @@ export const MONTH_NAMES = [
   "November",
   "December",
 ];
+
+const PRESSABLE_CARD_STYLE: CSSProperties = {
+  WebkitTouchCallout: "none",
+  WebkitTapHighlightColor: "transparent",
+  WebkitUserSelect: "none",
+  userSelect: "none",
+  touchAction: "manipulation",
+};
+
+function useLongPressActions(onOpen: () => void) {
+  const timerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null && typeof window !== "undefined") {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const begin = useCallback((event?: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    if (typeof window === "undefined") return;
+    clearTimer();
+    longPressTriggeredRef.current = false;
+    const firstTouch = event?.touches?.[0];
+    touchStartRef.current = firstTouch ? { x: firstTouch.clientX, y: firstTouch.clientY } : null;
+    timerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      void triggerImpactFeedback("medium");
+      onOpen();
+    }, 420);
+  }, [clearTimer, onOpen]);
+
+  const consumeIfLongPress = useCallback((event: { preventDefault(): void; stopPropagation(): void }) => {
+    if (longPressTriggeredRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      longPressTriggeredRef.current = false;
+      clearTimer();
+      touchStartRef.current = null;
+      return true;
+    }
+    clearTimer();
+    touchStartRef.current = null;
+    return false;
+  }, [clearTimer]);
+
+  const handleTouchMove = useCallback((event: { touches?: ArrayLike<{ clientX: number; clientY: number }> }) => {
+    const firstTouch = event.touches?.[0];
+    const start = touchStartRef.current;
+    if (!firstTouch || !start) return;
+    const distance = Math.hypot(firstTouch.clientX - start.x, firstTouch.clientY - start.y);
+    if (distance > 10) {
+      clearTimer();
+      touchStartRef.current = null;
+    }
+  }, [clearTimer]);
+
+  const openContextMenu = useCallback((event: { preventDefault(): void }) => {
+    event.preventDefault();
+    longPressTriggeredRef.current = true;
+    void triggerImpactFeedback("medium");
+    onOpen();
+  }, [onOpen]);
+
+  return {
+    begin,
+    clearTimer,
+    consumeIfLongPress,
+    handleTouchMove,
+    openContextMenu,
+  };
+}
 
 export function isSameDay(a: Date, b: Date): boolean {
   return (
@@ -268,7 +367,7 @@ export type ApptRecord = {
   totalPrice?: number | null;
   isMobile?: boolean | null;
   assignedStaffId?: string | null;
-  client: { firstName: string; lastName: string } | null;
+  client: { id?: string | null; firstName: string; lastName: string; phone?: string | null; email?: string | null } | null;
   vehicle: { make: string; model: string; year?: number | null } | null;
   assignedStaff: { firstName: string; lastName: string } | null;
 };
@@ -469,6 +568,7 @@ interface AppointmentBlockProps {
   apt: ApptRecord;
   dayContext?: Date;
   onClick: () => void;
+  onLongPress?: (apt: ApptRecord) => void;
   isSelected?: boolean;
   draggable?: boolean;
   onDragStart?: (apt: ApptRecord, e: React.DragEvent) => void;
@@ -482,6 +582,7 @@ export function AppointmentBlock({
   apt,
   dayContext,
   onClick,
+  onLongPress,
   isSelected = false,
   draggable: draggableProp,
   onDragStart,
@@ -492,6 +593,10 @@ export function AppointmentBlock({
 }: AppointmentBlockProps) {
   const [hovered, setHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const openActions = useCallback(() => {
+    onLongPress?.(apt);
+  }, [apt, onLongPress]);
+  const longPress = useLongPressActions(openActions);
 
   const start = new Date(apt.startTime);
   const end = apt.endTime ? new Date(apt.endTime) : new Date(start.getTime() + 60 * 60 * 1000);
@@ -534,7 +639,7 @@ export function AppointmentBlock({
     <button
       type="button"
       className={cn(
-        "absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none",
+        "absolute overflow-hidden rounded-xl border bg-white/98 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all select-none [&_*]:select-none",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         isBlock ? "border-slate-300/90 bg-slate-100/95 text-slate-800" : style.surface,
         isBlock ? "" : style.text,
@@ -545,6 +650,24 @@ export function AppointmentBlock({
         isDragging ? "cursor-grabbing opacity-50" : "cursor-grab",
         isConflict && "ring-1 ring-rose-300"
       )}
+      title={isConflict ? "Scheduling conflict" : undefined}
+      aria-haspopup={onLongPress ? "dialog" : undefined}
+      draggable={draggableProp ?? true}
+      onClick={(event) => {
+        if (longPress.consumeIfLongPress(event)) return;
+        event.stopPropagation();
+        onClick();
+      }}
+      onSelectStart={(event) => event.preventDefault()}
+      onTouchStart={longPress.begin}
+      onTouchEnd={longPress.consumeIfLongPress}
+      onTouchCancel={longPress.clearTimer}
+      onTouchMove={longPress.handleTouchMove}
+      onContextMenu={onLongPress ? longPress.openContextMenu : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       style={{
         top: `${top}px`,
         height: `${height}px`,
@@ -553,17 +676,8 @@ export function AppointmentBlock({
         width: widthCss ?? undefined,
         right: widthCss ? undefined : "6px",
         zIndex: zIndex ?? undefined,
+        ...PRESSABLE_CARD_STYLE,
       }}
-      title={isConflict ? "Scheduling conflict" : undefined}
-      draggable={draggableProp ?? true}
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
     >
       <div className="flex items-start gap-2">
         <span className={cn("mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full", isBlock ? "bg-slate-500" : style.accent)} />
@@ -624,6 +738,9 @@ export function AppointmentBlock({
   );
 }
 
+const MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 5;
+const MOBILE_MONTH_DAY_OVERFLOW_BADGE_THRESHOLD = 5;
+
 function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
   if (appointments.length === 0) return null;
 
@@ -636,7 +753,7 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
 
   return (
     <div className="pointer-events-none min-w-0 overflow-visible space-y-1 pb-0.5 sm:pb-1">
-      <div className="grid min-h-[8px] grid-cols-6 items-center gap-1 overflow-visible sm:min-h-[12px] sm:grid-cols-8">
+      <div className="flex min-h-[8px] flex-wrap items-center justify-center gap-0.5 overflow-visible sm:grid sm:min-h-[12px] sm:grid-cols-8 sm:justify-normal sm:gap-1">
         {orderedAppointments.map((apt) => {
           const status = getStatusStyle(apt.status);
           return (
@@ -652,6 +769,78 @@ function DayStatusDots({ appointments }: { appointments: ApptRecord[] }) {
       </div>
       <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
         {countLabel}
+      </span>
+    </div>
+  );
+}
+
+function MobileDayStatusDots({
+  appointments,
+  nativeIOS = false,
+}: {
+  appointments: ApptRecord[];
+  nativeIOS?: boolean;
+}) {
+  if (appointments.length === 0) return null;
+
+  const orderedAppointments = [...appointments].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+
+  return (
+    <div className={cn("pointer-events-none mx-auto flex flex-wrap justify-center py-0.5", nativeIOS ? "w-7 gap-1" : "w-6 gap-0.5")}>
+      {orderedAppointments.slice(0, 9).map((apt) => {
+        const status = getStatusStyle(apt.status);
+        return (
+          <span
+            key={apt.id}
+            className={cn(
+              "block shrink-0 rounded-full",
+              nativeIOS ? "h-2 w-2" : "h-1.5 w-1.5",
+              isCalendarBlockAppointment(apt) ? "bg-slate-500" : status.accent
+            )}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function MobileDayOverflowIndicator({
+  count,
+  label,
+  nativeIOS = false,
+}: {
+  count: number;
+  label: string;
+  nativeIOS?: boolean;
+}) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className={cn(
+        "pointer-events-none inline-flex items-center justify-center rounded-full bg-slate-700 font-semibold leading-none tabular-nums text-white",
+        nativeIOS ? "h-5 min-w-5 px-1.5 text-[10px]" : "h-4 min-w-4 px-1 text-[9px]"
+      )}
+    >
+      {count}
+    </span>
+  );
+}
+
+function DayOverflowIndicator({ count, label }: { count: number; label: string }) {
+  return (
+    <div className="pointer-events-none flex min-w-0 flex-col items-center overflow-visible space-y-1 pb-0.5 sm:items-start sm:pb-1">
+      <span
+        title={label}
+        aria-label={label}
+        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-700 px-1.5 text-[10px] font-semibold leading-none tabular-nums text-white sm:h-4.5 sm:min-w-4.5 sm:px-1 sm:text-[9px]"
+      >
+        {count}
+      </span>
+      <span className="hidden sm:inline-flex text-[10px] font-semibold leading-none text-foreground/80">
+        {label}
       </span>
     </div>
   );
@@ -830,6 +1019,7 @@ interface MonthViewProps {
   onApptClick: (apt: ApptRecord) => void;
   conflictIds?: Set<string>;
   isMobileLayout?: boolean;
+  isNativeIOSCalendar?: boolean;
 }
 
 export function MonthView({
@@ -841,6 +1031,7 @@ export function MonthView({
   onApptClick,
   conflictIds,
   isMobileLayout = false,
+  isNativeIOSCalendar = false,
 }: MonthViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hoverPreviewRef = useRef<HTMLDivElement | null>(null);
@@ -857,17 +1048,31 @@ export function MonthView({
   const monthGridLookup = useMemo(() => {
     const days = grid.flat();
     const dayKeys = new Set(days.map((day) => toDayKey(day)));
-    const startDayMap = new Map<string, ApptRecord[]>();
+    const dayMap = new Map<string, ApptRecord[]>();
     const revenueMap = new Map<string, number>();
     const conflictDaySet = new Set<string>();
 
     getOverviewCalendarAppointments(historicalAppointments).forEach((appointment) => {
-      const startKey = toDayKey(getJobSpanStart(appointment));
-      if (!dayKeys.has(startKey)) return;
-      const list = startDayMap.get(startKey);
-      if (list) list.push(appointment);
-      else startDayMap.set(startKey, [appointment]);
-      revenueMap.set(startKey, (revenueMap.get(startKey) ?? 0) + getCalendarAppointmentAmount(appointment));
+      const spanStart = getJobSpanStart(appointment);
+      const spanEnd = isMultiDayJob(appointment) ? getJobSpanEnd(appointment) : getWorkEnd(appointment);
+      const cursor = new Date(spanStart.getFullYear(), spanStart.getMonth(), spanStart.getDate());
+      const last = new Date(spanEnd.getFullYear(), spanEnd.getMonth(), spanEnd.getDate());
+
+      while (cursor.getTime() <= last.getTime()) {
+        const key = toDayKey(cursor);
+        const showsOnDay =
+          hasLaborOnDay(appointment, cursor) ||
+          (isMultiDayJob(appointment) && hasPresenceOnDay(appointment, cursor));
+
+        if (showsOnDay && dayKeys.has(key)) {
+          const list = dayMap.get(key);
+          if (list) list.push(appointment);
+          else dayMap.set(key, [appointment]);
+          revenueMap.set(key, (revenueMap.get(key) ?? 0) + getCalendarAppointmentAmount(appointment));
+        }
+
+        cursor.setDate(cursor.getDate() + 1);
+      }
     });
 
     if (conflictIds?.size) {
@@ -888,7 +1093,7 @@ export function MonthView({
     }
 
     return {
-      startDayMap,
+      dayMap,
       revenueMap,
       conflictDaySet,
     };
@@ -903,7 +1108,7 @@ export function MonthView({
   const hoverPreviewData = useMemo(() => {
     if (!hoverPreview) return null;
     const previewKey = toDayKey(hoverPreview.date);
-    const previewDensityItems = uniqueAppointmentsById(monthGridLookup.startDayMap.get(previewKey) ?? []);
+    const previewDensityItems = uniqueAppointmentsById(monthGridLookup.dayMap.get(previewKey) ?? []);
     const previewRevenue = monthGridLookup.revenueMap.get(previewKey) ?? 0;
 
     return {
@@ -963,32 +1168,64 @@ export function MonthView({
   return (
     <div
       ref={containerRef}
-      className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]"
+      className={cn(
+        "relative flex min-w-0 flex-col rounded-[20px] border border-border/70 bg-background/95 shadow-sm sm:rounded-[24px]",
+        isMobileLayout ? "overflow-visible" : "h-full overflow-hidden",
+        isNativeIOSCalendar && "rounded-[1.35rem] border-white/80 bg-[radial-gradient(circle_at_top_left,rgba(251,146,60,0.1),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_10px_28px_rgba(15,23,42,0.07)]"
+      )}
       onMouseLeave={() => {
         if (!isMobileLayout) setHoverPreview(null);
       }}
     >
-      <div className="grid grid-cols-7 border-b border-border/70 bg-muted/20 px-2 py-2">
+      <div
+        className={cn(
+          "grid grid-cols-7 border-b border-border/70 bg-muted/20 px-2 py-2",
+          isNativeIOSCalendar && "bg-white/88 px-1.5 py-2.5"
+        )}
+      >
         {DAY_NAMES.map((name) => (
-          <div key={name} className="px-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div
+            key={name}
+            className={cn(
+              "px-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground",
+              isNativeIOSCalendar && "px-1 text-[10px] tracking-[0.18em]"
+            )}
+          >
             {name}
           </div>
         ))}
       </div>
 
       <div
-        className="grid min-h-0 min-w-0 flex-1 overflow-hidden"
-        style={{ gridTemplateRows: `repeat(${grid.length}, minmax(0, 1fr))` }}
+        className={cn("grid min-w-0", isMobileLayout ? "overflow-visible" : "min-h-0 flex-1 overflow-hidden")}
+        style={{
+          gridTemplateRows: isMobileLayout
+            ? `repeat(${grid.length}, auto)`
+            : `repeat(${grid.length}, minmax(0, 1fr))`,
+        }}
       >
         {grid.map((week, wi) => (
-          <div key={wi} className="grid min-h-0 grid-cols-7 border-b border-border/60 last:border-b-0">
+          <div
+            key={wi}
+            className={cn(
+              "grid grid-cols-7 border-b border-border/60 last:border-b-0",
+              isMobileLayout ? "min-h-[5rem]" : "min-h-0",
+              isNativeIOSCalendar && "min-h-[5.7rem]"
+            )}
+          >
             {week.map((day, di) => {
               const dayKey = toDayKey(day);
               const isCurrentMonth = day.getMonth() === currentDate.getMonth();
               const isToday = isSameDay(day, today);
               const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
-              const dayDensityItems = uniqueAppointmentsById(monthGridLookup.startDayMap.get(dayKey) ?? []);
+              const dayDensityItems = uniqueAppointmentsById(monthGridLookup.dayMap.get(dayKey) ?? []);
               const hasConflict = monthGridLookup.conflictDaySet.has(dayKey);
+              const shouldCollapseDayIndicators = isMobileLayout
+                ? dayDensityItems.length >= MOBILE_MONTH_DAY_OVERFLOW_BADGE_THRESHOLD
+                : dayDensityItems.length >= MONTH_DAY_OVERFLOW_BADGE_THRESHOLD;
+              const dayCountLabel = dayDensityItems.some((apt) => isCalendarBlockAppointment(apt))
+                ? `${dayDensityItems.length} item${dayDensityItems.length === 1 ? "" : "s"}`
+                : `${dayDensityItems.length} appointment${dayDensityItems.length === 1 ? "" : "s"}`;
               const dayLabel = day.toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "long",
@@ -1001,12 +1238,16 @@ export function MonthView({
                   type="button"
                   aria-label={`Open ${dayLabel}`}
                   className={cn(
-                    "group relative flex h-full min-h-0 touch-manipulation select-none appearance-none flex-col border-r border-border/60 bg-transparent px-1 py-1 text-left transition-colors last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
+                    "group relative flex touch-manipulation select-none appearance-none flex-col border-r border-border/60 bg-transparent px-1 py-1 text-left transition-[transform,background-color,border-color,box-shadow] duration-150 last:border-r-0 [webkit-tap-highlight-color:transparent] sm:px-2 sm:py-1.5 xl:px-2.5 xl:py-2",
+                    isMobileLayout ? "min-h-[5rem]" : "h-full min-h-0",
+                    isNativeIOSCalendar && "min-h-[5.7rem] px-1.5 py-1.5 active:scale-[0.985]",
                     "hover:bg-muted/25",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     !isCurrentMonth && "bg-muted/10 text-muted-foreground",
                     isToday && "bg-primary/[0.04]",
-                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30"
+                    isSelected && "bg-primary/[0.03] ring-1 ring-inset ring-primary/30",
+                    isNativeIOSCalendar && !isSelected && isToday && "bg-primary/[0.045] ring-1 ring-inset ring-primary/20",
+                    isNativeIOSCalendar && isSelected && "bg-primary/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]"
                   )}
                   onClick={() => onDayClick(day)}
                   onMouseEnter={(event) => {
@@ -1022,23 +1263,26 @@ export function MonthView({
                     });
                   }}
                 >
-                  <div className="flex h-full min-h-0 flex-col">
+                  <div className={cn("flex flex-col", isMobileLayout ? "min-h-[5rem]" : "h-full min-h-0", isNativeIOSCalendar && "min-h-[5.7rem]")}>
                     <div className="flex items-start justify-between gap-1 sm:items-center sm:gap-2">
                       <span
                         className={cn(
                           "inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold sm:h-8 sm:w-8 sm:text-sm",
-                          isToday ? "bg-primary text-primary-foreground" : "text-foreground"
+                          isToday ? "bg-primary text-primary-foreground" : "text-foreground",
+                          isNativeIOSCalendar && "h-8 w-8 text-[13px]",
+                          isNativeIOSCalendar && !isSelected && isToday && "border border-primary/20 bg-primary/[0.07] text-primary",
+                          isNativeIOSCalendar && isSelected && "bg-primary text-primary-foreground shadow-[0_8px_18px_rgba(249,115,22,0.28)]"
                         )}
                       >
                         {day.getDate()}
                       </span>
-                      <div className="flex min-w-0 flex-col items-end gap-1">
+                      <div className="flex min-h-[1rem] items-center justify-end">
                         {hasConflict ? <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600 sm:h-3.5 sm:w-3.5" /> : null}
                       </div>
                     </div>
 
-                    <div className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden">
-                      {dayDensityItems.length > 0 && !isMobileLayout ? (
+                    <div className={cn("mt-1 flex flex-1 flex-col", isMobileLayout ? "overflow-visible" : "min-h-0 overflow-hidden")}>
+                      {!isMobileLayout && dayDensityItems.length > 0 ? (
                         <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-hidden pt-1">
                           {dayDensityItems
                             .slice(0, 2)
@@ -1059,8 +1303,30 @@ export function MonthView({
                         <div className="min-h-0 flex-1" />
                       )}
 
-                      <div className="mt-auto min-h-[1rem] shrink-0 overflow-visible space-y-1 pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5">
-                        <DayStatusDots appointments={dayDensityItems} />
+                      <div
+                        className={cn(
+                          "mt-auto shrink-0 overflow-visible space-y-1",
+                          isMobileLayout
+                            ? "min-h-[1.5rem] pt-2 pb-1"
+                            : "min-h-[1rem] pt-1 pb-2 sm:min-h-[1.15rem] sm:pt-2 sm:pb-2.5"
+                        )}
+                      >
+                        {isMobileLayout ? (
+                          <div className={cn("flex min-h-[1.5rem] items-end justify-center", isNativeIOSCalendar && "min-h-[1.65rem] pb-0.5")}>
+                            {dayDensityItems.length > 0 ? (
+                              shouldCollapseDayIndicators ? (
+                                <MobileDayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} nativeIOS={isNativeIOSCalendar} />
+                              ) : (
+                                <MobileDayStatusDots appointments={dayDensityItems} nativeIOS={isNativeIOSCalendar} />
+                              )
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {!isMobileLayout && shouldCollapseDayIndicators ? (
+                          <DayOverflowIndicator count={dayDensityItems.length} label={dayCountLabel} />
+                        ) : !isMobileLayout ? (
+                          <DayStatusDots appointments={dayDensityItems} />
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1096,7 +1362,7 @@ export function MonthView({
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <CompactSignal label="Starting" value={hoverPreviewData.count} />
+                <CompactSignal label="Scheduled" value={hoverPreviewData.count} />
           </div>
 
           <div className="mt-3 space-y-2">
@@ -1111,7 +1377,7 @@ export function MonthView({
               ))
             ) : (
               <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
-                No jobs start on this day.
+                No jobs scheduled on this day.
               </div>
             )}
           </div>

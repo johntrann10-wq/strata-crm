@@ -9,7 +9,7 @@ import {
   useNavigate,
   useRouteError,
 } from "react-router";
-import { Suspense, useEffect, useLayoutEffect, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./app.css";
 import faviconHref from "./favicon.svg";
 import appleTouchIconHref from "./apple-touch-icon.png";
@@ -17,9 +17,16 @@ import { Toaster } from "@/components/ui/sonner";
 import type { Route } from "./+types/root";
 import { analyticsEnabled, getClarityProjectId, getGaMeasurementId, trackPageView } from "./lib/analytics";
 import { persistAuthState } from "./lib/auth";
-import { buildNavigationTarget, isNativeShell, resolveAppReturnState, resolveNativeShellReturnUrl } from "./lib/mobileShell";
 import { buildCanonicalUrl } from "./lib/publicShareMeta";
 import { recordRuntimeError } from "./lib/runtimeErrors";
+import {
+  addNativeAppUrlOpenListener,
+  buildNavigationTarget,
+  getNativeLaunchUrl,
+  isNativeShell,
+  resolveAppReturnState,
+  resolveNativeShellReturnUrl,
+} from "./lib/mobileShell";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
@@ -98,115 +105,6 @@ function isIndexableMarketingPath(pathname: string) {
   ].includes(pathname);
 }
 
-/** Consumes both legacy ?token=... redirects and native-shell auth returns. */
-function AuthTokenConsumer() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useLayoutEffect(() => {
-    if (typeof window === "undefined") return;
-    const { token, nextPath, cleanedSearch, cleanedHash, isAppReturnPath } = resolveAppReturnState({
-      pathname: location.pathname,
-      search: location.search,
-      hash: location.hash,
-    });
-    if (!token) return;
-
-    persistAuthState(token, { source: isAppReturnPath ? "app-return" : "auth-return" });
-    if (isAppReturnPath && nextPath) {
-      navigate(buildNavigationTarget(nextPath, cleanedSearch, cleanedHash), { replace: true });
-      return;
-    }
-    if (cleanedSearch !== location.search || cleanedHash !== location.hash) {
-      navigate(`${location.pathname}${cleanedSearch}${cleanedHash}`, { replace: true });
-    }
-  }, [location.pathname, location.search, location.hash, navigate]);
-
-  return null;
-}
-
-function MobileShellBridge() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const html = document.documentElement;
-    if (isNativeShell()) {
-      html.dataset.mobileShell = "true";
-    } else {
-      delete html.dataset.mobileShell;
-    }
-    return () => {
-      delete html.dataset.mobileShell;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !isNativeShell()) return;
-
-    type AppLaunchResult = { url?: string | null };
-    type AppUrlOpenEvent = { url: string };
-    type AppListenerHandle = { remove?: () => Promise<void> | void };
-    type AppPlugin = {
-      getLaunchUrl?: () => Promise<AppLaunchResult | undefined>;
-      addListener?: (
-        eventName: "appUrlOpen",
-        listenerFunc: (event: AppUrlOpenEvent) => void,
-      ) => Promise<AppListenerHandle> | AppListenerHandle;
-    };
-    type CapacitorWindow = Window & {
-      Capacitor?: {
-        Plugins?: {
-          App?: AppPlugin;
-        };
-      };
-    };
-
-    const appPlugin = (window as CapacitorWindow).Capacitor?.Plugins?.App;
-    if (!appPlugin) return;
-
-    let disposed = false;
-    let removeListener: (() => void) | null = null;
-
-    const routeIncomingUrl = (rawUrl: string | null | undefined) => {
-      const target = resolveNativeShellReturnUrl(rawUrl);
-      if (!target) return;
-      navigate(target, { replace: true });
-    };
-
-    const attach = async () => {
-      try {
-        const launchResult = await appPlugin.getLaunchUrl?.();
-        if (!disposed) {
-          routeIncomingUrl(launchResult?.url);
-        }
-
-        if (!appPlugin.addListener) return;
-        const handle = await appPlugin.addListener("appUrlOpen", ({ url }) => {
-          routeIncomingUrl(url);
-        });
-        removeListener = () => {
-          void handle.remove?.();
-        };
-      } catch (error) {
-        recordRuntimeError({
-          source: "mobile-shell-bridge",
-          message: error instanceof Error ? error.message : "Failed to initialize mobile auth return bridge",
-          detail: error instanceof Error ? error.stack : undefined,
-        });
-      }
-    };
-
-    void attach();
-
-    return () => {
-      disposed = true;
-      removeListener?.();
-    };
-  }, [navigate]);
-
-  return null;
-}
 
 /** Renders Toaster only on the client to avoid SSR crashes (e.g. Sonner in serverless). */
 function ClientToaster() {
@@ -269,6 +167,123 @@ function AnalyticsRouteTracker() {
   return null;
 }
 
+function AuthHashConsumer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const { token, nextPath, cleanedSearch, cleanedHash, isAppReturnPath } = resolveAppReturnState({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    });
+    if (token || isAppReturnPath) {
+      console.log("[mobile-shell-bridge] app-return-state", {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+        hasToken: Boolean(token),
+        nextPath,
+        cleanedSearch,
+        cleanedHash,
+        isAppReturnPath,
+      });
+    }
+    if (!token) return;
+    persistAuthState(token, { source: isAppReturnPath ? "app-return" : "auth-hash" });
+    if (isAppReturnPath && nextPath) {
+      navigate(buildNavigationTarget(nextPath, cleanedSearch, cleanedHash), { replace: true });
+      return;
+    }
+    if (cleanedSearch !== location.search || cleanedHash !== location.hash) {
+      navigate(`${location.pathname}${cleanedSearch}${cleanedHash}`, { replace: true });
+    }
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  return null;
+}
+
+function MobileShellBridge() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const lastHandledUrlRef = useRef<string | null>(null);
+  const latestLocationRef = useRef(`${location.pathname}${location.search}${location.hash}`);
+
+  useEffect(() => {
+    latestLocationRef.current = `${location.pathname}${location.search}${location.hash}`;
+  }, [location.hash, location.pathname, location.search]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    if (isNativeShell()) {
+      html.dataset.mobileShell = "true";
+    } else {
+      delete html.dataset.mobileShell;
+    }
+    return () => {
+      delete html.dataset.mobileShell;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isNativeShell()) return;
+
+    let disposed = false;
+    let removeListener: (() => Promise<void>) | null = null;
+
+    const closeNativeBrowserIfNeeded = async (rawUrl: string, resolvedTarget: string) => {
+      if (!rawUrl.includes("authToken=") && !resolvedTarget.startsWith("/app-return")) return;
+      try {
+        const { Browser } = await import("@capacitor/browser");
+        await Browser.close();
+      } catch {
+        // Browser.close() is best-effort only.
+      }
+    };
+
+    const handleNativeReturn = async (rawUrl: string | null | undefined) => {
+      if (disposed || typeof rawUrl !== "string") return;
+      const trimmed = rawUrl.trim();
+      if (!trimmed || trimmed === lastHandledUrlRef.current) return;
+
+      const resolvedTarget = resolveNativeShellReturnUrl(trimmed);
+      if (!resolvedTarget) return;
+
+      lastHandledUrlRef.current = trimmed;
+      await closeNativeBrowserIfNeeded(trimmed, resolvedTarget);
+
+      if (latestLocationRef.current === resolvedTarget) return;
+      navigate(resolvedTarget, { replace: true });
+    };
+
+    void getNativeLaunchUrl().then((launchUrl) => void handleNativeReturn(launchUrl));
+    void addNativeAppUrlOpenListener((url) => {
+      void handleNativeReturn(url);
+    }).then((remove) => {
+      if (disposed) {
+        void remove();
+        return;
+      }
+      removeListener = remove;
+    }).catch((error) => {
+      recordRuntimeError({
+        source: "mobile-shell-bridge",
+        message: error instanceof Error ? error.message : "Failed to initialize mobile auth return bridge",
+        detail: error instanceof Error ? error.stack : undefined,
+      });
+    });
+
+    return () => {
+      disposed = true;
+      void removeListener?.();
+    };
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  return null;
+}
+
 function AnalyticsScripts() {
   if (!isProduction || !analyticsEnabled()) return null;
 
@@ -316,12 +331,15 @@ export const links = () => [
 
 export const meta = () => [
   { charset: "utf-8" },
-  { name: "viewport", content: "width=device-width, initial-scale=1" },
+  { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
   { title: defaultTitle },
   { name: "description", content: defaultDescription },
   { name: "application-name", content: "Strata CRM" },
   { name: "theme-color", content: "#f97316" },
   { name: "google-site-verification", content: googleSiteVerification },
+  { name: "mobile-web-app-capable", content: "yes" },
+  { name: "apple-mobile-web-app-capable", content: "yes" },
+  { name: "apple-mobile-web-app-status-bar-style", content: "default" },
   { name: "apple-mobile-web-app-title", content: "Strata CRM" },
   { property: "og:site_name", content: "Strata CRM" },
   { property: "og:type", content: "website" },
@@ -402,8 +420,8 @@ export default function App({ loaderData }: Route.ComponentProps) {
       </head>
       <body>
         <Suspense>
-          <AuthTokenConsumer />
           <MobileShellBridge />
+          <AuthHashConsumer />
           <AnalyticsRouteTracker />
           <BrowserErrorReporter />
           <Outlet context={{ gadgetConfig, csrfToken }} />
@@ -435,6 +453,14 @@ export function ErrorBoundary() {
   const error = useRouteError();
   const { title, detail, stack } = errorToDetails(error);
   const showStack = import.meta.env.DEV && stack;
+
+  useEffect(() => {
+    recordRuntimeError({
+      source: "react.boundary",
+      message: title,
+      detail: detail || stack,
+    });
+  }, [detail, stack, title]);
 
   return (
     <html lang="en">

@@ -1,3 +1,5 @@
+import { reportRemoteDiagnosticEvent } from "./remoteDiagnostics";
+
 export type ReliabilityDiagnosticEntry = {
   id: string;
   source:
@@ -108,7 +110,20 @@ export function recordReliabilityDiagnostic(params: {
   });
   if (duplicate) return;
   writeEntries([entry, ...existing]);
-  console.error("[Strata reliability]", entry);
+  reportRemoteDiagnosticEvent({
+    category: "reliability",
+    source: entry.source,
+    severity: entry.severity,
+    message: entry.message,
+    detail: entry.detail,
+    path: entry.path,
+    method: entry.method,
+    status: entry.status,
+    timestamp: entry.timestamp,
+  });
+  if (import.meta.env.DEV) {
+    console.error("[Strata reliability]", entry);
+  }
 }
 
 export function listReliabilityDiagnostics(): ReliabilityDiagnosticEntry[] {

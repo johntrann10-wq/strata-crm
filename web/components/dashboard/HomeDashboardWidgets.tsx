@@ -42,6 +42,7 @@ type TopBarProps = {
   roleLabel: string;
   range: HomeDashboardRange;
   onRangeChange: (value: HomeDashboardRange) => void;
+  showRangeSelector?: boolean;
   teamOptions: Array<{ id: string; name: string }>;
   teamMemberId: string;
   onTeamChange: (value: string) => void;
@@ -50,6 +51,7 @@ type TopBarProps = {
   refreshing: boolean;
   primaryAction?: ReactNode;
   secondaryAction?: ReactNode;
+  nativeIOS?: boolean;
 };
 
 function parseDate(value: string | null | undefined) {
@@ -149,12 +151,12 @@ function CardLoadingShell({ title, rows = 4, compact = false }: { title: string;
 }
 
 export function HomeDashboardTopBar({
-  title = "Dashboard",
   subtitle,
   businessName,
   roleLabel,
   range,
   onRangeChange,
+  showRangeSelector = true,
   teamOptions,
   teamMemberId,
   onTeamChange,
@@ -163,6 +165,7 @@ export function HomeDashboardTopBar({
   refreshing,
   primaryAction,
   secondaryAction,
+  nativeIOS = false,
 }: TopBarProps) {
   const rangeOptions: Array<{ value: HomeDashboardRange; label: string }> = [
     { value: "today", label: "Today" },
@@ -170,46 +173,88 @@ export function HomeDashboardTopBar({
     { value: "month", label: "This month" },
   ];
 
+  if (nativeIOS) {
+    return (
+      <section className="rounded-[1.45rem] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.95))] px-3.5 py-3.5 shadow-[0_12px_30px_rgba(15,23,42,0.07)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{businessName ?? "Current business"}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] font-medium text-slate-500">
+              <span>{roleLabel}</span>
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span className="inline-flex items-center gap-1">
+                <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                {refreshing ? "Refreshing" : lastUpdatedLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2">
+          {primaryAction}
+          {secondaryAction}
+          {canFilterTeam ? (
+            <label className="inline-flex min-h-11 w-full items-center gap-2 rounded-full border border-slate-200/80 bg-white/88 px-3.5 py-2 text-sm text-slate-500">
+              <UserRound className="h-4 w-4" />
+              <span className="sr-only">Filter dashboard by team member</span>
+              <select
+                className="w-full bg-transparent text-sm font-medium text-foreground outline-none"
+                value={teamMemberId}
+                onChange={(event) => onTeamChange(event.target.value)}
+                aria-label="Filter dashboard by team member"
+              >
+                <option value="all">All team members</option>
+                {teamOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <Card className="surface-panel overflow-hidden rounded-[1.7rem] border-border/70 bg-white/96 py-0 shadow-[0_18px_45px_rgba(15,23,42,0.06)]">
-      <CardContent className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
+      <CardContent className="flex flex-col gap-4 px-3.5 py-4 sm:px-5 sm:py-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <div className="space-y-1">
-            <h1 className="text-balance text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-[31px]">
-              {title}
-            </h1>
-            {subtitle ? <p className="max-w-2xl text-sm text-slate-500">{subtitle}</p> : null}
+            {subtitle ? <p className="max-w-2xl text-[15px] leading-6 text-slate-500 sm:text-sm sm:leading-5">{subtitle}</p> : null}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-500 sm:text-sm">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] font-medium text-slate-500 sm:text-sm">
             <span>{businessName ?? "Current business"}</span>
             <span className="text-slate-300">/</span>
             <span>{roleLabel}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <div className="flex items-center gap-2 text-[13px] text-slate-500 sm:text-sm">
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
             <span>{refreshing ? "Refreshing..." : `Last updated ${lastUpdatedLabel}`}</span>
           </div>
         </div>
 
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:max-w-[56rem]">
+        <div className="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto lg:max-w-[56rem]">
           {primaryAction}
           {secondaryAction}
-          <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
-            {rangeOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onRangeChange(option.value)}
-                className={cn(
-                  "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
-                  range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
-                )}
-                aria-pressed={range === option.value}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {showRangeSelector ? (
+            <div className="grid w-full grid-cols-3 rounded-[1.1rem] border border-border/70 bg-slate-100/75 p-1 sm:w-auto sm:min-w-[18rem]">
+              {rangeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onRangeChange(option.value)}
+                  className={cn(
+                    "min-h-[42px] rounded-[0.9rem] px-2.5 py-2 text-center text-sm font-medium transition-colors sm:px-3",
+                    range === option.value ? "bg-white text-foreground shadow-sm" : "text-slate-500 hover:text-foreground"
+                  )}
+                  aria-pressed={range === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {canFilterTeam ? (
             <label className="inline-flex w-full items-center gap-2 rounded-[1.1rem] border border-border/70 bg-white px-3 py-2 text-sm text-slate-500 sm:min-w-[210px] sm:w-auto">
@@ -444,11 +489,9 @@ export function HomeActionQueueCard({
   error,
   onRetry,
   onDismiss,
-  onSnooze,
 }: {
   snapshot?: HomeDashboardSnapshot | null;
   onDismiss?: (itemId: string) => void;
-  onSnooze?: (itemId: string) => void;
 } & WidgetStateProps) {
   if (loading) return <CardLoadingShell title="Action Queue" rows={5} />;
   if (error) return <WidgetErrorState title="Action Queue" error={error} onRetry={onRetry} />;
@@ -498,11 +541,6 @@ export function HomeActionQueueCard({
                       </Link>
                     </Button>
                     <div className="flex gap-2">
-                      {item.supportsSnooze && onSnooze ? (
-                        <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full text-xs" onClick={() => onSnooze(item.id)}>
-                          Snooze
-                        </Button>
-                      ) : null}
                       {item.supportsDismiss && onDismiss ? (
                         <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full text-xs" onClick={() => onDismiss(item.id)}>
                           Dismiss

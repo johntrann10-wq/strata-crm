@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import {
   Activity,
   BellRing,
+  Building2,
   Cable,
   CheckCircle2,
   CreditCard,
@@ -42,6 +43,8 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  UserCircle,
+  Users,
   Webhook,
 } from "lucide-react";
 import {
@@ -75,7 +78,6 @@ import {
   listRuntimeErrors,
   type RuntimeErrorEntry,
 } from "../lib/runtimeErrors";
-import { PageHeader } from "../components/shared/PageHeader";
 import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import {
@@ -91,6 +93,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
+import { isNativeIOSApp } from "../lib/mobileShell";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
@@ -131,6 +134,17 @@ const BOOKING_DAY_OPTIONS = [
   { value: 0, label: "Sun" },
 ] as const;
 
+function parseBookingBlackoutDatesText(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]+/)
+        .map((entry) => entry.trim())
+        .filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry))
+    )
+  ).slice(0, 90);
+}
+
 const BILLING_FEATURES = [
   "Appointments & calendar",
   "Client & vehicle CRM",
@@ -138,6 +152,27 @@ const BILLING_FEATURES = [
   "Payments on invoices",
   "Service catalog",
 ];
+
+const SETTINGS_TAB_VALUES = [
+  "profile",
+  "billing",
+  "locations",
+  "team",
+  "integrations",
+  "automations",
+  "account",
+] as const;
+
+type SettingsTabId = (typeof SETTINGS_TAB_VALUES)[number];
+
+function isSettingsTabId(value: string | null | undefined): value is SettingsTabId {
+  return SETTINGS_TAB_VALUES.includes(value as SettingsTabId);
+}
+
+function getSettingsTabFromParams(searchParams: URLSearchParams): SettingsTabId {
+  const tab = searchParams.get("tab");
+  return isSettingsTabId(tab) ? tab : "profile";
+}
 
 interface BillingStatus {
   status: string | null;
@@ -155,7 +190,7 @@ interface BillingStatus {
   billingLastStripeSyncStatus: "synced" | "failed" | null;
   billingLastStripeSyncError: string | null;
   activationMilestone: BillingActivationMilestone;
-  billingPrompt: BillingPromptState;
+  billingPrompt?: BillingPromptState | null;
   stripeConnectConfigured: boolean;
   stripeConnectAccountId: string | null;
   stripeConnectDetailsSubmitted: boolean;
@@ -163,6 +198,45 @@ interface BillingStatus {
   stripeConnectPayoutsEnabled: boolean;
   stripeConnectOnboardedAt: string | null;
   stripeConnectReady: boolean;
+}
+
+function getFallbackBillingStatus(): BillingStatus {
+  return {
+    status: null,
+    accessState: null,
+    trialStartedAt: null,
+    trialEndsAt: null,
+    currentPeriodEnd: null,
+    billingHasPaymentMethod: false,
+    billingPaymentMethodAddedAt: null,
+    billingSetupError: null,
+    billingSetupFailedAt: null,
+    billingLastStripeEventId: null,
+    billingLastStripeEventType: null,
+    billingLastStripeEventAt: null,
+    billingLastStripeSyncStatus: null,
+    billingLastStripeSyncError: null,
+    activationMilestone: {
+      reached: false,
+      type: null,
+      occurredAt: null,
+      detail: null,
+    },
+    billingPrompt: {
+      stage: "none",
+      visible: false,
+      daysLeftInTrial: null,
+      dismissedUntil: null,
+      cooldownDays: 5,
+    },
+    stripeConnectConfigured: false,
+    stripeConnectAccountId: null,
+    stripeConnectDetailsSubmitted: false,
+    stripeConnectChargesEnabled: false,
+    stripeConnectPayoutsEnabled: false,
+    stripeConnectOnboardedAt: null,
+    stripeConnectReady: false,
+  };
 }
 
 type LocationRecord = {
@@ -780,42 +854,7 @@ function BillingTab({
       })
       .catch(() => {
         if (!cancelled) {
-          setBillingStatus({
-            status: null,
-            accessState: null,
-            trialStartedAt: null,
-            trialEndsAt: null,
-            currentPeriodEnd: null,
-            billingHasPaymentMethod: false,
-            billingPaymentMethodAddedAt: null,
-            billingSetupError: null,
-            billingSetupFailedAt: null,
-            billingLastStripeEventId: null,
-            billingLastStripeEventType: null,
-            billingLastStripeEventAt: null,
-            billingLastStripeSyncStatus: null,
-            billingLastStripeSyncError: null,
-            activationMilestone: {
-              reached: false,
-              type: null,
-              occurredAt: null,
-              detail: null,
-            },
-            billingPrompt: {
-              stage: "none",
-              visible: false,
-              daysLeftInTrial: null,
-              dismissedUntil: null,
-              cooldownDays: 5,
-            },
-            stripeConnectConfigured: false,
-            stripeConnectAccountId: null,
-            stripeConnectDetailsSubmitted: false,
-            stripeConnectChargesEnabled: false,
-            stripeConnectPayoutsEnabled: false,
-            stripeConnectOnboardedAt: null,
-            stripeConnectReady: false,
-          });
+          setBillingStatus(getFallbackBillingStatus());
         }
       });
 
@@ -981,7 +1020,12 @@ function BillingTab({
   };
 
   const isActive = hasFullBillingAccess(billingStatus?.accessState);
-  const billingAccessLabel = getBillingAccessLabel(billingStatus?.accessState);
+  const nativeShellSession = isNativeIOSApp();
+  const billingAccessLabel = nativeShellSession
+    ? isActive
+      ? "Workspace active"
+      : "Needs attention"
+    : getBillingAccessLabel(billingStatus?.accessState);
   const trialDaysLeft = getTrialDaysLeft(billingStatus?.trialEndsAt);
   const trialEnd = billingStatus?.trialEndsAt ? new Date(billingStatus.trialEndsAt) : null;
   const periodEnd = billingStatus?.currentPeriodEnd ? new Date(billingStatus.currentPeriodEnd) : null;
@@ -990,12 +1034,13 @@ function BillingTab({
     : null;
   const canManageStripeConnect = membershipRole === "owner" || membershipRole === "admin";
   const canManageBilling = membershipRole === "owner" || membershipRole === "admin";
+  const billingPrompt = billingStatus?.billingPrompt ?? null;
   const promptBody =
-    billingStatus?.billingPrompt.stage && billingStatus.billingPrompt.stage !== "none"
+    billingPrompt?.stage && billingPrompt.stage !== "none"
       ? getBillingPromptBody({
-          stage: billingStatus.billingPrompt.stage,
+          stage: billingPrompt.stage,
           milestone: billingStatus.activationMilestone,
-          daysLeftInTrial: billingStatus.billingPrompt.daysLeftInTrial,
+          daysLeftInTrial: billingPrompt.daysLeftInTrial,
         })
       : "";
 
@@ -1007,10 +1052,12 @@ function BillingTab({
             <div className="rounded-md bg-primary/10 p-2">
               <CreditCard className="h-5 w-5 text-primary" />
             </div>
-            <CardTitle>Plan &amp; Billing</CardTitle>
+            <CardTitle>{nativeShellSession ? "Workspace status" : "Plan & Billing"}</CardTitle>
           </div>
           <CardDescription>
-            Strata is $29/month. First month free. Manage your subscription and payment method below.
+            {nativeShellSession
+              ? "View workspace access status here. Owners can manage plan changes from the web dashboard."
+              : "Strata is $29/month. First month free. Manage your subscription and payment method below."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1019,29 +1066,36 @@ function BillingTab({
               <Badge variant={isActive ? "default" : "secondary"}>
                 {billingAccessLabel}
               </Badge>
-              {trialEnd && billingStatus.accessState === "active_trial" ? (
+              {nativeShellSession && trialEnd && billingStatus.accessState === "active_trial" ? (
+                <Badge variant="outline">
+                  {trialDaysLeft == null
+                    ? `Ends ${trialEnd.toLocaleDateString()}`
+                    : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left`}
+                </Badge>
+              ) : null}
+              {!nativeShellSession && trialEnd && billingStatus.accessState === "active_trial" ? (
                 <span className="text-sm text-muted-foreground">
                   {trialDaysLeft == null
                     ? `Trial ends ${trialEnd.toLocaleDateString()}`
                     : `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} left`}
                 </span>
               ) : null}
-              {periodEnd && billingStatus.accessState === "active_paid" ? (
+              {!nativeShellSession && periodEnd && billingStatus.accessState === "active_paid" ? (
                 <span className="text-sm text-muted-foreground">Renews {periodEnd.toLocaleDateString()}</span>
               ) : null}
             </div>
           ) : null}
 
-          {billingStatus && billingStatus.billingPrompt.stage !== "none" ? (
+          {billingStatus && !nativeShellSession && billingPrompt?.stage && billingPrompt.stage !== "none" ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-sm font-medium text-amber-950">
-                {getBillingPromptHeadline(billingStatus.billingPrompt.stage)}
+                {getBillingPromptHeadline(billingPrompt.stage)}
               </p>
               <p className="mt-1 text-sm text-amber-900">{promptBody}</p>
             </div>
           ) : null}
 
-          {billingStatus?.billingLastStripeEventType || billingStatus?.billingLastStripeSyncError ? (
+          {!nativeShellSession && (billingStatus?.billingLastStripeEventType || billingStatus?.billingLastStripeSyncError) ? (
             <div className="rounded-lg border bg-muted/20 px-4 py-3">
               <p className="text-sm font-medium">Stripe sync</p>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -1059,115 +1113,147 @@ function BillingTab({
             </div>
           ) : null}
 
-          <div>
-            <p className="mb-3 text-sm font-medium">Everything included:</p>
-            <ul className="space-y-2">
-              {BILLING_FEATURES.map((feature) => (
-                <li key={feature} className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {!nativeShellSession ? (
+            <>
+              <div>
+                <p className="mb-3 text-sm font-medium">Everything included:</p>
+                <ul className="space-y-2">
+                  {BILLING_FEATURES.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-          <Separator />
+              <Separator />
+            </>
+          ) : null}
 
           {billingStatus?.accessState === "pending_setup_failure" ? (
             <div className="space-y-3">
               <p className="text-sm text-amber-700 dark:text-amber-300">
                 {billingStatus.billingSetupError?.trim() || "Strata could not finish Stripe setup automatically yet."}
               </p>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button onClick={handleRetryBillingSetup} disabled={billingRetryLoading || !canManageBilling}>
-                  {billingRetryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                  Retry billing setup
-                </Button>
-                <Button asChild variant="outline">
-                  <Link to="/subscribe">Open billing recovery</Link>
-                </Button>
-              </div>
+              {nativeShellSession ? (
+                <p className="text-sm text-muted-foreground">
+                  Contact support if workspace access still needs attention.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button onClick={handleRetryBillingSetup} disabled={billingRetryLoading || !canManageBilling}>
+                    {billingRetryLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Retry billing setup
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to="/subscribe">Open billing recovery</Link>
+                  </Button>
+                </div>
+              )}
             </div>
           ) : isActive ? (
             <div className="space-y-3">
               {billingStatus?.accessState === "active_trial" ? (
                 <p className="text-sm text-muted-foreground">
-                  {billingStatus.billingHasPaymentMethod
-                    ? "A payment method is already saved. Your trial stays active until the paid plan begins automatically."
-                    : "Your workspace is fully usable now. Add a payment method whenever you're ready so the trial can roll into a paid plan smoothly."}
+                  {nativeShellSession
+                    ? trialDaysLeft == null
+                      ? "Workspace access is active in the mobile app."
+                      : `Workspace access is active. ${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remain in the current access period.`
+                    : billingStatus.billingHasPaymentMethod
+                      ? "A payment method is already saved. Your trial stays active until the paid plan begins automatically."
+                      : "Your workspace is fully usable now. Add a payment method whenever you're ready so the trial can roll into a paid plan smoothly."}
                 </p>
               ) : null}
-              <Button
-                onClick={
-                  billingStatus?.billingPrompt.stage &&
-                  billingStatus.billingPrompt.stage !== "none" &&
-                  billingStatus.accessState === "active_trial"
-                    ? () => setBillingPromptOpen(true)
-                    : handleManageSubscription
-                }
-                disabled={billingPortalLoading || !canManageBilling}
-              >
-                {billingPortalLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                )}
-                {billingStatus?.accessState === "active_trial"
-                  ? billingStatus.billingHasPaymentMethod
-                    ? "Manage billing"
-                    : "Add payment method"
-                  : billingStatus?.accessState === "canceled"
-                    ? "Reactivate subscription"
-                  : "Manage billing"}
-              </Button>
+              {nativeShellSession ? (
+                <p className="text-sm text-muted-foreground">
+                  Mobile stays focused on operations tools and account access.
+                </p>
+              ) : (
+                <Button
+                  onClick={
+                    billingPrompt?.stage &&
+                    billingPrompt.stage !== "none" &&
+                    billingStatus.accessState === "active_trial"
+                      ? () => setBillingPromptOpen(true)
+                      : handleManageSubscription
+                  }
+                  disabled={billingPortalLoading || !canManageBilling}
+                >
+                  {billingPortalLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                  )}
+                  {billingStatus?.accessState === "active_trial"
+                    ? billingStatus.billingHasPaymentMethod
+                      ? "Manage billing"
+                      : "Add payment method"
+                    : billingStatus?.accessState === "canceled"
+                      ? "Reactivate subscription"
+                    : "Manage billing"}
+                </Button>
+              )}
             </div>
           ) : billingStatus !== null ? (
             <div className="space-y-2">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                {billingStatus.accessState === "paused_missing_payment_method"
-                  ? "The trial ended without a saved payment method. Add one to resume full access."
-                  : "Billing is inactive for this workspace. Your data is saved and ready to resume."}
+                {nativeShellSession
+                  ? "Workspace access needs attention."
+                  : billingStatus.accessState === "paused_missing_payment_method"
+                    ? "The trial ended without a saved payment method. Add one to resume full access."
+                    : "Billing is inactive for this workspace. Your data is saved and ready to resume."}
               </p>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/subscribe">Open billing recovery</Link>
-              </Button>
+              {nativeShellSession ? (
+                <p className="text-sm text-muted-foreground">
+                  Contact support if the workspace still needs account help outside the mobile app.
+                </p>
+              ) : (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/subscribe">Open billing recovery</Link>
+                </Button>
+              )}
             </div>
           ) : null}
 
           {!canManageBilling ? (
             <p className="text-xs text-muted-foreground">
-              Ask an owner or admin to update billing for this workspace.
+              {nativeShellSession
+                ? "Ask an owner or admin to manage workspace access."
+                : "Ask an owner or admin to update billing for this workspace."}
             </p>
           ) : null}
         </CardContent>
       </Card>
 
-      <BillingPromptDialog
-        open={billingPromptOpen}
-        onOpenChange={setBillingPromptOpen}
-        stage={billingStatus?.billingPrompt.stage ?? "none"}
-        body={promptBody}
-        canManageBilling={canManageBilling}
-        loading={billingPortalLoading}
-        onContinue={() => {
-          const promptStage = billingStatus?.billingPrompt.stage;
-          if (!promptStage || promptStage === "none") return;
-          void (async () => {
-            setBillingPortalLoading(true);
-            try {
-              const result = await api.billing.createPortalSessionForPrompt({
-                promptStage,
-                entryPoint: "settings",
-              });
-              if (result?.url) window.location.href = result.url;
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : "Could not open billing portal.");
-            } finally {
-              setBillingPortalLoading(false);
-            }
-          })();
-        }}
-      />
+      {nativeShellSession ? null : (
+        <BillingPromptDialog
+          open={billingPromptOpen}
+          onOpenChange={setBillingPromptOpen}
+          stage={billingPrompt?.stage ?? "none"}
+          body={promptBody}
+          canManageBilling={canManageBilling}
+          loading={billingPortalLoading}
+          onContinue={() => {
+            const promptStage = billingPrompt?.stage;
+            if (!promptStage || promptStage === "none") return;
+            void (async () => {
+              setBillingPortalLoading(true);
+              try {
+                const result = await api.billing.createPortalSessionForPrompt({
+                  promptStage,
+                  entryPoint: "settings",
+                });
+                if (result?.url) window.location.href = result.url;
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not open billing portal.");
+              } finally {
+                setBillingPortalLoading(false);
+              }
+            })();
+          }}
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -1313,7 +1399,7 @@ function BillingTab({
 export default function SettingsPage() {
   const { user, businessId, membershipRole, permissions } = useOutletContext<AuthOutletContext>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(() => getSettingsTabFromParams(searchParams));
   const [formData, setFormData] = useState<BusinessSettingsFormData>(DEFAULT_BUSINESS_SETTINGS_FORM);
   const [defaultTaxRateInput, setDefaultTaxRateInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultTaxRate));
   const [defaultAdminFeeInput, setDefaultAdminFeeInput] = useState(String(DEFAULT_BUSINESS_SETTINGS_FORM.defaultAdminFee));
@@ -1358,6 +1444,7 @@ export default function SettingsPage() {
     DEFAULT_INTEGRATION_SETTINGS
   );
   const [twilioSettings, setTwilioSettings] = useState<TwilioSmsSettingsForm>(DEFAULT_TWILIO_SMS_SETTINGS);
+  const [twilioTemplatesDirty, setTwilioTemplatesDirty] = useState(false);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
@@ -1389,6 +1476,25 @@ export default function SettingsPage() {
     message: "Not checked yet.",
     checkedAt: null,
   });
+  const nativeShellSession = isNativeIOSApp();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.billing
+      .getStatus()
+      .then((result) => {
+        if (!cancelled) setBillingStatus(result);
+      })
+      .catch(() => {
+        if (!cancelled) setBillingStatus(getFallbackBillingStatus());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const hasFullBillingWorkspaceAccess = billingStatus !== null && hasFullBillingAccess(billingStatus.accessState);
   const integrationsBlockedByBilling = billingStatus !== null && !hasFullBillingAccess(billingStatus.accessState);
   const canLoadIntegrationData = Boolean(businessId) && activeTab === "integrations" && hasFullBillingWorkspaceAccess;
@@ -1497,6 +1603,8 @@ export default function SettingsPage() {
     integrationStatus?.registry.find((item) => item.provider === "google_calendar") ?? null;
   const twilioConnection =
     integrationStatus?.connections.find((item) => item.provider === "twilio_sms") ?? null;
+  const twilioConnectionIsActive = twilioConnection?.status === "connected";
+  const twilioCanReuseStoredToken = twilioConnectionIsActive;
   const twilioRegistry =
     integrationStatus?.registry.find((item) => item.provider === "twilio_sms") ?? null;
   const outboundWebhookConnection =
@@ -1555,11 +1663,11 @@ export default function SettingsPage() {
   );
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab) {
+    const tab = getSettingsTabFromParams(searchParams);
+    if (tab !== activeTab) {
       setActiveTab(tab);
     }
-  }, [searchParams]);
+  }, [activeTab, searchParams]);
 
   useEffect(() => {
     const quickBooksState = searchParams.get("quickbooks");
@@ -1674,19 +1782,30 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!twilioConnection) {
-      setTwilioSettings(DEFAULT_TWILIO_SMS_SETTINGS);
+      setTwilioSettings((current) => ({
+        ...DEFAULT_TWILIO_SMS_SETTINGS,
+        accountSid: current.accountSid,
+        authToken: current.authToken,
+        messagingServiceSid: current.messagingServiceSid,
+        enabledTemplateSlugs:
+          current.enabledTemplateSlugs.length > 0
+            ? current.enabledTemplateSlugs
+            : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
+      }));
       return;
     }
-    setTwilioSettings({
+    setTwilioSettings((current) => ({
       accountSid: twilioConnection.configSummary.twilioAccountSid ?? "",
-      authToken: "",
+      authToken: current.authToken,
       messagingServiceSid: twilioConnection.configSummary.twilioMessagingServiceSid ?? "",
       enabledTemplateSlugs:
-        twilioConnection.configSummary.twilioEnabledTemplateSlugs.length > 0
-          ? (twilioConnection.configSummary.twilioEnabledTemplateSlugs as TwilioSmsSettingsForm["enabledTemplateSlugs"])
-          : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
-    });
-  }, [twilioConnection]);
+        twilioTemplatesDirty
+          ? current.enabledTemplateSlugs
+          : twilioConnection.configSummary.twilioEnabledTemplateSlugs.length > 0
+            ? (twilioConnection.configSummary.twilioEnabledTemplateSlugs as TwilioSmsSettingsForm["enabledTemplateSlugs"])
+            : DEFAULT_TWILIO_SMS_SETTINGS.enabledTemplateSlugs,
+    }));
+  }, [twilioConnection, twilioTemplatesDirty]);
 
   useEffect(() => {
     if (!canLoadIntegrationData) return;
@@ -1843,9 +1962,35 @@ export default function SettingsPage() {
 
   const handleFieldChange = (
     field: keyof BusinessSettingsFormData,
-    value: string | number | boolean | number[]
+    value: BusinessSettingsFormData[keyof BusinessSettingsFormData]
   ) => {
     setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleBookingDayToggle = (dayIndex: number, enabled: boolean) => {
+    setFormData((current) => {
+      const dailyHours = current.bookingDailyHours.map((entry) =>
+        entry.dayIndex === dayIndex ? { ...entry, enabled } : entry
+      );
+      return {
+        ...current,
+        bookingDailyHours: dailyHours,
+        bookingAvailableDays: dailyHours.filter((entry) => entry.enabled).map((entry) => entry.dayIndex),
+      };
+    });
+  };
+
+  const handleBookingDayTimeChange = (
+    dayIndex: number,
+    field: "openTime" | "closeTime",
+    value: string
+  ) => {
+    setFormData((current) => ({
+      ...current,
+      bookingDailyHours: current.bookingDailyHours.map((entry) =>
+        entry.dayIndex === dayIndex ? { ...entry, [field]: value } : entry
+      ),
+    }));
   };
 
   const normalizeAppointmentBufferInput = (value: string) => {
@@ -2183,6 +2328,7 @@ export default function SettingsPage() {
     templateSlug: TwilioSmsSettingsForm["enabledTemplateSlugs"][number],
     enabled: boolean
   ) => {
+    setTwilioTemplatesDirty(true);
     setTwilioSettings((current) => {
       const next = new Set(current.enabledTemplateSlugs);
       if (enabled) {
@@ -2198,17 +2344,24 @@ export default function SettingsPage() {
   };
 
   const handleSaveTwilio = async () => {
+    const authToken = twilioSettings.authToken.trim();
+    if (!twilioCanReuseStoredToken && !authToken) {
+      toast.error("Twilio Auth Token is required to reconnect Twilio SMS.");
+      return;
+    }
+
     setTwilioSaving(true);
     try {
       await api.integration.connectTwilio({
         accountSid: twilioSettings.accountSid.trim(),
-        authToken: twilioSettings.authToken.trim() || undefined,
+        authToken: authToken || undefined,
         messagingServiceSid: twilioSettings.messagingServiceSid.trim(),
         enabledTemplateSlugs: twilioSettings.enabledTemplateSlugs,
       });
       await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
       setTwilioSettings((current) => ({ ...current, authToken: "" }));
-      toast.success(twilioConnection ? "Twilio settings saved." : "Twilio SMS connected.");
+      setTwilioTemplatesDirty(false);
+      toast.success(twilioConnectionIsActive ? "Twilio settings saved." : "Twilio SMS connected.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save Twilio SMS settings.");
     } finally {
@@ -2222,6 +2375,7 @@ export default function SettingsPage() {
       await api.integration.disconnectTwilio();
       await Promise.all([refetchIntegrationStatus(), refetchIntegrationFailures()]);
       setTwilioSettings(DEFAULT_TWILIO_SMS_SETTINGS);
+      setTwilioTemplatesDirty(false);
       toast.success("Twilio SMS disconnected.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not disconnect Twilio SMS.");
@@ -2500,6 +2654,14 @@ export default function SettingsPage() {
         bookingAvailableDays: formData.bookingAvailableDays,
         bookingAvailableStartTime: formData.bookingAvailableStartTime || null,
         bookingAvailableEndTime: formData.bookingAvailableEndTime || null,
+        bookingDailyHours: formData.bookingDailyHours.map((entry) => ({
+          dayIndex: entry.dayIndex,
+          enabled: entry.enabled,
+          openTime: entry.enabled ? entry.openTime : null,
+          closeTime: entry.enabled ? entry.closeTime : null,
+        })),
+        bookingBlackoutDates: parseBookingBlackoutDatesText(formData.bookingBlackoutDatesText),
+        bookingClosedOnUsHolidays: formData.bookingClosedOnUsHolidays,
       });
       toast.success("Settings saved successfully.");
     } catch (error: any) {
@@ -2537,6 +2699,90 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSettingsTabChange = (value: string) => {
+    if (!isSettingsTabId(value)) return;
+    setActiveTab(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value === "profile") {
+      nextParams.delete("tab");
+    } else {
+      nextParams.set("tab", value);
+    }
+    setSearchParams(nextParams, { replace: true, preventScrollReset: true });
+  };
+
+  const activeLocationCount = (locations as LocationRecord[] | undefined)?.filter((location) => location.active !== false).length ?? 0;
+  const activeTeamCount = (teamMembers as StaffRecord[] | undefined)?.filter((member) => member.active !== false).length ?? 0;
+  const connectedIntegrationCount =
+    integrationStatus?.connections.filter((connection) => connection.status === "connected").length ?? 0;
+  const enabledAutomationCount = [
+    automationSettings.leadCaptureEnabled,
+    automationSettings.leadAutoResponseEnabled,
+    automationSettings.missedCallTextBackEnabled,
+    automationSettings.uncontactedLeadsEnabled,
+    automationSettings.appointmentRemindersEnabled,
+    automationSettings.abandonedQuotesEnabled,
+    automationSettings.reviewRequestsEnabled,
+    automationSettings.lapsedClientsEnabled,
+  ].filter(Boolean).length;
+  const settingsNavItems = [
+    {
+      value: "profile",
+      label: "Business",
+      helper: business?.name || "Shop details",
+      meta: formData.timezone || "Timezone",
+      icon: Building2,
+    },
+    {
+      value: "billing",
+      label: nativeShellSession ? "Workspace" : "Billing",
+      helper: nativeShellSession ? "Access status" : "Plan and payments",
+      meta: billingStatus ? getBillingAccessLabel(billingStatus.accessState) : "Loading",
+      icon: CreditCard,
+    },
+    {
+      value: "locations",
+      label: "Locations",
+      helper: "Shop footprint",
+      meta: `${activeLocationCount} active`,
+      icon: MapPin,
+    },
+    {
+      value: "team",
+      label: "Team",
+      helper: "Roles and access",
+      meta: `${activeTeamCount} people`,
+      icon: Users,
+    },
+    {
+      value: "integrations",
+      label: "Integrations",
+      helper: integrationsBlockedByBilling ? "Access required" : "Connected tools",
+      meta: integrationsBlockedByBilling ? "Blocked" : `${connectedIntegrationCount} connected`,
+      icon: Cable,
+    },
+    {
+      value: "automations",
+      label: "Automations",
+      helper: "Follow-up engine",
+      meta: `${enabledAutomationCount} enabled`,
+      icon: BellRing,
+    },
+    {
+      value: "account",
+      label: "Account",
+      helper: "Login and deletion",
+      meta: membershipRole ?? "Member",
+      icon: UserCircle,
+    },
+  ] satisfies Array<{
+    value: SettingsTabId;
+    label: string;
+    helper: string;
+    meta: string;
+    icon: typeof Building2;
+  }>;
+
   if (businessFetching) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -2547,58 +2793,84 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="page-content page-section max-w-5xl pb-28 sm:pb-8">
-        <PageHeader
-          title="Settings"
-          subtitle="Set up your shop, team, billing, and diagnostics without digging through separate tools."
-          badge={
-            business?.name ? (
-              <Badge variant="outline" className="hidden sm:inline-flex">
-                {business.name}
-              </Badge>
-            ) : undefined
-          }
-        />
+      <div className="page-content page-section max-w-7xl pb-28 sm:pb-8">
+        <div className="mb-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Workspace</p>
+            <p className="mt-1 truncate text-sm font-semibold">{business?.name || "Business settings"}</p>
+          </div>
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access</p>
+            <p className="mt-1 truncate text-sm font-semibold capitalize">{membershipRole ?? "member"}</p>
+          </div>
+          <div className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {nativeShellSession ? "Status" : "Billing"}
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold">
+              {billingStatus ? getBillingAccessLabel(billingStatus.accessState) : "Checking workspace"}
+            </p>
+          </div>
+        </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="flex h-auto w-full gap-2 overflow-x-auto bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-6 sm:overflow-visible">
-            <TabsTrigger
-              value="profile"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Business Profile
-            </TabsTrigger>
-            <TabsTrigger
-              value="billing"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Billing
-            </TabsTrigger>
-            <TabsTrigger
-              value="locations"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Locations
-            </TabsTrigger>
-            <TabsTrigger
-              value="team"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Team
-            </TabsTrigger>
-            <TabsTrigger
-              value="integrations"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Integrations
-            </TabsTrigger>
-            <TabsTrigger
-              value="automations"
-              className="min-w-[152px] justify-start rounded-lg border border-border bg-background px-4 py-3 text-left data-[state=active]:border-primary data-[state=active]:bg-primary/5 sm:min-w-0"
-            >
-              Automations
-            </TabsTrigger>
+        <Tabs
+          value={activeTab}
+          onValueChange={handleSettingsTabChange}
+          className="space-y-5 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0"
+        >
+          <TabsList className="sticky top-4 z-20 flex h-auto w-full gap-2 overflow-x-auto rounded-2xl border bg-background/95 p-2 shadow-sm backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-col lg:overflow-visible">
+            {settingsNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="group min-w-[158px] justify-start rounded-xl border border-transparent bg-transparent p-0 text-left data-[state=active]:border-primary/25 data-[state=active]:bg-primary/10 data-[state=active]:shadow-sm lg:w-full lg:min-w-0"
+                >
+                  <span className="flex w-full items-center gap-3 px-3 py-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-foreground">{item.label}</span>
+                      <span className="block truncate text-xs font-normal text-muted-foreground">{item.helper}</span>
+                    </span>
+                    <span className="hidden shrink-0 rounded-full border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground xl:inline-flex">
+                      {item.meta}
+                    </span>
+                  </span>
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
+
+          <div className="min-w-0 space-y-6">
+
+          <TabsContent value="account" className="space-y-6">
+            <Card className="border-destructive/20 bg-destructive/[0.03]">
+              <CardHeader>
+                <CardTitle>Account &amp; deletion</CardTitle>
+                <CardDescription>
+                  Manage your personal login methods, privacy details, and permanent account deletion from one clear place.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+                  Deleting your account permanently removes sign-in access, linked Apple or Google identities, notifications,
+                  and workspace memberships. If legally required billing or tax history must remain, Strata keeps only the
+                  minimum retained records in anonymized form.
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button asChild>
+                    <Link to="/profile">Open account settings</Link>
+                  </Button>
+                  <Button asChild variant="destructive">
+                    <Link to="/profile#delete-account">Delete account</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="profile" className="space-y-6">
             <Card>
@@ -2846,65 +3118,98 @@ export default function SettingsPage() {
                     </p>
                   </div>
 
-                  <div className="mt-4 space-y-4">
-                    <div className="space-y-1.5">
-                      <Label>Operating days</Label>
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                        {BOOKING_DAY_OPTIONS.map((day) => {
-                          const checked = formData.bookingAvailableDays.includes(day.value);
-                          return (
-                            <label
-                              key={day.value}
-                              className={cn(
-                                "flex cursor-pointer items-center justify-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
-                                checked
-                                  ? "border-primary/35 bg-primary/10 text-primary"
-                                  : "border-slate-200 bg-white text-slate-600"
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                className="sr-only"
-                                checked={checked}
-                                onChange={() =>
-                                  handleFieldChange(
-                                    "bookingAvailableDays",
-                                    checked
-                                      ? formData.bookingAvailableDays.filter((value) => value !== day.value)
-                                      : [...formData.bookingAvailableDays, day.value].sort()
-                                  )
-                                }
-                              />
-                              {day.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
+	                  <div className="mt-4 space-y-4">
+	                    <div className="space-y-2">
+	                      <Label>Weekly booking hours</Label>
+	                      <div className="grid gap-2">
+	                        {BOOKING_DAY_OPTIONS.map((day) => {
+	                          const entry =
+	                            formData.bookingDailyHours.find((item) => item.dayIndex === day.value) ??
+	                            {
+	                              dayIndex: day.value,
+	                              enabled: false,
+	                              openTime: formData.bookingAvailableStartTime,
+	                              closeTime: formData.bookingAvailableEndTime,
+	                            };
+	                          return (
+	                            <div
+	                              key={day.value}
+	                              className={cn(
+	                                "grid gap-3 rounded-2xl border bg-background/85 p-3 sm:grid-cols-[7rem_1fr_1fr] sm:items-center",
+	                                entry.enabled ? "border-primary/25" : "border-border/70 opacity-75"
+	                              )}
+	                            >
+	                              <label className="flex min-h-10 items-center justify-between gap-3 sm:justify-start">
+	                                <span className="text-sm font-semibold">{day.label}</span>
+	                                <Switch
+	                                  checked={entry.enabled}
+	                                  onCheckedChange={(enabled) => handleBookingDayToggle(day.value, enabled)}
+	                                />
+	                              </label>
+	                              <div className="space-y-1">
+	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-open-${day.value}`}>
+	                                  Opens
+	                                </Label>
+	                                <Input
+	                                  id={`booking-open-${day.value}`}
+	                                  type="time"
+	                                  className={mobileTimeInputClassName}
+	                                  value={entry.openTime}
+	                                  disabled={!entry.enabled}
+	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "openTime", e.target.value)}
+	                                />
+	                              </div>
+	                              <div className="space-y-1">
+	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-close-${day.value}`}>
+	                                  Closes
+	                                </Label>
+	                                <Input
+	                                  id={`booking-close-${day.value}`}
+	                                  type="time"
+	                                  className={mobileTimeInputClassName}
+	                                  value={entry.closeTime}
+	                                  disabled={!entry.enabled}
+	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "closeTime", e.target.value)}
+	                                />
+	                              </div>
+	                            </div>
+	                          );
+	                        })}
+	                      </div>
+	                      <p className="text-xs leading-5 text-muted-foreground">
+	                        Use different hours for each day. Closed days never show bookable time slots.
+	                      </p>
+	                    </div>
 
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="bookingAvailableStartTime">Public booking start time</Label>
-                        <Input
-                          id="bookingAvailableStartTime"
-                          type="time"
-                          className={mobileTimeInputClassName}
-                          value={formData.bookingAvailableStartTime}
-                          onChange={(e) => handleFieldChange("bookingAvailableStartTime", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="bookingAvailableEndTime">Public booking end time</Label>
-                        <Input
-                          id="bookingAvailableEndTime"
-                          type="time"
-                          className={mobileTimeInputClassName}
-                          value={formData.bookingAvailableEndTime}
-                          onChange={(e) => handleFieldChange("bookingAvailableEndTime", e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
+		                    <div className="space-y-3 rounded-2xl border bg-background/85 p-3">
+		                      <div className="flex min-h-11 items-center justify-between gap-3">
+		                        <div className="min-w-0">
+		                          <p className="text-sm font-semibold">Close on U.S. holidays</p>
+		                          <p className="text-xs leading-5 text-muted-foreground">
+		                            Automatically blocks major federal and observed holidays every year.
+		                          </p>
+		                        </div>
+		                        <Switch
+		                          checked={formData.bookingClosedOnUsHolidays}
+		                          onCheckedChange={(value) => handleFieldChange("bookingClosedOnUsHolidays", value)}
+		                        />
+		                      </div>
+		                    </div>
+
+		                    <div className="space-y-1.5">
+		                      <Label htmlFor="bookingBlackoutDatesText">Additional closed dates</Label>
+		                      <textarea
+		                        id="bookingBlackoutDatesText"
+		                        className="min-h-24 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40"
+		                        value={formData.bookingBlackoutDatesText}
+		                        onChange={(e) => handleFieldChange("bookingBlackoutDatesText", e.target.value)}
+		                        placeholder={"2026-12-24\n2026-12-31"}
+		                      />
+		                      <p className="text-xs leading-5 text-muted-foreground">
+		                        Add shop-specific closures as YYYY-MM-DD, one per line. These dates are blocked from requests and instant booking.
+		                      </p>
+		                    </div>
+	                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -3356,21 +3661,25 @@ export default function SettingsPage() {
                     <div className="rounded-md bg-amber-500/10 p-2">
                       <CreditCard className="h-5 w-5 text-amber-700" />
                     </div>
-                    <CardTitle>Billing access required</CardTitle>
+                  <CardTitle>{nativeShellSession ? "Workspace access required" : "Billing access required"}</CardTitle>
                   </div>
                   <CardDescription>
-                    Integrations stay read-protected until billing is active again. Open Billing to restore full workspace access.
+                    {nativeShellSession
+                      ? "Integrations stay read-protected until workspace access is healthy again."
+                      : "Integrations stay read-protected until billing is active again. Open Billing to restore full workspace access."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-3 sm:flex-row">
                   <Button asChild>
-                    <Link to="/settings?tab=billing">Open billing</Link>
+                    <Link to="/settings?tab=billing">{nativeShellSession ? "Open workspace status" : "Open billing"}</Link>
                   </Button>
-                  <Button asChild variant="outline">
-                    <Link to="/subscribe">
-                      {billingStatus?.accessState === "canceled" ? "Reactivate subscription" : "Open recovery"}
-                    </Link>
-                  </Button>
+                  {nativeShellSession ? null : (
+                    <Button asChild variant="outline">
+                      <Link to="/subscribe">
+                        {billingStatus?.accessState === "canceled" ? "Reactivate subscription" : "Open recovery"}
+                      </Link>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : null}
@@ -3629,7 +3938,7 @@ export default function SettingsPage() {
                           <p className="text-sm font-medium">Google Calendar</p>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          One-way appointment sync into your selected Google Calendar. Strata stays the source of truth.
+                          One-way appointment sync into a Strata-created Google Calendar. Strata stays the source of truth.
                         </p>
                       </div>
                       <Badge
@@ -3666,9 +3975,9 @@ export default function SettingsPage() {
                             <SelectValue
                               placeholder={
                                 googleCalendarCalendarsLoading
-                                  ? "Loading calendars..."
+                                  ? "Loading Strata calendar..."
                                   : googleCalendarConnection
-                                    ? "Select a Google Calendar"
+                                    ? "Strata calendar"
                                     : "Connect Google Calendar first"
                               }
                             />
@@ -3683,11 +3992,11 @@ export default function SettingsPage() {
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">
-                          Only writable calendars from your Google account are listed here.
+                          Strata creates and manages its own calendar so it does not need access to your existing Google calendars.
                         </p>
                       </div>
                       <div className="space-y-2 text-xs text-muted-foreground">
-                        <p>Control scope: Your user account only.</p>
+                        <p>Control scope: Strata-created calendar only.</p>
                         <p>
                           Selected calendar:{" "}
                           {googleCalendarConnection?.configSummary.selectedCalendarSummary ?? "Not selected"}
@@ -3796,13 +4105,16 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       <div className="space-y-1.5">
-                        <Label>{twilioConnection ? "Rotate Auth Token" : "Twilio Auth Token"}</Label>
+                        <Label>{twilioCanReuseStoredToken ? "Rotate Auth Token" : "Twilio Auth Token"}</Label>
                         <Input
-                          type="password"
+                          type="text"
                           value={twilioSettings.authToken}
                           onChange={(e) => setTwilioSettings((current) => ({ ...current, authToken: e.target.value }))}
-                          placeholder={twilioConnection ? "Leave blank to keep the stored token" : "Your Twilio auth token"}
+                          placeholder={twilioCanReuseStoredToken ? "Leave blank to keep the stored token" : "Paste your Twilio auth token"}
                           disabled={!canManageBusinessIntegrations}
+                          autoComplete="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
                         />
                         <p className="text-xs text-muted-foreground">
                           Stored encrypted in Strata. Status callbacks are validated against this token before delivery updates are accepted.
@@ -3875,7 +4187,7 @@ export default function SettingsPage() {
                       <Button
                         variant="outline"
                         onClick={handleDisconnectTwilio}
-                        disabled={!canManageBusinessIntegrations || !twilioConnection || twilioDisconnecting}
+                        disabled={!canManageBusinessIntegrations || !twilioConnectionIsActive || twilioDisconnecting}
                         className="w-full sm:w-auto"
                       >
                         {twilioDisconnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -3900,7 +4212,7 @@ export default function SettingsPage() {
                       </Badge>
                     </div>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                      <Button variant="outline" className="w-full sm:w-auto" onClick={() => setActiveTab("billing")}>
+                      <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleSettingsTabChange("billing")}>
                         Open billing controls
                       </Button>
                       {billingStatus?.stripeConnectAccountId ? (
@@ -5001,6 +5313,7 @@ export default function SettingsPage() {
               membershipRole={membershipRole}
             />
           </TabsContent>
+          </div>
         </Tabs>
       </div>
 
