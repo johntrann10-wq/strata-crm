@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatServiceCategory } from "../lib/serviceCatalog";
+import { isPackageTemplateService } from "../lib/servicePackages";
 import { QuarterHourDurationGrid } from "../components/appointments/SchedulingControls";
 import { getBusinessTypeWorkspaceDefaults } from "../lib/businessTypeWorkspaceDefaults";
 import type { BookingDailyHoursEntry } from "../lib/businessSettingsForm";
@@ -1555,7 +1556,7 @@ export default function ServicesPage() {
   const packageSummaries = useMemo(
     () =>
       services
-        .filter((service) => !service.isAddon)
+        .filter((service) => !service.isAddon && isPackageTemplateService(service))
         .map((service) => {
           const linkedAddons = addonLinks
             .filter((link) => link.parentServiceId === service.id)
@@ -2034,7 +2035,7 @@ export default function ServicesPage() {
         {packageTemplatesOpen ? (
         <CardContent className="p-4 sm:p-5">
           {packageSummaries.length === 0 ? (
-            <EmptyState icon={Package} title="No package templates yet" description="Link add-ons on a service to turn it into a reusable package." />
+            <EmptyState icon={Package} title="No package templates yet" description="Create or categorize a service as a package or bundle, then link add-ons to make it reusable here." />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {packageSummaries.map((summary) => (
