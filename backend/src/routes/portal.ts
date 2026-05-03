@@ -5,6 +5,7 @@ import { db } from "../db/index.js";
 import {
   appointmentServices,
   appointments,
+  activityLogs,
   businesses,
   clients,
   invoices,
@@ -439,6 +440,24 @@ portalRouter.post(
       currentServiceRows.find((row) => row.serviceId === link.parentServiceId)?.serviceName ?? "Booked service";
     const clientName =
       [appointment.clientFirstName, appointment.clientLastName].filter(Boolean).join(" ").trim() || "Customer";
+
+    const [existingRequest] = await db
+      .select({ id: activityLogs.id })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.businessId, access.businessId),
+          eq(activityLogs.entityType, "appointment"),
+          eq(activityLogs.entityId, appointment.id),
+          eq(activityLogs.action, "appointment.public_addon_requested"),
+          sql`coalesce(${activityLogs.metadata}::json->>'addonServiceId', '') = ${addon.id}`
+        )
+      )
+      .limit(1);
+    if (existingRequest) {
+      res.status(200).json({ ok: true, message: "Add-on request already sent." });
+      return;
+    }
 
     await createActivityLog({
       businessId: access.businessId,

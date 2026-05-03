@@ -3364,20 +3364,28 @@ export function buildActionQueue(params: {
   }
 
   if (params.context.permissions.todaySchedule) {
+    const seenAddonRequestKeys = new Set<string>();
     for (const row of params.customerAddonRequestRows) {
       if (!row.appointmentId) continue;
       let addonName = "Requested add-on";
       let addonPrice: number | null = null;
+      let addonServiceId = "";
       try {
         const metadata = row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {};
         if (typeof metadata.addonName === "string" && metadata.addonName.trim()) {
           addonName = metadata.addonName.trim();
+        }
+        if (typeof metadata.addonServiceId === "string" && metadata.addonServiceId.trim()) {
+          addonServiceId = metadata.addonServiceId.trim();
         }
         const parsedPrice = Number(metadata.addonPrice);
         addonPrice = Number.isFinite(parsedPrice) ? parsedPrice : null;
       } catch {
         addonName = "Requested add-on";
       }
+      const requestKey = `${row.appointmentId}:${addonServiceId || row.id}`;
+      if (seenAddonRequestKeys.has(requestKey)) continue;
+      seenAddonRequestKeys.add(requestKey);
       items.push({
         id: `addon-request:${row.id}`,
         type: "customer_addon_request",

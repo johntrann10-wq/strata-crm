@@ -201,6 +201,7 @@ type CustomerAddonRequest = {
 function parseCustomerAddonRequests(
   records: Array<{ id?: string | null; type?: string | null; action?: string | null; metadata?: string | null; createdAt?: string | Date | null }>
 ): CustomerAddonRequest[] {
+  const seenAddonServiceIds = new Set<string>();
   return records
     .filter((record) => (record.type ?? record.action) === "appointment.public_addon_requested")
     .map((record) => {
@@ -230,7 +231,11 @@ function parseCustomerAddonRequests(
         return null;
       }
     })
-    .filter((request): request is CustomerAddonRequest => Boolean(request?.addonServiceId));
+    .filter((request): request is CustomerAddonRequest => {
+      if (!request?.addonServiceId || seenAddonServiceIds.has(request.addonServiceId)) return false;
+      seenAddonServiceIds.add(request.addonServiceId);
+      return true;
+    });
 }
 
 function safeDate(value: string | Date | null | undefined): Date | null {
