@@ -29,4 +29,14 @@ describe("builtin email templates", () => {
     expect(getBuiltinTemplate("quote_sent")?.bodyHtml).not.toContain("{{portalUrl}}");
     expect(getBuiltinTemplate("quote_follow_up")?.bodyHtml).not.toContain("{{portalUrl}}");
   });
+
+  it("uses email-safe logo placement in customer-facing shells", () => {
+    const html = getBuiltinTemplate("appointment_confirmation")?.bodyHtml ?? "";
+    expect(html).toContain('role="presentation"');
+    expect(html).toContain("{{businessLogoImageWidthAttr}}");
+    expect(html).toContain("{{businessLogoImageHeightAttr}}");
+    expect(html).not.toContain("display:flex");
+    expect(html).not.toContain("calc(");
+    expect(html).not.toContain("position:absolute");
+  });
 });
