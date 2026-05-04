@@ -1545,7 +1545,7 @@ export default function CalendarPage() {
             <p className="mt-1 text-base font-semibold text-foreground">{selectedDayAgendaItems.length}</p>
           </div>
           <div className="rounded-[1rem] border border-white/80 bg-white/86 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Revenue</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Booked</p>
             <p className="mt-1 text-base font-semibold text-foreground">{formatCurrency(selectedDayRevenue)}</p>
           </div>
           <div className="rounded-[1rem] border border-white/80 bg-white/86 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)]">
@@ -1637,7 +1637,7 @@ export default function CalendarPage() {
           {isMobileLayout ? (
             <div className="flex flex-wrap gap-1.5 text-xs">
               <span className="rounded-full border border-border/70 bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                {formatCurrency(selectedDayRevenue)}
+                {formatCurrency(selectedDayRevenue)} booked
               </span>
               <span className="rounded-full border border-border/70 bg-background px-2 py-1 text-[11px] font-medium text-muted-foreground">
                 {selectedDayAgendaItems.length} jobs
@@ -2154,7 +2154,7 @@ export default function CalendarPage() {
                 </div>
               </div>
               <div className={cn("flex shrink-0 justify-start", isMobileLayout && "hidden")}>
-                <InlineMetricPill label="Month revenue" value={formatCurrency(selectedMonthRevenue)} />
+                <InlineMetricPill label="Month booked" value={formatCurrency(selectedMonthRevenue)} />
               </div>
             </div>
 
