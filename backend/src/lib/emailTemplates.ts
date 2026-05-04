@@ -44,22 +44,26 @@ function renderClientShell(options: {
     <div style="background:linear-gradient(180deg,#ffffff,rgba(255,255,255,0.98));border:1px solid rgba(148,163,184,0.22);border-radius:22px;overflow:hidden;box-shadow:0 24px 60px rgba(15,23,42,0.10);">
       <div style="height:6px;background:linear-gradient(90deg,#f97316,#fb923c 40%,#0f172a);"></div>
       <div style="padding:28px;">
-        <div style="display:flex;align-items:center;gap:14px;">
-          <div style="display:{{businessLogoDisplay}};">
-            <div style="position:relative;width:{{businessLogoFrameWidth}};height:{{businessLogoFrameHeight}};border-radius:{{businessLogoFrameRadius}};overflow:hidden;background:{{businessLogoBackground}};border:1px solid {{businessLogoBorder}};box-shadow:{{businessLogoShadow}};">
-              <img
-                src="{{businessLogoUrl}}"
-                alt="{{businessName}} logo"
-                width="100%"
-                height="100%"
-                style="position:absolute;left:{{businessLogoPadding}};top:{{businessLogoPadding}};width:calc(100% - ({{businessLogoPadding}} * 2));height:calc(100% - ({{businessLogoPadding}} * 2));object-fit:{{businessLogoObjectFit}};filter:{{businessLogoFilter}};transform:{{businessLogoTransform}};transform-origin:center center;display:block;"
-              />
-            </div>
-          </div>
-          <div style="min-width:0;">
-            <div style="font-size:18px;font-weight:700;color:#0f172a;">${options.businessName}</div>
-          </div>
-        </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="display:{{businessLogoDisplay}};width:{{businessLogoFrameWidth}};padding:0 14px 0 0;vertical-align:middle;">
+              <div style="width:{{businessLogoFrameWidth}};height:{{businessLogoFrameHeight}};border-radius:{{businessLogoFrameRadius}};overflow:hidden;background:{{businessLogoBackground}};border:1px solid {{businessLogoBorder}};box-shadow:{{businessLogoShadow}};text-align:center;line-height:0;">
+                <div style="padding:{{businessLogoPadding}};line-height:0;">
+                  <img
+                    src="{{businessLogoUrl}}"
+                    alt="{{businessName}} logo"
+                    width="{{businessLogoImageWidthAttr}}"
+                    height="{{businessLogoImageHeightAttr}}"
+                    style="display:block;width:{{businessLogoImageWidth}};height:{{businessLogoImageHeight}};max-width:{{businessLogoImageWidth}};max-height:{{businessLogoImageHeight}};object-fit:{{businessLogoObjectFit}};filter:{{businessLogoFilter}};transform:{{businessLogoTransform}};transform-origin:center center;border:0;outline:none;text-decoration:none;margin:0 auto;"
+                  />
+                </div>
+              </div>
+            </td>
+            <td style="vertical-align:middle;">
+              <div style="font-size:18px;line-height:1.25;font-weight:700;color:#0f172a;">${options.businessName}</div>
+            </td>
+          </tr>
+        </table>
         <div style="margin-top:12px;display:inline-flex;border-radius:999px;padding:6px 10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">${options.eyebrow}</div>
         <h1 style="font-size:28px;line-height:1.08;letter-spacing:-0.03em;margin:16px 0 12px;color:#0f172a;">${options.title}</h1>
         <div style="color:#334155;font-size:15px;line-height:1.65;">${options.introHtml}</div>
