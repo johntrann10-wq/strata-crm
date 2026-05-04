@@ -27,6 +27,15 @@ type MakeSeed = {
 
 const SOURCE = "strata_catalog";
 
+function model(name: string, bodyStyle: string, engine: string, trims = ["Base", "Premium", "Limited"]): ModelSeed {
+  return {
+    name,
+    bodyStyle,
+    engine,
+    trims: trims.map((trim) => ({ name: trim, bodyStyle, engine })),
+  };
+}
+
 const MAKES: MakeSeed[] = [
   {
     name: "Toyota",
@@ -210,6 +219,203 @@ const MAKES: MakeSeed[] = [
       { name: "Macan", bodyStyle: "SUV", engine: "2.0L Turbo I4", trims: [{ name: "Base", bodyStyle: "SUV", engine: "2.0L Turbo I4" }, { name: "GTS", bodyStyle: "SUV", engine: "2.9L Twin Turbo V6" }] },
       { name: "Panamera", bodyStyle: "Sedan", engine: "2.9L Twin Turbo V6", trims: [{ name: "Base", bodyStyle: "Sedan", engine: "2.9L Twin Turbo V6" }, { name: "Turbo E-Hybrid", bodyStyle: "Sedan", engine: "4.0L Twin Turbo V8 Hybrid" }] },
       { name: "Taycan", bodyStyle: "Sedan", engine: "Dual Motor Electric", trims: [{ name: "4S", bodyStyle: "Sedan", engine: "Dual Motor Electric" }, { name: "Turbo", bodyStyle: "Sedan", engine: "Dual Motor Electric" }] },
+    ],
+  },
+  {
+    name: "Lexus",
+    models: [
+      model("IS", "Sedan", "2.0L Turbo I4", ["300", "350 F Sport", "500 F Sport Performance"]),
+      model("ES", "Sedan", "2.5L I4", ["250", "350", "300h"]),
+      model("LS", "Sedan", "3.4L Twin Turbo V6", ["500", "500 F Sport", "500h"]),
+      model("UX", "SUV", "2.0L Hybrid", ["250h", "Premium", "F Sport"]),
+      model("NX", "SUV", "2.5L I4", ["250", "350", "350h", "450h+"]),
+      model("RX", "SUV", "2.4L Turbo I4", ["350", "350h", "500h F Sport Performance"]),
+      model("GX", "SUV", "3.4L Twin Turbo V6", ["Premium", "Overtrail", "Luxury"]),
+      model("TX", "SUV", "2.4L Turbo I4", ["350", "500h", "550h+"]),
+      model("LX", "SUV", "3.4L Twin Turbo V6", ["600", "F Sport", "Ultra Luxury"]),
+      model("RC", "Coupe", "2.0L Turbo I4", ["300", "350 F Sport", "F"]),
+      model("LC", "Coupe", "5.0L V8", ["500", "500 Convertible", "500h"]),
+    ],
+  },
+  {
+    name: "Acura",
+    models: [
+      model("Integra", "Hatchback", "1.5L Turbo I4", ["Base", "A-Spec", "Type S"]),
+      model("TLX", "Sedan", "2.0L Turbo I4", ["Technology", "A-Spec", "Type S"]),
+      model("RDX", "SUV", "2.0L Turbo I4", ["Technology", "A-Spec", "Advance"]),
+      model("MDX", "SUV", "3.5L V6", ["Technology", "A-Spec", "Type S"]),
+      model("ZDX", "SUV", "Dual Motor Electric", ["A-Spec", "Type S"]),
+      model("NSX", "Coupe", "3.5L Twin Turbo Hybrid V6", ["Base", "Type S"]),
+    ],
+  },
+  {
+    name: "Jeep",
+    models: [
+      model("Wrangler", "SUV", "3.6L V6", ["Sport", "Sahara", "Rubicon", "392"]),
+      model("Gladiator", "Truck", "3.6L V6", ["Sport", "Mojave", "Rubicon"]),
+      model("Compass", "SUV", "2.0L Turbo I4", ["Latitude", "Limited", "Trailhawk"]),
+      model("Cherokee", "SUV", "2.4L I4", ["Latitude", "Limited", "Trailhawk"]),
+      model("Grand Cherokee", "SUV", "3.6L V6", ["Laredo", "Limited", "Summit", "4xe"]),
+      model("Wagoneer", "SUV", "3.0L Twin Turbo I6", ["Series II", "Series III", "Carbide"]),
+      model("Grand Wagoneer", "SUV", "3.0L Twin Turbo I6", ["Series II", "Series III", "Obsidian"]),
+      model("Renegade", "SUV", "1.3L Turbo I4", ["Latitude", "Limited", "Trailhawk"]),
+    ],
+  },
+  {
+    name: "Ram",
+    models: [
+      model("1500", "Truck", "3.6L V6", ["Tradesman", "Big Horn", "Laramie", "Rebel", "Limited"]),
+      model("1500 TRX", "Truck", "6.2L Supercharged V8", ["Base", "Level 2"]),
+      model("2500", "Truck", "6.4L V8", ["Tradesman", "Big Horn", "Laramie", "Power Wagon"]),
+      model("3500", "Truck", "6.4L V8", ["Tradesman", "Big Horn", "Laramie", "Limited"]),
+      model("ProMaster", "Van", "3.6L V6", ["Cargo Van", "Window Van", "Chassis Cab"]),
+      model("ProMaster City", "Van", "2.4L I4", ["Tradesman", "Wagon"]),
+    ],
+  },
+  {
+    name: "GMC",
+    models: [
+      model("Canyon", "Truck", "2.7L Turbo I4", ["Elevation", "AT4", "Denali"]),
+      model("Sierra 1500", "Truck", "5.3L V8", ["SLE", "Elevation", "AT4", "Denali"]),
+      model("Sierra HD", "Truck", "6.6L V8", ["SLE", "AT4", "Denali"]),
+      model("Terrain", "SUV", "1.5L Turbo I4", ["SLE", "SLT", "Denali"]),
+      model("Acadia", "SUV", "2.5L Turbo I4", ["Elevation", "AT4", "Denali"]),
+      model("Yukon", "SUV", "5.3L V8", ["SLE", "AT4", "Denali"]),
+      model("Hummer EV Pickup", "Truck", "Tri Motor Electric", ["2X", "3X", "Edition 1"]),
+      model("Hummer EV SUV", "SUV", "Tri Motor Electric", ["2X", "3X", "Edition 1"]),
+    ],
+  },
+  {
+    name: "Dodge",
+    models: [
+      model("Charger", "Sedan", "3.6L V6", ["SXT", "R/T", "Scat Pack", "Hellcat"]),
+      model("Charger Daytona", "Coupe", "Dual Motor Electric", ["R/T", "Scat Pack"]),
+      model("Challenger", "Coupe", "3.6L V6", ["SXT", "R/T", "Scat Pack", "Hellcat"]),
+      model("Durango", "SUV", "3.6L V6", ["GT", "R/T", "SRT 392", "Hellcat"]),
+      model("Hornet", "SUV", "2.0L Turbo I4", ["GT", "R/T"]),
+      model("Journey", "SUV", "2.4L I4", ["SE", "SXT", "Crossroad"]),
+    ],
+  },
+  {
+    name: "Cadillac",
+    models: [
+      model("CT4", "Sedan", "2.0L Turbo I4", ["Luxury", "Sport", "V", "V Blackwing"]),
+      model("CT5", "Sedan", "2.0L Turbo I4", ["Luxury", "Sport", "V", "V Blackwing"]),
+      model("XT4", "SUV", "2.0L Turbo I4", ["Luxury", "Premium Luxury", "Sport"]),
+      model("XT5", "SUV", "2.0L Turbo I4", ["Luxury", "Premium Luxury", "Sport"]),
+      model("XT6", "SUV", "3.6L V6", ["Luxury", "Premium Luxury", "Sport"]),
+      model("Escalade", "SUV", "6.2L V8", ["Luxury", "Premium Luxury", "Sport", "V"]),
+      model("Lyriq", "SUV", "Dual Motor Electric", ["Tech", "Luxury", "Sport"]),
+      model("Optiq", "SUV", "Dual Motor Electric", ["Luxury", "Sport"]),
+    ],
+  },
+  {
+    name: "Buick",
+    models: [
+      model("Encore", "SUV", "1.4L Turbo I4", ["Preferred", "Sport Touring"]),
+      model("Encore GX", "SUV", "1.3L Turbo I3", ["Preferred", "Sport Touring", "Avenir"]),
+      model("Envista", "SUV", "1.2L Turbo I3", ["Preferred", "Sport Touring", "Avenir"]),
+      model("Envision", "SUV", "2.0L Turbo I4", ["Preferred", "Sport Touring", "Avenir"]),
+      model("Enclave", "SUV", "3.6L V6", ["Essence", "Premium", "Avenir"]),
+      model("Regal", "Sedan", "2.0L Turbo I4", ["Sportback", "GS", "TourX"]),
+    ],
+  },
+  {
+    name: "Lincoln",
+    models: [
+      model("Corsair", "SUV", "2.0L Turbo I4", ["Premiere", "Reserve", "Grand Touring"]),
+      model("Nautilus", "SUV", "2.0L Turbo I4", ["Premiere", "Reserve", "Black Label"]),
+      model("Aviator", "SUV", "3.0L Twin Turbo V6", ["Premiere", "Reserve", "Black Label"]),
+      model("Navigator", "SUV", "3.5L Twin Turbo V6", ["Premiere", "Reserve", "Black Label"]),
+      model("Continental", "Sedan", "3.7L V6", ["Premiere", "Reserve", "Black Label"]),
+      model("MKZ", "Sedan", "2.0L Turbo I4", ["Standard", "Reserve", "Hybrid"]),
+    ],
+  },
+  {
+    name: "Genesis",
+    models: [
+      model("G70", "Sedan", "2.5L Turbo I4", ["Base", "Sport Prestige", "3.3T"]),
+      model("G80", "Sedan", "2.5L Turbo I4", ["Base", "Sport Prestige", "Electrified"]),
+      model("G90", "Sedan", "3.5L Twin Turbo V6", ["Base", "E-Supercharger"]),
+      model("GV60", "SUV", "Dual Motor Electric", ["Advanced", "Performance"]),
+      model("GV70", "SUV", "2.5L Turbo I4", ["Base", "Sport Prestige", "Electrified"]),
+      model("GV80", "SUV", "2.5L Turbo I4", ["Base", "Advanced", "Prestige"]),
+      model("GV80 Coupe", "SUV", "3.5L Twin Turbo V6", ["Base", "E-Supercharger"]),
+    ],
+  },
+  {
+    name: "Infiniti",
+    models: [
+      model("Q50", "Sedan", "3.0L Twin Turbo V6", ["Luxe", "Sensory", "Red Sport 400"]),
+      model("Q60", "Coupe", "3.0L Twin Turbo V6", ["Pure", "Luxe", "Red Sport 400"]),
+      model("QX50", "SUV", "2.0L Turbo I4", ["Pure", "Luxe", "Sensory"]),
+      model("QX55", "SUV", "2.0L Turbo I4", ["Luxe", "Essential", "Sensory"]),
+      model("QX60", "SUV", "3.5L V6", ["Pure", "Luxe", "Autograph"]),
+      model("QX80", "SUV", "5.6L V8", ["Luxe", "Premium Select", "Sensory"]),
+    ],
+  },
+  {
+    name: "Volvo",
+    models: [
+      model("S60", "Sedan", "2.0L Turbo I4", ["Core", "Plus", "Ultimate"]),
+      model("S90", "Sedan", "2.0L Turbo I4 Hybrid", ["Plus", "Ultimate"]),
+      model("V60", "Wagon", "2.0L Turbo I4", ["Cross Country", "Polestar Engineered"]),
+      model("XC40", "SUV", "2.0L Turbo I4", ["Core", "Plus", "Ultimate"]),
+      model("XC60", "SUV", "2.0L Turbo I4", ["Core", "Plus", "Ultimate", "Recharge"]),
+      model("XC90", "SUV", "2.0L Turbo I4", ["Core", "Plus", "Ultimate", "Recharge"]),
+      model("EX30", "SUV", "Dual Motor Electric", ["Core", "Plus", "Ultra"]),
+      model("EX90", "SUV", "Dual Motor Electric", ["Plus", "Ultra"]),
+    ],
+  },
+  {
+    name: "Land Rover",
+    models: [
+      model("Range Rover", "SUV", "3.0L Turbo I6", ["SE", "Autobiography", "SV"]),
+      model("Range Rover Sport", "SUV", "3.0L Turbo I6", ["SE", "Dynamic SE", "Autobiography"]),
+      model("Range Rover Velar", "SUV", "2.0L Turbo I4", ["S", "Dynamic SE", "Dynamic HSE"]),
+      model("Range Rover Evoque", "SUV", "2.0L Turbo I4", ["S", "Dynamic SE", "Autobiography"]),
+      model("Defender 90", "SUV", "2.0L Turbo I4", ["S", "X-Dynamic", "V8"]),
+      model("Defender 110", "SUV", "2.0L Turbo I4", ["S", "X-Dynamic", "V8"]),
+      model("Discovery", "SUV", "2.0L Turbo I4", ["S", "Dynamic SE", "Metropolitan"]),
+      model("Discovery Sport", "SUV", "2.0L Turbo I4", ["S", "Dynamic SE"]),
+    ],
+  },
+  {
+    name: "MINI",
+    models: [
+      model("Cooper Hardtop 2 Door", "Hatchback", "1.5L Turbo I3", ["Classic", "Signature", "John Cooper Works"]),
+      model("Cooper Hardtop 4 Door", "Hatchback", "1.5L Turbo I3", ["Classic", "Signature", "Iconic"]),
+      model("Cooper Convertible", "Convertible", "1.5L Turbo I3", ["Classic", "Signature", "John Cooper Works"]),
+      model("Clubman", "Wagon", "2.0L Turbo I4", ["Cooper S", "All4", "John Cooper Works"]),
+      model("Countryman", "SUV", "2.0L Turbo I4", ["Cooper S", "All4", "John Cooper Works"]),
+      model("Cooper Electric", "Hatchback", "Electric", ["SE", "Iconic"]),
+    ],
+  },
+  {
+    name: "Mitsubishi",
+    models: [
+      model("Mirage", "Hatchback", "1.2L I3", ["ES", "LE", "SE"]),
+      model("Mirage G4", "Sedan", "1.2L I3", ["ES", "LE", "SE"]),
+      model("Outlander Sport", "SUV", "2.0L I4", ["S", "SE", "GT"]),
+      model("Eclipse Cross", "SUV", "1.5L Turbo I4", ["LE", "SE", "SEL"]),
+      model("Outlander", "SUV", "2.5L I4", ["ES", "SE", "SEL"]),
+      model("Outlander PHEV", "SUV", "2.4L Plug-In Hybrid", ["SE", "SEL", "Ralliart"]),
+      model("Lancer", "Sedan", "2.0L I4", ["ES", "GT", "Evolution"]),
+    ],
+  },
+  {
+    name: "Rivian",
+    models: [
+      model("R1T", "Truck", "Quad Motor Electric", ["Adventure", "Performance Dual-Motor", "Quad-Motor"]),
+      model("R1S", "SUV", "Quad Motor Electric", ["Adventure", "Performance Dual-Motor", "Quad-Motor"]),
+      model("EDV", "Van", "Electric", ["500", "700", "900"]),
+    ],
+  },
+  {
+    name: "Lucid",
+    models: [
+      model("Air", "Sedan", "Dual Motor Electric", ["Pure", "Touring", "Grand Touring", "Sapphire"]),
+      model("Gravity", "SUV", "Dual Motor Electric", ["Touring", "Grand Touring"]),
     ],
   },
 ];
