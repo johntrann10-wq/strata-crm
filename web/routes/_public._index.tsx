@@ -20,15 +20,15 @@ import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-const homeTitle = "Automotive Service CRM | Strata";
+const homeTitle = "Automotive Service CRM and Booking Software | Strata";
 const homeDescription =
-  "Strata is a scheduling-first CRM for automotive service businesses. Manage appointments, customers, vehicles, branded booking pages, quotes, invoices, deposits, and payments in one clean system.";
+  "Strata is a scheduling-first CRM for automotive service businesses. Manage appointments, customers, vehicles, branded booking pages, quotes, invoices, add-ons, deposits, and payments in one clean system.";
 
 const featureRail = [
   {
     id: "scheduling",
     title: "Scheduling that stays clear",
-    description: "Start from the month, drill into the day, and act with the full client and vehicle context.",
+    description: "Start from the month, drill into the day, and keep client, vehicle, and service context attached.",
     desktopImage: "/marketing/strata-ui/hero-desktop-calendar.png",
     desktopAlt: "Monthly calendar with active appointments and day inspector.",
     mobileImage: "/marketing/strata-ui/mobile-calendar.png",
@@ -37,7 +37,7 @@ const featureRail = [
   {
     id: "crm",
     title: "Client + vehicle CRM",
-    description: "Every customer, vehicle, and service history stays tied to quotes, appointments, and invoices.",
+    description: "Every customer, vehicle, appointment, quote, invoice, and approval stays connected.",
     desktopImage: "/marketing/strata-ui/desktop-customer-crm.png",
     desktopAlt: "Customer CRM list with vehicle context and activity.",
     mobileImage: "/marketing/strata-ui/mobile-client-detail.png",
@@ -46,7 +46,7 @@ const featureRail = [
   {
     id: "billing",
     title: "Quotes, invoices, and payments",
-    description: "Send client-ready estimates, collect deposits, and track balances without switching tools.",
+    description: "Send client-ready estimates, collect deposits, review add-ons, and track balances without switching tools.",
     desktopImage: "/marketing/strata-ui/desktop-invoice.png",
     desktopAlt: "Invoice workflow with line items, totals, and status.",
     mobileImage: "/marketing/strata-ui/mobile-portal-payment.png",
@@ -66,32 +66,32 @@ const featureRail = [
 type FeaturePreview = (typeof featureRail)[number];
 
 const trustStrip = [
-  { icon: Wrench, label: "Built for owner-operated shops" },
-  { icon: Smartphone, label: "Mobile-ready booking and customer pages" },
-  { icon: CreditCard, label: "Stripe-powered deposits and payments" },
-  { icon: ShieldCheck, label: "Customer portal + public approvals" },
+  { icon: Wrench, label: "Built for service operators" },
+  { icon: Smartphone, label: "iPhone-ready daily workflow" },
+  { icon: CreditCard, label: "Stripe-powered deposits" },
+  { icon: ShieldCheck, label: "Customer hub + approvals" },
   { icon: Users, label: "Role-based team access" },
 ];
 
 const platformCards = [
   {
     title: "Scheduling",
-    description: "Month-to-day calendar and appointment flow that stays clear.",
+    description: "Month, week, and day views built around fast appointment decisions.",
     icon: CalendarDays,
   },
   {
     title: "Client + Vehicle CRM",
-    description: "Every customer and vehicle stays tied to the work.",
+    description: "Keep customer, vehicle, service, and document history together.",
     icon: Users,
   },
   {
     title: "Quotes",
-    description: "Send estimates with public approval and revisions.",
+    description: "Send estimates with public approval, revisions, and clear status.",
     icon: FileText,
   },
   {
     title: "Invoices",
-    description: "Client-ready invoices with clear payment status.",
+    description: "Create client-ready invoices from the work already in Strata.",
     icon: Receipt,
   },
   {
@@ -101,7 +101,7 @@ const platformCards = [
   },
   {
     title: "Customer Portal",
-    description: "Clients view quotes, invoices, and appointments in one hub.",
+    description: "Clients view appointments, quotes, invoices, documents, and add-ons in one hub.",
     icon: ExternalLink,
   },
   {
@@ -111,7 +111,7 @@ const platformCards = [
   },
   {
     title: "Finance Dashboard",
-    description: "Track revenue, expenses, and collections health.",
+    description: "Review monthly revenue, expenses, collections, and average ticket trends.",
     icon: TrendingUp,
   },
   {
@@ -412,7 +412,7 @@ export default function LandingPage() {
   }, [activeFeatureId, isDesktop, prefersReducedMotion, queuedFeature, isTransitioning]);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff8f2_0%,#fffdfb_24%,#ffffff_100%)] text-gray-900">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#fff7ef_0%,#fffdfb_20%,#ffffff_54%,#f8fafc_100%)] text-gray-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchema) }} />
 
       <section className="relative overflow-hidden px-5 pb-12 pt-14 sm:px-6 sm:pb-16 sm:pt-18 lg:px-8 lg:pb-20 lg:pt-24">
@@ -427,18 +427,17 @@ export default function LandingPage() {
         <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.82fr)] lg:items-center">
           <div className="space-y-6">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">
-              Built for owner-operated automotive service businesses
+              CRM, booking, quotes, invoices, and payments
             </p>
             <div className="space-y-4">
               <h1 className="text-balance text-4xl font-extrabold tracking-tight text-gray-950 sm:text-5xl lg:text-6xl">
-                A cleaner CRM for automotive service businesses
+                Run your auto service business from schedule to payment.
               </h1>
               <p className="max-w-xl text-lg leading-8 text-gray-600 sm:text-xl">
-                Schedule work, track customers and vehicles, run branded online booking, send estimates and invoices, and collect deposits and payments in one modern system
-                built for the day-to-day shop flow.
+                Strata keeps appointments, customers, vehicles, booking requests, add-ons, estimates, invoices, and payments in one modern workspace built for daily shop flow.
               </p>
               <p className="text-sm font-medium text-gray-500">
-                Detailers, tint and wrap shops, mobile service operators, and small teams.
+                Built for detailers, tint and wrap shops, mobile service operators, and focused automotive teams.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -467,7 +466,7 @@ export default function LandingPage() {
                 <ExternalLink className="ml-2 h-4 w-4" />
               </a>
             </div>
-            <p className="text-sm font-medium text-gray-500">30-day free trial | No card required</p>
+            <p className="text-sm font-medium text-gray-500">30-day free trial | No card required | Now available on iPhone</p>
           </div>
 
           <div className="relative flex min-h-[26rem] items-center justify-center px-2 sm:min-h-[32rem] lg:min-h-[40rem] lg:justify-end lg:px-0">
@@ -484,10 +483,12 @@ export default function LandingPage() {
       </section>
 
       <section className="px-5 pb-12 sm:px-6 sm:pb-14 lg:px-8 lg:pb-16">
-        <div className="mx-auto grid max-w-6xl gap-3 rounded-[28px] border border-orange-100 bg-white/90 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)] sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-5">
+        <div className="mx-auto grid max-w-6xl gap-3 rounded-[28px] border border-orange-100 bg-white/92 p-4 shadow-[0_18px_44px_rgba(15,23,42,0.07)] sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-5">
           {trustStrip.map((item) => (
-            <div key={item.label} className="flex items-center gap-3 rounded-2xl border border-orange-100/70 bg-white px-3 py-3">
-              <item.icon className="h-4 w-4 text-orange-600" />
+            <div key={item.label} className="flex min-h-[58px] items-center gap-3 rounded-2xl border border-orange-100/80 bg-[linear-gradient(180deg,#ffffff,#fffaf6)] px-3 py-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+                <item.icon className="h-4 w-4" />
+              </span>
               <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-700">{item.label}</span>
             </div>
           ))}
@@ -499,10 +500,10 @@ export default function LandingPage() {
           <div className="mb-10 flex flex-col gap-4 text-center lg:mb-12">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Workflow preview</p>
             <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              See how Strata runs the day-to-day shop flow.
+              See the daily workflow without jumping between tools.
             </h2>
             <p className="mx-auto max-w-2xl text-base leading-7 text-gray-600">
-              Every view is built around scheduling clarity, branded customer touchpoints, and billing follow-through.
+              Every view is built around scheduling clarity, customer context, add-on approvals, and billing follow-through.
             </p>
           </div>
 
@@ -703,10 +704,10 @@ export default function LandingPage() {
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Booking page</p>
                 <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-                  Online booking that feels like your business, not a generic form.
+                  Online booking that feels like your shop, not a generic form.
                 </h2>
                 <p className="max-w-2xl text-base leading-7 text-gray-600">
-                  Let customers choose a service, add their vehicle, and either book instantly or request a real time from one clean, branded booking flow that works beautifully on mobile.
+                  Let customers choose a service, add their vehicle, request add-ons, and either book instantly or request a real time from one clean, branded flow that works beautifully on mobile.
                 </p>
               </div>
 
@@ -774,11 +775,11 @@ export default function LandingPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-700">
                       What your customer actually sees
                     </p>
-                    <h3 className="text-lg font-semibold tracking-tight text-gray-950">
+                  <h3 className="text-lg font-semibold tracking-tight text-gray-950">
                       A branded booking flow that can close instantly or hand off cleanly.
                     </h3>
                     <p className="text-sm leading-6 text-gray-600">
-                      Customers can browse services, expand details, and keep moving without falling into a vague contact form or a clunky scheduling handoff.
+                      Customers can browse services, expand details, add vehicle context, and keep moving without falling into a vague contact form or a clunky scheduling handoff.
                     </p>
                   </div>
                   <div className="relative mx-auto w-full max-w-[36rem] pb-14 sm:pb-16">
@@ -833,10 +834,10 @@ export default function LandingPage() {
           <div className="mb-10 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-700">Platform</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-              Everything a modern automotive service business needs, in one system.
+              The core operating system for modern automotive service work.
             </h2>
             <p className="mx-auto mt-3 max-w-2xl text-base leading-7 text-gray-600">
-              Keep scheduling, CRM, and billing connected without stacking separate tools.
+              Keep scheduling, customer records, service add-ons, documents, and billing connected without stacking separate tools.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -859,7 +860,7 @@ export default function LandingPage() {
               <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
                 Simple pricing with a 30-day free trial.
               </h2>
-              <p className="text-base leading-7 text-gray-600">No card required to start.</p>
+              <p className="text-base leading-7 text-gray-600">No card required to start. Set up the workspace, test the flow, and invite your team when you are ready.</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-stretch">
               <Link
@@ -885,10 +886,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-5xl rounded-[28px] border border-orange-100 bg-white/90 p-6 shadow-[0_16px_50px_rgba(15,23,42,0.06)] sm:p-8">
           <div className="mb-6 space-y-3">
             <h2 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
-              The product depth you need, without the overhead.
+              Product depth where it matters, without the overhead.
             </h2>
             <p className="text-sm leading-6 text-gray-600">
-              Strata focuses on the workflows that keep appointments, customer context, and billing moving without clutter.
+              Strata focuses on the workflows that keep appointments, customer context, add-ons, documents, and billing moving without clutter.
             </p>
           </div>
           <Accordion type="single" collapsible className="space-y-3">
