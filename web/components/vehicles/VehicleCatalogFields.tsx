@@ -290,33 +290,27 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
         {lookupError ? <p className="text-xs text-destructive">{lookupError}</p> : null}
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/25 px-4 py-3">
-        <div>
-          <p className="text-sm font-medium">Vehicle source</p>
-          <p className="text-xs text-muted-foreground">
-            Use the structured catalog first. Switch to manual entry only when the vehicle is unsupported.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            updateValue({
-              manualEntry: !value.manualEntry,
-              source: !value.manualEntry ? "manual" : value.source || "nhtsa_vpic",
-            })
-          }
-        >
-          <Wrench className="mr-2 h-4 w-4" />
-          {value.manualEntry ? "Use catalog" : "Manual fallback"}
-        </Button>
-      </div>
-
       {value.manualEntry ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="space-y-2">
-            <Label htmlFor="vehicle-year">Year</Label>
+            <div className="flex min-h-10 items-center justify-between gap-2">
+              <Label htmlFor="vehicle-year">Year</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 rounded-lg px-2 text-xs"
+                onClick={() =>
+                  updateValue({
+                    manualEntry: false,
+                    source: value.source || "nhtsa_vpic",
+                  })
+                }
+              >
+                <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                Use catalog
+              </Button>
+            </div>
             <Input
               id="vehicle-year"
               value={value.year}
@@ -362,7 +356,24 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="space-y-2">
-            <Label>Year</Label>
+            <div className="flex min-h-10 items-center justify-between gap-2">
+              <Label>Year</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 rounded-lg px-2 text-xs"
+                onClick={() =>
+                  updateValue({
+                    manualEntry: true,
+                    source: "manual",
+                  })
+                }
+              >
+                <Wrench className="mr-1.5 h-3.5 w-3.5" />
+                Manual
+              </Button>
+            </div>
             {useNativeMobileSelects ? (
               <select
                 className={mobileSelectClassName}
