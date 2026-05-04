@@ -132,6 +132,7 @@ type FinanceInvoiceSnapshot = {
   total: number | string | null;
   dueDate: Date | null;
   createdAt: Date;
+  issuedAt: Date;
   totalPaid: number | string | null;
   clientFirstName: string | null;
   clientLastName: string | null;
@@ -356,6 +357,24 @@ function toMoneyNumber(value: number | string | null | undefined): number {
   return Number.isFinite(normalized) ? normalized : 0;
 }
 
+function safeParseFinanceMetadata(metadata: string | null | undefined): Record<string, unknown> {
+  if (!metadata) return {};
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function getFinanceActivityPaidAt(metadata: string | null | undefined, fallback: Date) {
+  const rawPaidAt = safeParseFinanceMetadata(metadata).paidAt;
+  if (typeof rawPaidAt === "string") {
+    const parsed = new Date(rawPaidAt);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return fallback;
+}
+
 function getDisplayedStandaloneAppointmentAmount(row: {
   subtotal?: number | string | null;
   taxRate?: number | string | null;
@@ -498,15 +517,13 @@ async function getCollectedInvoiceRevenueTotal(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}), 0)` })
       .from(payments)
       .innerJoin(invoices, eq(payments.invoiceId, invoices.id))
-      .innerJoin(appointments, eq(invoices.appointmentId, appointments.id))
       .where(
         and(
           eq(invoices.businessId, bid),
           sql`${invoices.status} != 'void'`,
-          sql`${appointments.status} not in ('cancelled', 'no-show')`,
           isNull(payments.reversedAt),
-          sql`${appointments.startTime} <= ${end}`,
-          sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`
+          gte(payments.paidAt, start),
+          lte(payments.paidAt, end)
         )
       );
     return Number(row?.total ?? 0);
@@ -519,15 +536,13 @@ async function getCollectedInvoiceRevenueTotal(
     const [row] = await db
       .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
       .from(invoices)
-      .innerJoin(appointments, eq(invoices.appointmentId, appointments.id))
       .where(
         and(
           eq(invoices.businessId, bid),
           eq(invoices.status, "paid"),
           sql`${invoices.status} != 'void'`,
-          sql`${appointments.status} not in ('cancelled', 'no-show')`,
-          sql`${appointments.startTime} <= ${end}`,
-          sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`
+          gte(sql`coalesce(${invoices.paidAt}, ${invoices.updatedAt})`, start),
+          lte(sql`coalesce(${invoices.paidAt}, ${invoices.updatedAt})`, end)
         )
       );
     return Number(row?.total ?? 0);
@@ -539,26 +554,60 @@ async function getStandaloneAppointmentRevenueTotal(
   start: Date,
   end: Date
 ) {
-  const standaloneAppointments = await listStandaloneAppointmentsForFinance(
-    bid,
-    and(
-      sql`${appointments.startTime} <= ${end}`,
-      sql`coalesce(${appointments.endTime}, ${appointments.startTime}) >= ${start}`
-    )
-  );
-  const financeByAppointment = await getAppointmentFinanceSummaryMap(
-    bid,
-    standaloneAppointments.map((appointment) => ({
-      id: appointment.id,
-      totalPrice: getDisplayedStandaloneAppointmentAmount(appointment),
-      depositAmount: appointment.depositAmount,
-      paidAt: null,
-    }))
-  );
-  return standaloneAppointments.reduce((sum, appointment) => {
-    const collectedAmount = financeByAppointment.get(appointment.id)?.collectedAmount ?? 0;
-    return sum + collectedAmount;
+  const rows = await db
+    .select({
+      action: activityLogs.action,
+      metadata: activityLogs.metadata,
+      createdAt: activityLogs.createdAt,
+    })
+    .from(activityLogs)
+    .innerJoin(appointments, eq(activityLogs.entityId, appointments.id))
+    .where(
+      and(
+        eq(activityLogs.businessId, bid),
+        eq(activityLogs.entityType, "appointment"),
+        eq(appointments.businessId, bid),
+        sql`${appointments.status} not in ('cancelled', 'no-show')`,
+        sql`${activityLogs.action} in ('appointment.deposit_paid', 'appointment.deposit_payment_reversed')`,
+        sql`not exists (
+          select 1
+          from ${invoices}
+          where ${invoices.businessId} = ${bid}
+            and ${invoices.appointmentId} = ${appointments.id}
+            and ${invoices.status} != 'void'
+        )`
+      )
+    );
+
+  return rows.reduce((sum, row) => {
+    const paidAt = getFinanceActivityPaidAt(row.metadata, row.createdAt);
+    if (paidAt < start || paidAt > end) return sum;
+    const amount = toMoneyNumber(safeParseFinanceMetadata(row.metadata).amount as number | string | null | undefined);
+    if (amount <= 0) return sum;
+    return row.action === "appointment.deposit_payment_reversed" ? sum - amount : sum + amount;
   }, 0);
+}
+
+async function getIssuedInvoiceRevenueByAttributedAt(
+  bid: string,
+  start: Date,
+  end: Date
+) {
+  const attributedAt = sql<Date>`coalesce(${appointments.startTime}, ${invoices.createdAt})`;
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
+    .from(invoices)
+    .leftJoin(appointments, and(eq(invoices.appointmentId, appointments.id), eq(appointments.businessId, bid)))
+    .where(
+      and(
+        eq(invoices.businessId, bid),
+        sql`${invoices.status} != 'void'`,
+        sql`${invoices.status} != 'draft'`,
+        gte(attributedAt, start),
+        lte(attributedAt, end)
+      )
+    );
+  return Number(row?.total ?? 0);
 }
 
 async function getStandaloneAppointmentAwaitingCollectionTotal(bid: string) {
@@ -686,48 +735,12 @@ async function getInvoiceCollectedRevenueByPaidAt(
   }
 }
 
-async function getStandaloneAppointmentCollectedRevenueByUpdatedAt(
+async function getStandaloneAppointmentCollectedRevenueByPaidAt(
   bid: string,
   start: Date,
   end: Date
 ) {
-  const standaloneAppointments = await listStandaloneAppointmentsForFinance(
-    bid,
-    and(gte(appointments.updatedAt, start), lte(appointments.updatedAt, end))
-  );
-  const financeByAppointment = await getAppointmentFinanceSummaryMap(
-    bid,
-    standaloneAppointments.map((appointment) => ({
-      id: appointment.id,
-      totalPrice: getDisplayedStandaloneAppointmentAmount(appointment),
-      depositAmount: appointment.depositAmount,
-      paidAt: null,
-    }))
-  );
-  return standaloneAppointments.reduce((sum, appointment) => {
-    const collectedAmount = financeByAppointment.get(appointment.id)?.collectedAmount ?? 0;
-    return sum + collectedAmount;
-  }, 0);
-}
-
-async function getIssuedInvoiceRevenueByCreatedAt(
-  bid: string,
-  start: Date,
-  end: Date
-) {
-  const [row] = await db
-    .select({ total: sql<string>`coalesce(sum(${invoices.total}), 0)` })
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.businessId, bid),
-        sql`${invoices.status} != 'void'`,
-        sql`${invoices.status} != 'draft'`,
-        gte(invoices.createdAt, start),
-        lte(invoices.createdAt, end)
-      )
-    );
-  return Number(row?.total ?? 0);
+  return getStandaloneAppointmentRevenueTotal(bid, start, end);
 }
 
 async function getExpenseTotalForRange(bid: string, start: Date, end: Date) {
@@ -758,6 +771,7 @@ async function listFinanceInvoiceSnapshots(bid: string): Promise<FinanceInvoiceS
     .as("payment_totals_legacy");
 
   try {
+    const issuedAt = sql<Date>`coalesce(${appointments.startTime}, ${invoices.createdAt})`;
     return await db
       .select({
         id: invoices.id,
@@ -766,11 +780,13 @@ async function listFinanceInvoiceSnapshots(bid: string): Promise<FinanceInvoiceS
         total: invoices.total,
         dueDate: invoices.dueDate,
         createdAt: invoices.createdAt,
+        issuedAt,
         totalPaid: sql<string>`coalesce(${paymentTotals.totalPaid}, 0)`,
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
       })
       .from(invoices)
+      .leftJoin(appointments, and(eq(invoices.appointmentId, appointments.id), eq(appointments.businessId, bid)))
       .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.businessId, bid)))
       .leftJoin(paymentTotals, eq(paymentTotals.invoiceId, invoices.id))
       .where(and(eq(invoices.businessId, bid), sql`${invoices.status} != 'void'`))
@@ -789,6 +805,7 @@ async function listFinanceInvoiceSnapshots(bid: string): Promise<FinanceInvoiceS
         total: invoices.total,
         dueDate: invoices.dueDate,
         createdAt: invoices.createdAt,
+        issuedAt: invoices.createdAt,
         totalPaid: sql<string>`coalesce(${paymentTotalsLegacy.totalPaid}, 0)`,
         clientFirstName: clients.firstName,
         clientLastName: clients.lastName,
@@ -1104,19 +1121,19 @@ actionsRouter.post("/getFinanceDashboard", requireAuth, requireTenant, requirePe
   ] = await Promise.all([
     listFinanceInvoiceSnapshots(bid),
     listRecentFinancePayments(bid, params.paymentLimit ?? 8),
-    getIssuedInvoiceRevenueByCreatedAt(bid, monthStart, monthEnd),
+    getIssuedInvoiceRevenueByAttributedAt(bid, monthStart, monthEnd),
     getInvoiceCollectedRevenueByPaidAt(bid, monthStart, monthEnd),
-    getStandaloneAppointmentCollectedRevenueByUpdatedAt(bid, monthStart, monthEnd),
+    getStandaloneAppointmentCollectedRevenueByPaidAt(bid, monthStart, monthEnd),
     getExpenseTotalForRange(bid, monthStart, monthEnd),
     getStandaloneAppointmentAwaitingCollectionTotal(bid),
     Promise.all(
       monthBuckets.map(async (bucket) => ({
         key: bucket.key,
         label: bucket.label,
-        invoiced: await getIssuedInvoiceRevenueByCreatedAt(bid, bucket.start, bucket.end),
+        invoiced: await getIssuedInvoiceRevenueByAttributedAt(bid, bucket.start, bucket.end),
         collected:
           (await getInvoiceCollectedRevenueByPaidAt(bid, bucket.start, bucket.end)) +
-          (await getStandaloneAppointmentCollectedRevenueByUpdatedAt(bid, bucket.start, bucket.end)),
+          (await getStandaloneAppointmentCollectedRevenueByPaidAt(bid, bucket.start, bucket.end)),
         expenses: await getExpenseTotalForRange(bid, bucket.start, bucket.end),
       }))
     ),
@@ -1137,7 +1154,8 @@ actionsRouter.post("/getFinanceDashboard", requireAuth, requireTenant, requirePe
       dueDate: invoice.dueDate ? invoice.dueDate.toISOString() : null,
       status: normalizedStatus,
       createdAt: invoice.createdAt.toISOString(),
-      isCurrentMonth: invoice.createdAt >= monthStart && invoice.createdAt <= monthEnd,
+      issuedAt: invoice.issuedAt.toISOString(),
+      isCurrentMonth: invoice.issuedAt >= monthStart && invoice.issuedAt <= monthEnd,
     };
   });
 
