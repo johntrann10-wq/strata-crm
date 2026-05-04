@@ -218,56 +218,33 @@ export type ResolvedTemplateMessage = {
 const defaultBusinessLogoVars: TemplateVars = {
   businessLogoUrl: undefined,
   businessLogoDisplay: "none",
-  businessLogoFrameWidth: "112px",
-  businessLogoFrameHeight: "76px",
+  businessLogoFrameWidth: "128px",
+  businessLogoFrameHeight: "72px",
   businessLogoFrameRadius: "22px",
-  businessLogoPadding: "6px",
-  businessLogoImageWidth: "100px",
-  businessLogoImageHeight: "64px",
-  businessLogoImageWidthAttr: 100,
-  businessLogoImageHeightAttr: 64,
-  businessLogoImageMarginTop: "0px",
-  businessLogoImageMarginLeft: "0px",
+  businessLogoImageMaxWidth: "112px",
+  businessLogoImageMaxHeight: "56px",
+  businessLogoImageWidthAttr: 112,
   businessLogoBackground: "rgba(255,255,255,0.98)",
   businessLogoBorder: "rgba(226,232,240,0.95)",
   businessLogoShadow: "0 18px 36px rgba(15,23,42,0.08)",
   businessLogoFilter: "none",
-  businessLogoObjectFit: "contain",
-  businessLogoTransform: "none",
 };
 
 function buildBusinessLogoTransformCss(params: {
   fitMode: "contain" | "cover" | "wordmark";
-  rotationDeg: number;
-  zoom: number;
-  offsetX: number;
-  offsetY: number;
 }) {
-  const frameWidth = params.fitMode === "wordmark" ? 216 : 112;
-  const frameHeight = params.fitMode === "wordmark" ? 76 : 76;
-  const padding = params.fitMode === "cover" ? 0 : params.fitMode === "wordmark" ? 8 : 6;
-  const innerWidth = Math.max(frameWidth - padding * 2, 1);
-  const innerHeight = Math.max(frameHeight - padding * 2, 1);
-  const emailZoom = Math.min(Math.max(params.zoom, 1), 3.5);
-  const imageWidth = Math.round(innerWidth * emailZoom);
-  const imageHeight = Math.round(innerHeight * emailZoom);
-  const offsetX = Math.round(params.offsetX * innerWidth * 0.12 * 100) / 100;
-  const offsetY = Math.round(params.offsetY * innerHeight * 0.12 * 100) / 100;
-  const imageMarginLeft = Math.round(((innerWidth - imageWidth) / 2 + offsetX) * 100) / 100;
-  const imageMarginTop = Math.round(((innerHeight - imageHeight) / 2 + offsetY) * 100) / 100;
+  const isWordmark = params.fitMode === "wordmark";
+  const frameWidth = isWordmark ? 188 : 128;
+  const frameHeight = 72;
+  const imageMaxWidth = isWordmark ? 168 : 112;
+  const imageMaxHeight = 56;
   return {
     width: `${frameWidth}px`,
     height: `${frameHeight}px`,
-    radius: `${params.fitMode === "wordmark" ? 22 : 22}px`,
-    padding: `${padding}px`,
-    imageWidth: `${imageWidth}px`,
-    imageHeight: `${imageHeight}px`,
-    imageWidthAttr: imageWidth,
-    imageHeightAttr: imageHeight,
-    imageMarginLeft: `${imageMarginLeft}px`,
-    imageMarginTop: `${imageMarginTop}px`,
-    objectFit: params.fitMode === "cover" ? "cover" : "contain",
-    transform: `rotate(${params.rotationDeg}deg)`,
+    radius: "22px",
+    imageMaxWidth: `${imageMaxWidth}px`,
+    imageMaxHeight: `${imageMaxHeight}px`,
+    imageWidthAttr: imageMaxWidth,
   };
 }
 
@@ -384,19 +361,13 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
     businessLogoFrameWidth: logoFrame.width,
     businessLogoFrameHeight: logoFrame.height,
     businessLogoFrameRadius: logoFrame.radius,
-    businessLogoPadding: logoFrame.padding,
-    businessLogoImageWidth: logoFrame.imageWidth,
-    businessLogoImageHeight: logoFrame.imageHeight,
+    businessLogoImageMaxWidth: logoFrame.imageMaxWidth,
+    businessLogoImageMaxHeight: logoFrame.imageMaxHeight,
     businessLogoImageWidthAttr: logoFrame.imageWidthAttr,
-    businessLogoImageHeightAttr: logoFrame.imageHeightAttr,
-    businessLogoImageMarginTop: logoFrame.imageMarginTop,
-    businessLogoImageMarginLeft: logoFrame.imageMarginLeft,
     businessLogoBackground: plate.background,
     businessLogoBorder: plate.border,
     businessLogoShadow: plate.shadow,
     businessLogoFilter: plate.imageFilter,
-    businessLogoObjectFit: logoFrame.objectFit,
-    businessLogoTransform: logoFrame.transform,
   };
 }
 
