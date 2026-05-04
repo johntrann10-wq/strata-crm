@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import {
+  activityLogs,
   appointmentServices,
   appointments,
   bookingDrafts,
@@ -46,9 +47,11 @@ import {
   sendBookingRequestReceived,
   sendLeadAutoResponse,
   sendLeadFollowUpAlert,
+  sendTemplatedEmail,
 } from "../lib/email.js";
 import { ensureBusinessTrialSubscription } from "../lib/billingLifecycle.js";
 import { hasFullBillingAccess } from "../lib/billingAccess.js";
+import { logger } from "../lib/logger.js";
 import {
   addDaysInTimeZone,
   buildSlotsForDate,
@@ -3676,6 +3679,92 @@ function isBusinessSchemaDriftError(error: unknown): boolean {
   const code = String(cause.code ?? "");
   const message = String(cause.message ?? "").toLowerCase();
   return code === "42P01" || code === "42703" || message.includes("does not exist");
+}
+
+function resolveFrontendBillingUrl(): string {
+  const configured = process.env.FRONTEND_URL?.trim() || "https://stratacrm.app";
+  return `${configured.replace(/\/+$/, "")}/settings?tab=billing`;
+}
+
+function buildTrialWelcomeDetail(trialEndsAt: Date | null | undefined): string {
+  if (!trialEndsAt) {
+    return "Your trial includes full workspace access while your team gets set up.";
+  }
+  const daysLeft = Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+  if (daysLeft <= 0) {
+    return "Your trial is active now. Open billing on the web dashboard when you are ready to keep access going.";
+  }
+  return `You have ${daysLeft} day${daysLeft === 1 ? "" : "s"} to explore Strata before the trial ends.`;
+}
+
+async function hasSentTrialWelcomeEmail(businessId: string): Promise<boolean> {
+  try {
+    const [existing] = await db
+      .select({ id: activityLogs.id })
+      .from(activityLogs)
+      .where(and(eq(activityLogs.businessId, businessId), eq(activityLogs.action, "billing.trial_welcome_email_sent")))
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(1);
+    return Boolean(existing);
+  } catch (error) {
+    if (!isBusinessSchemaDriftError(error)) throw error;
+    warnOnce("businesses:trial-welcome:activity-schema", "trial welcome email dedupe skipped because activity logs are unavailable", {
+      businessId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+async function sendTrialWelcomeEmailIfNeeded(params: {
+  business: Pick<typeof businesses.$inferSelect, "id" | "name" | "email" | "trialEndsAt">;
+  userId: string | null | undefined;
+}) {
+  if (!isEmailConfigured() || (await hasSentTrialWelcomeEmail(params.business.id))) return;
+
+  const [owner] = params.userId
+    ? await db
+        .select({
+          email: users.email,
+          firstName: users.firstName,
+        })
+        .from(users)
+        .where(eq(users.id, params.userId))
+        .limit(1)
+    : [];
+  const recipient = owner?.email?.trim() || params.business.email?.trim();
+  if (!recipient) return;
+
+  try {
+    await sendTemplatedEmail({
+      to: recipient,
+      businessId: params.business.id,
+      templateSlug: "trial_welcome",
+      vars: {
+        userName: owner?.firstName?.trim() || recipient,
+        businessName: params.business.name,
+        trialDetail: buildTrialWelcomeDetail(params.business.trialEndsAt),
+        billingUrl: resolveFrontendBillingUrl(),
+      },
+    });
+    await createActivityLog({
+      businessId: params.business.id,
+      action: "billing.trial_welcome_email_sent",
+      entityType: "business",
+      entityId: params.business.id,
+      userId: params.userId ?? null,
+      metadata: {
+        recipient,
+        source: "onboarding_complete",
+      },
+    });
+  } catch (error) {
+    logger.warn("Trial welcome email failed", {
+      businessId: params.business.id,
+      recipient,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 let ensureBusinessAutomationColumnsPromise: Promise<void> | null = null;
@@ -7436,5 +7525,9 @@ businessesRouter.post("/:id/completeOnboarding", requireAuth, wrapAsync(async (r
   });
 
   const refreshed = await loadBusinessById(id);
+  await sendTrialWelcomeEmailIfNeeded({
+    business: refreshed ?? updated,
+    userId: req.userId ?? null,
+  });
   res.json(serializeBusiness(refreshed ?? updated));
 }));
