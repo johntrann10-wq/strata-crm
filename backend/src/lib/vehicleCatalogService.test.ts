@@ -67,6 +67,18 @@ describe("vehicle catalog provider", () => {
         );
       }
 
+      if (url.includes("/GetModelsForMake/Tesla?format=json")) {
+        return new Response(
+          JSON.stringify({
+            Results: [
+              { Model_ID: 103, Model_Name: "Model 3" },
+              { Model_ID: 104, Model_Name: "Roadster" },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
       throw new Error(`Unexpected fetch: ${url}`);
     });
 
@@ -82,6 +94,8 @@ describe("vehicle catalog provider", () => {
     const models = await provider.listModels(2024, tesla!.id, tesla!.value);
     expect(models.map((entry) => entry.value)).toContain("Cybertruck");
     expect(models.map((entry) => entry.value)).toContain("Model X");
+    expect(models.map((entry) => entry.value)).toContain("Model 3");
+    expect(models.map((entry) => entry.value)).toContain("Roadster");
   });
 
   it("includes larger curated coverage for popular automakers when live lookup is unavailable", async () => {
