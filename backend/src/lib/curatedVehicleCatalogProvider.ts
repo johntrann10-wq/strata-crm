@@ -418,6 +418,209 @@ const MAKES: MakeSeed[] = [
       model("Gravity", "SUV", "Dual Motor Electric", ["Touring", "Grand Touring"]),
     ],
   },
+  {
+    name: "Polestar",
+    models: [
+      model("2", "Sedan", "Dual Motor Electric", ["Long Range Single Motor", "Long Range Dual Motor", "Performance"]),
+      model("3", "SUV", "Dual Motor Electric", ["Long Range Dual Motor", "Performance"]),
+      model("4", "SUV", "Dual Motor Electric", ["Long Range Single Motor", "Long Range Dual Motor"]),
+    ],
+  },
+  {
+    name: "Jaguar",
+    models: [
+      model("XE", "Sedan", "2.0L Turbo I4", ["S", "R-Dynamic", "300 Sport"]),
+      model("XF", "Sedan", "2.0L Turbo I4", ["S", "R-Dynamic", "Portfolio"]),
+      model("F-Type", "Coupe", "5.0L Supercharged V8", ["P450", "R", "75"]),
+      model("E-Pace", "SUV", "2.0L Turbo I4", ["S", "R-Dynamic", "300 Sport"]),
+      model("F-Pace", "SUV", "2.0L Turbo I4", ["P250", "P400", "SVR"]),
+      model("I-Pace", "SUV", "Dual Motor Electric", ["S", "SE", "HSE"]),
+    ],
+  },
+  {
+    name: "Alfa Romeo",
+    models: [
+      model("Giulia", "Sedan", "2.0L Turbo I4", ["Sprint", "Ti", "Veloce", "Quadrifoglio"]),
+      model("Stelvio", "SUV", "2.0L Turbo I4", ["Sprint", "Ti", "Veloce", "Quadrifoglio"]),
+      model("Tonale", "SUV", "1.3L Plug-In Hybrid", ["Sprint", "Ti", "Veloce"]),
+      model("4C", "Coupe", "1.7L Turbo I4", ["Base", "Spider"]),
+    ],
+  },
+  {
+    name: "Chrysler",
+    models: [
+      model("300", "Sedan", "3.6L V6", ["Touring", "S", "C"]),
+      model("Pacifica", "Minivan", "3.6L V6", ["Touring L", "Limited", "Pinnacle", "Hybrid"]),
+      model("Voyager", "Minivan", "3.6L V6", ["L", "LX"]),
+      model("Town & Country", "Minivan", "3.6L V6", ["Touring", "Limited"]),
+    ],
+  },
+  {
+    name: "Fiat",
+    models: [
+      model("500", "Hatchback", "1.4L I4", ["Pop", "Sport", "Abarth"]),
+      model("500e", "Hatchback", "Electric", ["Base", "Inspired By Beauty", "Inspired By Music"]),
+      model("500X", "SUV", "1.3L Turbo I4", ["Pop", "Sport", "Trekking"]),
+      model("124 Spider", "Convertible", "1.4L Turbo I4", ["Classica", "Lusso", "Abarth"]),
+    ],
+  },
+  {
+    name: "Maserati",
+    models: [
+      model("Ghibli", "Sedan", "3.0L Twin Turbo V6", ["GT", "Modena", "Trofeo"]),
+      model("Quattroporte", "Sedan", "3.0L Twin Turbo V6", ["GT", "Modena", "Trofeo"]),
+      model("Levante", "SUV", "3.0L Twin Turbo V6", ["GT", "Modena", "Trofeo"]),
+      model("Grecale", "SUV", "2.0L Turbo I4", ["GT", "Modena", "Trofeo"]),
+      model("GranTurismo", "Coupe", "3.0L Twin Turbo V6", ["Modena", "Trofeo", "Folgore"]),
+      model("MC20", "Coupe", "3.0L Twin Turbo V6", ["Base", "Cielo"]),
+    ],
+  },
+  {
+    name: "Ferrari",
+    models: [
+      model("California", "Convertible", "3.9L Twin Turbo V8", ["T", "Handling Speciale"]),
+      model("Roma", "Coupe", "3.9L Twin Turbo V8", ["Base", "Spider"]),
+      model("Portofino", "Convertible", "3.9L Twin Turbo V8", ["Base", "M"]),
+      model("F8", "Coupe", "3.9L Twin Turbo V8", ["Tributo", "Spider"]),
+      model("296", "Coupe", "3.0L Twin Turbo Hybrid V6", ["GTB", "GTS"]),
+      model("SF90", "Coupe", "4.0L Twin Turbo Hybrid V8", ["Stradale", "Spider"]),
+      model("Purosangue", "SUV", "6.5L V12", ["Base"]),
+    ],
+  },
+  {
+    name: "Lamborghini",
+    models: [
+      model("Huracan", "Coupe", "5.2L V10", ["EVO", "Tecnica", "STO"]),
+      model("Aventador", "Coupe", "6.5L V12", ["S", "SVJ", "Ultimae"]),
+      model("Revuelto", "Coupe", "6.5L Hybrid V12", ["Base"]),
+      model("Urus", "SUV", "4.0L Twin Turbo V8", ["S", "Performante", "SE"]),
+      model("Gallardo", "Coupe", "5.2L V10", ["LP560-4", "LP570-4", "Spyder"]),
+    ],
+  },
+  {
+    name: "McLaren",
+    models: [
+      model("570S", "Coupe", "3.8L Twin Turbo V8", ["Base", "Spider"]),
+      model("600LT", "Coupe", "3.8L Twin Turbo V8", ["Base", "Spider"]),
+      model("720S", "Coupe", "4.0L Twin Turbo V8", ["Base", "Spider"]),
+      model("765LT", "Coupe", "4.0L Twin Turbo V8", ["Base", "Spider"]),
+      model("Artura", "Coupe", "3.0L Hybrid V6", ["Base", "Spider"]),
+      model("GT", "Coupe", "4.0L Twin Turbo V8", ["Base"]),
+    ],
+  },
+  {
+    name: "Aston Martin",
+    models: [
+      model("Vantage", "Coupe", "4.0L Twin Turbo V8", ["Base", "F1 Edition"]),
+      model("DB11", "Coupe", "4.0L Twin Turbo V8", ["V8", "AMR", "Volante"]),
+      model("DB12", "Coupe", "4.0L Twin Turbo V8", ["Base", "Volante"]),
+      model("DBX", "SUV", "4.0L Twin Turbo V8", ["Base", "707"]),
+      model("Vanquish", "Coupe", "5.9L V12", ["Base", "S"]),
+    ],
+  },
+  {
+    name: "Bentley",
+    models: [
+      model("Continental GT", "Coupe", "4.0L Twin Turbo V8", ["V8", "Speed", "Mulliner"]),
+      model("Flying Spur", "Sedan", "4.0L Twin Turbo V8", ["V8", "Speed", "Hybrid"]),
+      model("Bentayga", "SUV", "4.0L Twin Turbo V8", ["V8", "S", "Azure", "Speed"]),
+      model("Mulsanne", "Sedan", "6.75L Twin Turbo V8", ["Base", "Speed"]),
+    ],
+  },
+  {
+    name: "Rolls-Royce",
+    models: [
+      model("Ghost", "Sedan", "6.75L Twin Turbo V12", ["Base", "Extended", "Black Badge"]),
+      model("Phantom", "Sedan", "6.75L Twin Turbo V12", ["Base", "Extended"]),
+      model("Wraith", "Coupe", "6.6L Twin Turbo V12", ["Base", "Black Badge"]),
+      model("Dawn", "Convertible", "6.6L Twin Turbo V12", ["Base", "Black Badge"]),
+      model("Cullinan", "SUV", "6.75L Twin Turbo V12", ["Base", "Black Badge"]),
+      model("Spectre", "Coupe", "Dual Motor Electric", ["Base"]),
+    ],
+  },
+  {
+    name: "Scion",
+    models: [
+      model("FR-S", "Coupe", "2.0L H4", ["Base", "Release Series"]),
+      model("tC", "Coupe", "2.5L I4", ["Base", "Release Series"]),
+      model("xB", "Wagon", "2.4L I4", ["Base", "Release Series"]),
+      model("xD", "Hatchback", "1.8L I4", ["Base"]),
+      model("iA", "Sedan", "1.5L I4", ["Base"]),
+      model("iM", "Hatchback", "1.8L I4", ["Base"]),
+    ],
+  },
+  {
+    name: "Suzuki",
+    models: [
+      model("SX4", "Hatchback", "2.0L I4", ["Base", "Sportback", "Crossover"]),
+      model("Kizashi", "Sedan", "2.4L I4", ["S", "SE", "Sport"]),
+      model("Grand Vitara", "SUV", "2.4L I4", ["Base", "Premium", "Limited"]),
+      model("Equator", "Truck", "4.0L V6", ["Base", "Sport"]),
+    ],
+  },
+  {
+    name: "Saab",
+    models: [
+      model("9-3", "Sedan", "2.0L Turbo I4", ["Linear", "Arc", "Aero"]),
+      model("9-5", "Sedan", "2.3L Turbo I4", ["Linear", "Arc", "Aero"]),
+      model("9-7X", "SUV", "4.2L I6", ["Base", "Aero"]),
+    ],
+  },
+  {
+    name: "Pontiac",
+    models: [
+      model("G6", "Sedan", "2.4L I4", ["Base", "GT", "GXP"]),
+      model("G8", "Sedan", "3.6L V6", ["Base", "GT", "GXP"]),
+      model("Vibe", "Hatchback", "1.8L I4", ["Base", "GT"]),
+      model("Solstice", "Convertible", "2.4L I4", ["Base", "GXP"]),
+      model("Firebird", "Coupe", "5.7L V8", ["Base", "Formula", "Trans Am"]),
+    ],
+  },
+  {
+    name: "Saturn",
+    models: [
+      model("Ion", "Sedan", "2.2L I4", ["Base", "2", "3"]),
+      model("Aura", "Sedan", "2.4L I4", ["XE", "XR"]),
+      model("Vue", "SUV", "2.4L I4", ["XE", "XR", "Red Line"]),
+      model("Outlook", "SUV", "3.6L V6", ["XE", "XR"]),
+      model("Sky", "Convertible", "2.4L I4", ["Base", "Red Line"]),
+    ],
+  },
+  {
+    name: "Mercury",
+    models: [
+      model("Milan", "Sedan", "2.5L I4", ["Base", "Premier"]),
+      model("Sable", "Sedan", "3.5L V6", ["Base", "Premier"]),
+      model("Mariner", "SUV", "2.5L I4", ["Base", "Premier", "Hybrid"]),
+      model("Mountaineer", "SUV", "4.0L V6", ["Base", "Premier"]),
+      model("Grand Marquis", "Sedan", "4.6L V8", ["GS", "LS"]),
+    ],
+  },
+  {
+    name: "Hummer",
+    models: [
+      model("H2", "SUV", "6.2L V8", ["Base", "Luxury", "SUT"]),
+      model("H3", "SUV", "3.7L I5", ["Base", "Adventure", "Alpha"]),
+      model("EV Pickup", "Truck", "Tri Motor Electric", ["2X", "3X", "Edition 1"]),
+      model("EV SUV", "SUV", "Tri Motor Electric", ["2X", "3X", "Edition 1"]),
+    ],
+  },
+  {
+    name: "Isuzu",
+    models: [
+      model("Rodeo", "SUV", "3.2L V6", ["S", "LS"]),
+      model("Trooper", "SUV", "3.5L V6", ["S", "Limited"]),
+      model("Axiom", "SUV", "3.5L V6", ["Base", "XS"]),
+      model("i-Series", "Truck", "3.7L I5", ["i-290", "i-370"]),
+    ],
+  },
+  {
+    name: "Smart",
+    models: [
+      model("Fortwo", "Hatchback", "1.0L I3", ["Pure", "Passion", "Prime"]),
+      model("Fortwo Electric Drive", "Hatchback", "Electric", ["Pure", "Passion", "Prime"]),
+    ],
+  },
 ];
 
 function makeId(make: string) {
