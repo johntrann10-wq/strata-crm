@@ -117,6 +117,23 @@ const INVOICE_FILTERS = [
 type InvoiceFilterId = (typeof INVOICE_FILTERS)[number]["id"];
 type FinanceView = "overview" | "expenses";
 
+type MonthlyFinanceDetail = {
+  key: string;
+  label: string;
+  invoiced: number;
+  collected: number;
+  expenses: number;
+  net: number;
+  invoiceCount: number;
+  paidInvoiceCount: number;
+  expenseCount: number;
+  averageTicket: number;
+  awaitingPayment: number;
+  invoices: FinanceDashboard["invoiceRows"];
+  expensesList: ExpenseRecord[];
+  categoryBreakdown: Array<{ category: string; amount: number; count: number }>;
+};
+
 function getFinanceViewFromSearch(value: string | null): FinanceView {
   return value === "expenses" ? "expenses" : "overview";
 }
@@ -191,6 +208,52 @@ function getStatusLabel(status: FinanceDashboard["invoiceRows"][number]["status"
   return "Draft";
 }
 
+function getMonthKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const monthPrefix = /^(\d{4})-(\d{2})/.exec(value);
+  if (monthPrefix) return `${monthPrefix[1]}-${monthPrefix[2]}`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function buildMonthlyFinanceDetails(dashboard: FinanceDashboard | undefined, expenses: ExpenseRecord[]): MonthlyFinanceDetail[] {
+  if (!dashboard?.trend?.length) return [];
+  return dashboard.trend.map((month) => {
+    const invoices = dashboard.invoiceRows.filter((invoice) => getMonthKey(invoice.createdAt) === month.key);
+    const monthExpenses = expenses.filter((expense) => getMonthKey(expense.expenseDate) === month.key);
+    const invoiceTotal = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount ?? 0), 0);
+    const categoryMap = new Map<string, { amount: number; count: number }>();
+
+    for (const expense of monthExpenses) {
+      const category = expense.category?.trim() || "Uncategorized";
+      const current = categoryMap.get(category) ?? { amount: 0, count: 0 };
+      current.amount += Number(expense.amount ?? 0);
+      current.count += 1;
+      categoryMap.set(category, current);
+    }
+
+    return {
+      key: month.key,
+      label: month.label,
+      invoiced: month.invoiced,
+      collected: month.collected,
+      expenses: month.expenses,
+      net: month.collected - month.expenses,
+      invoiceCount: invoices.length,
+      paidInvoiceCount: invoices.filter((invoice) => invoice.status === "paid").length,
+      expenseCount: monthExpenses.length,
+      averageTicket: invoices.length > 0 ? invoiceTotal / invoices.length : 0,
+      awaitingPayment: invoices.reduce((sum, invoice) => sum + Number(invoice.balanceDue ?? 0), 0),
+      invoices,
+      expensesList: monthExpenses,
+      categoryBreakdown: Array.from(categoryMap.entries())
+        .map(([category, data]) => ({ category, amount: data.amount, count: data.count }))
+        .sort((a, b) => b.amount - a.amount),
+    };
+  });
+}
+
 export default function FinancesPage() {
   const outletContext = useOutletContext<AuthOutletContext>();
   if (!outletContext.permissions.has("payments.read")) {
@@ -213,13 +276,13 @@ function FinancesContent() {
   const [editingExpense, setEditingExpense] = useState<ExpenseRecord | null>(null);
   const [expenseForm, setExpenseForm] = useState<ExpenseFormState>(DEFAULT_EXPENSE_FORM);
   const [deleteExpenseId, setDeleteExpenseId] = useState<string | null>(null);
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
 
   const [{ data: dashboard, fetching: dashboardFetching, error: dashboardError }, runDashboard] = useGlobalAction(api.getFinanceDashboard);
   const [{ data: expenses, fetching: expensesFetching, error: expensesError }, refetchExpenses] = useFindMany(api.expense, {
-    search: deferredSearch || undefined,
     sort: { expenseDate: "Descending" } as any,
-    first: 100,
-    pause: !businessId || view !== "expenses",
+    first: 500,
+    pause: !businessId,
   });
   const [{ fetching: savingExpense }, saveExpense] = useAction((params?: Record<string, unknown>) => {
     if (editingExpense?.id) return api.expense.update({ id: editingExpense.id, ...(params ?? {}) });
@@ -243,6 +306,20 @@ function FinancesContent() {
 
   const dashboardData = dashboard as FinanceDashboard | undefined;
   const expenseRecords = useMemo(() => (expenses ?? []) as ExpenseRecord[], [expenses]);
+  const visibleExpenseRecords = useMemo(() => {
+    const query = deferredSearch.toLowerCase();
+    if (!query) return expenseRecords;
+    return expenseRecords.filter((expense) =>
+      [expense.vendor, expense.category, expense.description, expense.notes]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [deferredSearch, expenseRecords]);
+  const monthlyDetails = useMemo(() => buildMonthlyFinanceDetails(dashboardData, expenseRecords), [dashboardData, expenseRecords]);
+  const selectedMonth = useMemo(
+    () => monthlyDetails.find((month) => month.key === selectedMonthKey) ?? monthlyDetails[monthlyDetails.length - 1] ?? null,
+    [monthlyDetails, selectedMonthKey]
+  );
   const filteredInvoices = useMemo(
     () => getFilteredInvoices(dashboardData?.invoiceRows ?? [], invoiceFilter),
     [dashboardData?.invoiceRows, invoiceFilter]
@@ -251,6 +328,12 @@ function FinancesContent() {
     () => expenseRecords.reduce((sum, expense) => sum + Number(expense.amount ?? 0), 0),
     [expenseRecords]
   );
+
+  useEffect(() => {
+    if (monthlyDetails.length === 0) return;
+    if (selectedMonthKey && monthlyDetails.some((month) => month.key === selectedMonthKey)) return;
+    setSelectedMonthKey(monthlyDetails[monthlyDetails.length - 1]?.key ?? null);
+  }, [monthlyDetails, selectedMonthKey]);
 
   const updateSearchParams = (updates: Partial<{ view: FinanceView; filter: InvoiceFilterId }>) => {
     const next = new URLSearchParams(searchParams);
@@ -390,14 +473,14 @@ function FinancesContent() {
         ) : null}
 
         {view === "overview" ? (
-          <FinanceOverview dashboard={dashboardData} loading={dashboardFetching && !dashboardData} invoiceFilter={invoiceFilter} onInvoiceFilterChange={handleInvoiceFilterChange} filteredInvoices={filteredInvoices} nativeIOS={nativeIOS} />
+          <FinanceOverview dashboard={dashboardData} loading={dashboardFetching && !dashboardData} invoiceFilter={invoiceFilter} onInvoiceFilterChange={handleInvoiceFilterChange} filteredInvoices={filteredInvoices} monthlyDetails={monthlyDetails} selectedMonth={selectedMonth} selectedMonthKey={selectedMonth?.key ?? null} onSelectMonth={setSelectedMonthKey} nativeIOS={nativeIOS} />
         ) : (
           <ExpenseLedger
             metrics={dashboardData}
             canManage={canManage}
             search={search}
             onSearchChange={setSearch}
-            expenses={expenseRecords}
+            expenses={visibleExpenseRecords}
             loading={expensesFetching && !expenses}
             refreshing={expensesFetching && !!expenses}
             error={expensesError}
@@ -559,6 +642,10 @@ function FinanceOverview({
   invoiceFilter,
   onInvoiceFilterChange,
   filteredInvoices,
+  monthlyDetails,
+  selectedMonth,
+  selectedMonthKey,
+  onSelectMonth,
   nativeIOS = false,
 }: {
   dashboard: FinanceDashboard | undefined;
@@ -566,6 +653,10 @@ function FinanceOverview({
   invoiceFilter: InvoiceFilterId;
   onInvoiceFilterChange: (filter: InvoiceFilterId) => void;
   filteredInvoices: FinanceDashboard["invoiceRows"];
+  monthlyDetails: MonthlyFinanceDetail[];
+  selectedMonth: MonthlyFinanceDetail | null;
+  selectedMonthKey: string | null;
+  onSelectMonth: (monthKey: string) => void;
   nativeIOS?: boolean;
 }) {
   const kpis = dashboard?.kpis;
@@ -604,6 +695,17 @@ function FinanceOverview({
       <section className={cn("grid gap-4 xl:grid-cols-[1.15fr_1fr]", nativeIOS && "xl:grid-cols-1")}>
         <CollectionsOverviewCard dashboard={dashboard} loading={loading} />
         <StatusOverviewCard dashboard={dashboard} loading={loading} />
+      </section>
+
+      <section>
+        <MonthlyDrilldownCard
+          months={monthlyDetails}
+          selectedMonth={selectedMonth}
+          selectedMonthKey={selectedMonthKey}
+          loading={loading}
+          onSelectMonth={onSelectMonth}
+          nativeIOS={nativeIOS}
+        />
       </section>
 
       <section>
@@ -653,6 +755,212 @@ function FinanceOverview({
           </CardContent>
         </Card>
       </section>
+    </div>
+  );
+}
+
+function MonthlyDrilldownCard({
+  months,
+  selectedMonth,
+  selectedMonthKey,
+  loading,
+  onSelectMonth,
+  nativeIOS = false,
+}: {
+  months: MonthlyFinanceDetail[];
+  selectedMonth: MonthlyFinanceDetail | null;
+  selectedMonthKey: string | null;
+  loading: boolean;
+  onSelectMonth: (monthKey: string) => void;
+  nativeIOS?: boolean;
+}) {
+  if (loading) {
+    return <Skeleton className="h-80 w-full rounded-[28px]" />;
+  }
+
+  if (months.length === 0 || !selectedMonth) {
+    return (
+      <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]")}>
+        <CardContent className="p-5">
+          <p className="text-sm text-muted-foreground">Monthly finance detail will appear once invoices, payments, or expenses land.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className={cn("border-border/70", nativeIOS && "rounded-[28px] border-white/80 bg-white/92 shadow-[0_16px_34px_rgba(15,23,42,0.06)]")}>
+      <CardHeader className="gap-4 border-b pb-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Monthly drill-down</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Open any month to review income, expenses, average ticket, and activity.</p>
+          </div>
+          <Badge variant="outline" className="w-fit border-slate-200 bg-slate-50 text-slate-700">
+            {selectedMonth.label}
+          </Badge>
+        </div>
+        <div className={cn("flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", !nativeIOS && "sm:flex-wrap sm:overflow-visible")}>
+          {months.map((month) => {
+            const active = month.key === selectedMonthKey;
+            return (
+              <button
+                key={month.key}
+                type="button"
+                onClick={() => onSelectMonth(month.key)}
+                className={cn(
+                  "min-w-[150px] rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99]",
+                  active
+                    ? "border-slate-950 bg-slate-950 text-white shadow-sm"
+                    : "border-border/70 bg-background/90 text-foreground hover:border-primary/40",
+                  nativeIOS && "min-w-[156px] rounded-[22px]"
+                )}
+              >
+                <p className={cn("text-sm font-semibold", active ? "text-white" : "text-slate-950")}>{month.label}</p>
+                <p className={cn("mt-1 text-xs", active ? "text-white/70" : "text-muted-foreground")}>
+                  Net {formatCurrency(month.net)}
+                </p>
+                <div className="mt-3 h-1.5 rounded-full bg-white/20">
+                  <div
+                    className={cn("h-full rounded-full", month.net >= 0 ? "bg-emerald-400" : "bg-rose-400")}
+                    style={{ width: `${Math.min(100, Math.max(12, month.collected > 0 ? ((month.collected - month.expenses) / Math.max(month.collected, month.expenses, 1)) * 100 : 12))}%` }}
+                  />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-5 p-4 sm:p-5">
+        <div className={cn("grid gap-3 sm:grid-cols-2 xl:grid-cols-4", nativeIOS && "grid-cols-2 sm:grid-cols-2 xl:grid-cols-2")}>
+          <MonthMetricCard label="Income collected" value={formatCurrency(selectedMonth.collected)} icon={<ArrowDownRight className="h-4 w-4" />} tone="success" />
+          <MonthMetricCard label="Expenses" value={formatCurrency(selectedMonth.expenses)} icon={<Receipt className="h-4 w-4" />} tone="danger" />
+          <MonthMetricCard label="Net" value={formatCurrency(selectedMonth.net)} icon={<Wallet className="h-4 w-4" />} tone={selectedMonth.net >= 0 ? "success" : "danger"} />
+          <MonthMetricCard label="Avg ticket" value={formatCurrency(selectedMonth.averageTicket)} icon={<BarChart3 className="h-4 w-4" />} />
+          <MonthMetricCard label="Invoiced" value={formatCurrency(selectedMonth.invoiced)} icon={<DollarSign className="h-4 w-4" />} />
+          <MonthMetricCard label="Awaiting" value={formatCurrency(selectedMonth.awaitingPayment)} icon={<Landmark className="h-4 w-4" />} tone="warn" />
+          <MonthMetricCard label="Invoices" value={String(selectedMonth.invoiceCount)} detail={`${selectedMonth.paidInvoiceCount} paid`} icon={<Receipt className="h-4 w-4" />} />
+          <MonthMetricCard label="Expense lines" value={String(selectedMonth.expenseCount)} icon={<TrendingDown className="h-4 w-4" />} />
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <CategoryBreakdownList month={selectedMonth} />
+          <MonthlyLedgerPreview month={selectedMonth} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MonthMetricCard({
+  label,
+  value,
+  icon,
+  tone = "default",
+  detail,
+}: {
+  label: string;
+  value: string;
+  icon: ReactNode;
+  tone?: "default" | "success" | "warn" | "danger";
+  detail?: string;
+}) {
+  const toneClass =
+    tone === "success" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : tone === "danger" ? "text-rose-700" : "text-slate-950";
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/90 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+        <div className={toneClass}>{icon}</div>
+      </div>
+      <p className={cn("mt-2 break-words text-xl font-semibold tracking-[-0.03em]", toneClass)}>{value}</p>
+      {detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}
+    </div>
+  );
+}
+
+function CategoryBreakdownList({ month }: { month: MonthlyFinanceDetail }) {
+  const maxAmount = Math.max(1, ...month.categoryBreakdown.map((category) => category.amount));
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/90 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-foreground">Expense categories</p>
+        <Badge variant="outline">{month.expenseCount} lines</Badge>
+      </div>
+      {month.categoryBreakdown.length === 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">No expenses logged for this month.</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {month.categoryBreakdown.slice(0, 6).map((category) => (
+            <div key={category.category} className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="truncate font-medium text-foreground">{category.category}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-foreground">{formatCurrency(category.amount)}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.max(8, (category.amount / maxAmount) * 100)}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground">{category.count} expense{category.count === 1 ? "" : "s"}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonthlyLedgerPreview({ month }: { month: MonthlyFinanceDetail }) {
+  const recentInvoices = month.invoices.slice(0, 5);
+  const recentExpenses = month.expensesList.slice(0, 5);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-1">
+      <div className="rounded-2xl border border-border/70 bg-background/90 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-foreground">Month invoices</p>
+          <Badge variant="outline">{month.invoiceCount}</Badge>
+        </div>
+        {recentInvoices.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">No invoices created this month.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {recentInvoices.map((invoice) => (
+              <Link key={invoice.id} to={`/invoices/${invoice.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-2 transition hover:border-primary/40 hover:bg-muted/20">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{invoice.clientName}</p>
+                  <p className="text-xs text-muted-foreground">{invoice.invoiceNumber} · {getStatusLabel(invoice.status)}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatCurrency(invoice.totalAmount)}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border/70 bg-background/90 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-foreground">Month expenses</p>
+          <Badge variant="outline">{month.expenseCount}</Badge>
+        </div>
+        {recentExpenses.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">No expenses logged this month.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {recentExpenses.map((expense) => (
+              <div key={expense.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{expense.vendor}</p>
+                  <p className="truncate text-xs text-muted-foreground">{expense.category} · {formatDate(expense.expenseDate)}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatCurrency(expense.amount)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
