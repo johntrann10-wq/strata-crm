@@ -1117,6 +1117,7 @@ export const api = {
         dueDate: string | null;
         status: "draft" | "sent" | "partial" | "paid" | "overdue";
         createdAt: string;
+        issuedAt: string;
       }>;
       trend: Array<{
         key: string;

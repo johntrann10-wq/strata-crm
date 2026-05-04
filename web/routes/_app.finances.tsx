@@ -68,6 +68,7 @@ type FinanceDashboard = {
     dueDate: string | null;
     status: "draft" | "sent" | "partial" | "paid" | "overdue";
     createdAt: string;
+    issuedAt: string;
   }>;
   trend: Array<{
     key: string;
@@ -220,7 +221,7 @@ function getMonthKey(value: string | null | undefined): string | null {
 function buildMonthlyFinanceDetails(dashboard: FinanceDashboard | undefined, expenses: ExpenseRecord[]): MonthlyFinanceDetail[] {
   if (!dashboard?.trend?.length) return [];
   return dashboard.trend.map((month) => {
-    const invoices = dashboard.invoiceRows.filter((invoice) => getMonthKey(invoice.createdAt) === month.key);
+    const invoices = dashboard.invoiceRows.filter((invoice) => getMonthKey(invoice.issuedAt ?? invoice.createdAt) === month.key);
     const monthExpenses = expenses.filter((expense) => getMonthKey(expense.expenseDate) === month.key);
     const invoiceTotal = invoices.reduce((sum, invoice) => sum + Number(invoice.totalAmount ?? 0), 0);
     const categoryMap = new Map<string, { amount: number; count: number }>();
