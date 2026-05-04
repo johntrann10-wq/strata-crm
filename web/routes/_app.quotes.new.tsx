@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { PhoneInput } from "../components/shared/PhoneInput";
+import { ResponsiveSelect } from "@/components/ui/responsive-select";
 import { getPhoneNumberInputError } from "../lib/phone";
 
 type LineItem = {
@@ -52,6 +53,15 @@ type LineItem = {
   unitPrice: string;
   taxable: boolean;
 };
+
+function isBlankQuoteLineItem(item: LineItem | null | undefined) {
+  return Boolean(
+    item &&
+      item.description.trim() === "" &&
+      item.quantity.trim() === "1" &&
+      item.unitPrice.trim() === ""
+  );
+}
 
 type ServiceRecord = {
   id: string;
@@ -369,6 +379,11 @@ export default function NewQuotePage() {
     ...((clients ?? []) as ClientPickerRecord[]),
   ]);
   const selectedClientRecord = clientRecords.find((client) => client.id === selectedClientId) ?? null;
+  const vehicleOptions = ((vehicles ?? []) as Array<{ id: string; year?: number | string | null; make?: string | null; model?: string | null }>)
+    .map((vehicle) => ({
+      value: vehicle.id,
+      label: formatVehicleLabel(vehicle as any),
+    }));
   const filteredClients = clientRecords.filter((client) => {
     const query = clientSearch.toLowerCase();
     const searchable = [
@@ -495,16 +510,14 @@ export default function NewQuotePage() {
 
   const addServiceAsLineItem = useCallback(
     (service: { id: string; name: string; price: number | null }) => {
-      setLineItems((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          description: service.name,
-          quantity: "1",
-          unitPrice: service.price != null ? service.price.toString() : "",
-          taxable: true,
-        },
-      ]);
+      const nextItem = {
+        id: crypto.randomUUID(),
+        description: service.name,
+        quantity: "1",
+        unitPrice: service.price != null ? service.price.toString() : "",
+        taxable: true,
+      };
+      setLineItems((prev) => (prev.length === 1 && isBlankQuoteLineItem(prev[0]) ? [nextItem] : [...prev, nextItem]));
     },
     []
   );
@@ -527,7 +540,7 @@ export default function NewQuotePage() {
           taxable: true,
         })),
       ];
-      setLineItems((prev) => [...prev, ...nextItems]);
+      setLineItems((prev) => (prev.length === 1 && isBlankQuoteLineItem(prev[0]) ? nextItems : [...prev, ...nextItems]));
     },
     []
   );
@@ -1350,26 +1363,15 @@ export default function NewQuotePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="vehicle">Vehicle</Label>
-                <Select
+                <ResponsiveSelect
+                  id="vehicle"
                   value={selectedVehicleId}
                   onValueChange={setSelectedVehicleId}
+                  options={vehicleOptions}
+                  placeholder={selectedClientId ? "Select vehicle..." : "Select a client first"}
                   disabled={!selectedClientId}
-                >
-                  <SelectTrigger id="vehicle" className="h-11 rounded-xl">
-                    <SelectValue
-                      placeholder={
-                        selectedClientId ? "Select vehicle..." : "Select a client first"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vehicles?.map((vehicle) => (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
-                        {formatVehicleLabel(vehicle as any)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  triggerClassName="h-11 rounded-xl"
+                />
                 {selectedClientId && vehicles && vehicles.length === 0 ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                     <p>This client has no vehicles on file yet.</p>
