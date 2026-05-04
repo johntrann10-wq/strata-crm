@@ -690,10 +690,7 @@ async function buildBookingLogoDataUrl(file: File): Promise<BookingLogoDataUrlRe
     outputContext.drawImage(canvas, 0, 0, width, height, 0, 0, outputWidth, outputHeight);
   }
 
-  let dataUrl = outputCanvas.toDataURL("image/webp", 0.9);
-  if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
-    dataUrl = outputCanvas.toDataURL("image/png");
-  }
+  const dataUrl = outputCanvas.toDataURL("image/png");
   if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
     throw new Error("That logo is too detailed. Try a simpler image or smaller file.");
   }
