@@ -38,5 +38,6 @@ describe("builtin email templates", () => {
     expect(html).not.toContain("display:flex");
     expect(html).not.toContain("calc(");
     expect(html).not.toContain("position:absolute");
+    expect(html).not.toContain("scale(");
   });
 });
