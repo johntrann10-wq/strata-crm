@@ -677,6 +677,47 @@ Add a payment method in billing so your team keeps access without interruption:
 If you already added a payment method recently, you can ignore this reminder.`,
 };
 
+export const trialWelcome: BuiltinEmailTemplate = {
+  subject: "Your Strata CRM trial is active",
+  bodyHtml: renderClientShell({
+    businessName: "Strata CRM",
+    eyebrow: "Trial started",
+    title: "Your trial is active",
+    introHtml:
+      `<p style="margin:0;">Hi {{userName}},</p>` +
+      `<p style="margin:10px 0 0;">Your Strata CRM trial for <strong>{{businessName}}</strong> is active.</p>` +
+      `<p style="margin:10px 0 0;">{{trialDetail}}</p>`,
+    bodyHtml:
+      renderInfoCard(
+        "Web dashboard",
+        "Use the web dashboard to manage your workspace, billing, and subscription when you are ready to keep Strata after the trial."
+      ) +
+      renderInfoCard(
+        "Keep working",
+        "Your team can keep using Strata for scheduling, clients, vehicles, quotes, invoices, and booking requests during the trial."
+      ),
+    ctaLabel: "Open web billing",
+    ctaUrl: "{{billingUrl}}",
+    ctaHint: "Web billing: {{billingUrl}}",
+    showCtaHint: true,
+    footerNote: "If you have questions, reply to this email or contact Strata support.",
+  }),
+  bodyText: `Strata CRM
+
+Your trial is active
+
+Hi {{userName}},
+
+Your Strata CRM trial for {{businessName}} is active.
+
+{{trialDetail}}
+
+Use the web dashboard to manage your workspace, billing, and subscription when you are ready to keep Strata after the trial:
+{{billingUrl}}
+
+Your team can keep using Strata for scheduling, clients, vehicles, quotes, invoices, and booking requests during the trial.`,
+};
+
 const builtins: Record<string, BuiltinEmailTemplate> = {
   password_reset: {
     subject: "Reset your Strata password",
@@ -790,6 +831,7 @@ If this access looks wrong, contact your shop owner or admin before using the ac
   review_request: reviewRequest,
   lapsed_client_reengagement: lapsedClientReengagement,
   weekly_summary: weeklySummary,
+  trial_welcome: trialWelcome,
   billing_trial_reminder: billingTrialReminder,
   quote_revision_request_alert: quoteRevisionRequestAlert,
   customer_portal_link: {
