@@ -1,11 +1,13 @@
 import Capacitor
 import UIKit
+import UserNotifications
 
 class StrataBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(AppleSignInPlugin())
         bridge?.registerPluginInstance(NativeFeedbackPlugin())
         bridge?.registerPluginInstance(NativeMediaPlugin())
+        bridge?.registerPluginInstance(NativeNotificationsPlugin())
     }
 }
 
@@ -197,4 +199,150 @@ class NativeMediaPlugin: CAPPlugin, CAPBridgedPlugin, UIImagePickerControllerDel
 
         return imageData
     }
+}
+
+
+@objc(NativeNotificationsPlugin)
+class NativeNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "NativeNotificationsPlugin"
+    public let jsName = "NativeNotifications"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "getStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestAuthorization", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "registerForRemoteNotifications", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setBadgeCount", returnType: CAPPluginReturnPromise),
+    ]
+
+    private static var deviceToken: String?
+    private static var pendingRegistrationCalls: [CAPPluginCall] = []
+
+    override func load() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRemoteNotificationRegistered(_:)),
+            name: .strataRemoteNotificationsRegistered,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRemoteNotificationRegistrationFailed(_:)),
+            name: .strataRemoteNotificationsRegistrationFailed,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc func getStatus(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            call.resolve([
+                "status": self.authorizationStatusString(settings.authorizationStatus),
+                "deviceToken": Self.deviceToken as Any,
+            ])
+        }
+    }
+
+    @objc func requestAuthorization(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, error in
+            if let error {
+                call.reject("iPhone notifications could not be enabled.", "NATIVE_NOTIFICATIONS_PERMISSION_FAILED", error)
+                return
+            }
+
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                call.resolve([
+                    "status": self.authorizationStatusString(settings.authorizationStatus),
+                    "deviceToken": Self.deviceToken as Any,
+                ])
+            }
+        }
+    }
+
+    @objc func registerForRemoteNotifications(_ call: CAPPluginCall) {
+        if let token = Self.deviceToken {
+            resolveRegistration(call, token: token)
+            return
+        }
+
+        Self.pendingRegistrationCalls.append(call)
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+            guard let index = Self.pendingRegistrationCalls.firstIndex(where: { $0 === call }) else { return }
+            Self.pendingRegistrationCalls.remove(at: index)
+            call.reject("Apple did not return a device token yet.", "NATIVE_NOTIFICATIONS_TOKEN_TIMEOUT")
+        }
+    }
+
+    @objc func setBadgeCount(_ call: CAPPluginCall) {
+        let count = max(0, call.getInt("count") ?? 0)
+        DispatchQueue.main.async {
+            UIApplication.shared.applicationIconBadgeNumber = count
+            call.resolve()
+        }
+    }
+
+    static func updateDeviceToken(_ tokenData: Data) {
+        deviceToken = tokenData.map { String(format: "%02.2hhx", $0) }.joined()
+        NotificationCenter.default.post(name: .strataRemoteNotificationsRegistered, object: deviceToken)
+    }
+
+    static func failDeviceTokenRegistration(_ error: Error) {
+        NotificationCenter.default.post(name: .strataRemoteNotificationsRegistrationFailed, object: error)
+    }
+
+    @objc private func handleRemoteNotificationRegistered(_ notification: Notification) {
+        guard let token = notification.object as? String else { return }
+        let calls = Self.pendingRegistrationCalls
+        Self.pendingRegistrationCalls.removeAll()
+        calls.forEach { resolveRegistration($0, token: token) }
+    }
+
+    @objc private func handleRemoteNotificationRegistrationFailed(_ notification: Notification) {
+        let error = notification.object as? Error
+        let calls = Self.pendingRegistrationCalls
+        Self.pendingRegistrationCalls.removeAll()
+        calls.forEach { call in
+            call.reject(
+                error?.localizedDescription ?? "Remote notification registration failed.",
+                "NATIVE_NOTIFICATIONS_REGISTRATION_FAILED",
+                error
+            )
+        }
+    }
+
+    private func resolveRegistration(_ call: CAPPluginCall, token: String) {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            call.resolve([
+                "status": self.authorizationStatusString(settings.authorizationStatus),
+                "deviceToken": token,
+            ])
+        }
+    }
+
+    private func authorizationStatusString(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined:
+            return "notDetermined"
+        case .denied:
+            return "denied"
+        case .authorized:
+            return "authorized"
+        case .provisional:
+            return "provisional"
+        case .ephemeral:
+            return "ephemeral"
+        @unknown default:
+            return "unknown"
+        }
+    }
+}
+
+private extension Notification.Name {
+    static let strataRemoteNotificationsRegistered = Notification.Name("strataRemoteNotificationsRegistered")
+    static let strataRemoteNotificationsRegistrationFailed = Notification.Name("strataRemoteNotificationsRegistrationFailed")
 }
