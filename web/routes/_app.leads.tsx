@@ -37,8 +37,10 @@ import {
 import { PageHeader } from "../components/shared/PageHeader";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { EmptyState } from "../components/shared/EmptyState";
+import { PhoneInput } from "../components/shared/PhoneInput";
 import { triggerImpactFeedback } from "@/lib/nativeInteractions";
 import { getDateSearchAliases, smartSearchMatches } from "@/lib/smartSearch";
+import { getPhoneNumberInputError } from "../lib/phone";
 import {
   buildLeadNotes,
   formatLeadSource,
@@ -565,6 +567,8 @@ export default function LeadsPage() {
     if (!formData.firstName.trim()) errors.firstName = "First name is required";
     if (!formData.lastName.trim()) errors.lastName = "Last name is required";
     if (!formData.serviceInterest.trim()) errors.serviceInterest = "Service interest is required";
+    const phoneError = getPhoneNumberInputError(formData.phone);
+    if (phoneError) errors.phone = phoneError;
 
     if (Object.keys(errors).length > 0) {
       setLocalErrors(errors);
@@ -724,7 +728,8 @@ export default function LeadsPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="leadPhone">Phone</Label>
-            <Input id="leadPhone" type="tel" value={formData.phone} onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))} placeholder="(555) 000-0000" />
+            <PhoneInput id="leadPhone" value={formData.phone} onChange={(value) => setFormData((prev) => ({ ...prev, phone: value }))} placeholder="(555) 000-0000" aria-invalid={!!getFieldError("phone")} />
+            {getFieldError("phone") ? <p className="text-sm text-destructive">{getFieldError("phone")}</p> : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="leadEmail">Email</Label>

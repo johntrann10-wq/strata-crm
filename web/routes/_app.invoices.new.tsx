@@ -37,6 +37,8 @@ import { formatPackageIncludedItems, isPackageTemplateService } from "../lib/ser
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { getTransactionalEmailErrorMessage } from "../lib/transactionalEmail";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
+import { PhoneInput } from "../components/shared/PhoneInput";
+import { getPhoneNumberInputError } from "../lib/phone";
 
 interface LineItem {
   id: string;
@@ -705,6 +707,11 @@ export default function NewInvoicePage() {
       setQuickClientError("First and last name are required.");
       return;
     }
+    const phoneError = getPhoneNumberInputError(phone);
+    if (phoneError) {
+      setQuickClientError(phoneError);
+      return;
+    }
 
     setQuickClientError("");
     const result = await createClient({
@@ -1129,11 +1136,10 @@ export default function NewInvoicePage() {
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="invoice-client-phone">Phone</Label>
-                      <Input
+                      <PhoneInput
                         id="invoice-client-phone"
-                        type="tel"
                         value={quickClientForm.phone}
-                        onChange={(event) => handleQuickClientFieldChange("phone", event.target.value)}
+                        onChange={(value) => handleQuickClientFieldChange("phone", value)}
                         placeholder="(555) 000-0000"
                         autoComplete="tel"
                       />

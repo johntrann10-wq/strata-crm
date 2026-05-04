@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +32,7 @@ import {
   type PublicShareMetadataPayload,
 } from "@/lib/publicShareMeta";
 import { cn } from "@/lib/utils";
+import { getPhoneNumberInputError } from "@/lib/phone";
 import {
   ArrowLeft,
   ArrowRight,
@@ -2453,6 +2455,8 @@ export default function PublicBookingPage() {
       if (config.requirePhone && !form.phone.trim()) {
         return "Add the best phone number for follow-up.";
       }
+      const phoneError = getPhoneNumberInputError(form.phone);
+      if (phoneError) return phoneError;
       return form.email.trim() || form.phone.trim()
         ? null
         : "Add at least an email or phone number so the shop can follow up.";
@@ -3424,7 +3428,7 @@ export default function PublicBookingPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="booking-phone">Best phone number{config.requirePhone ? " *" : ""}</Label>
-              <Input id="booking-phone" type="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="(555) 111-2222" required={config.requirePhone} className="h-12 rounded-2xl bg-slate-50" />
+              <PhoneInput id="booking-phone" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} placeholder="(555) 111-2222" required={config.requirePhone} className="h-12 rounded-2xl bg-slate-50" />
             </div>
           </div>
           <StepHint icon={UserRound} text={config.requireEmail ? "Email is required for this booking page. Add a phone number too if the team should call or text." : "Add at least one way to follow up. Confirmation is sent after the request or booking is received."} />

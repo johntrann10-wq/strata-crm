@@ -49,6 +49,7 @@ import {
   triggerNotificationFeedback,
   triggerSelectionFeedback,
 } from "@/lib/nativeInteractions";
+import { getPhoneNumberInputError } from "../lib/phone";
 
 const blank: FormState = {
   firstName: "",
@@ -503,6 +504,11 @@ export default function ClientDetailPage() {
   }
 
   const handleSave = async () => {
+    const phoneError = getPhoneNumberInputError(form.phone);
+    if (phoneError) {
+      toast.error(phoneError);
+      return;
+    }
     const result = await runUpdate({ id: id!, ...(form as any) });
     if (result?.error) {
       toast.error("Failed to save changes: " + result.error.message);

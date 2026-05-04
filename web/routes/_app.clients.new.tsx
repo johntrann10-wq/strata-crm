@@ -11,8 +11,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PhoneInput } from "../components/shared/PhoneInput";
 import { toast } from "sonner";
 import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
+import { getPhoneNumberInputError } from "../lib/phone";
 import {
   emptyVehicleCatalogFormValue,
   type VehicleCatalogFormValue,
@@ -134,6 +136,8 @@ export default function NewClientPage() {
     const errors: Record<string, string> = {};
     if (!formData.firstName.trim()) errors.firstName = "First name is required";
     if (!formData.lastName.trim()) errors.lastName = "Last name is required";
+    const phoneError = getPhoneNumberInputError(formData.phone);
+    if (phoneError) errors.phone = phoneError;
 
     if (shouldCreateVehicle && (!vehicleForm.make.trim() || !vehicleForm.model.trim())) {
       errors.vehicle = "Select or enter a make and model before saving the vehicle.";
@@ -346,15 +350,14 @@ export default function NewClientPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="phone">Phone</Label>
-            <Input
+            <PhoneInput
               id="phone"
-              type="tel"
               value={formData.phone}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, phone: e.target.value }))
-              }
+              onChange={(value) => setFormData((prev) => ({ ...prev, phone: value }))}
               placeholder="(555) 000-0000"
+              aria-invalid={!!getFieldError("phone")}
             />
+            {getFieldError("phone") ? <p className="text-sm text-destructive">{getFieldError("phone")}</p> : null}
           </div>
 
           <div className="space-y-2">
