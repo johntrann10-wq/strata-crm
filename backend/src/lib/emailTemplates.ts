@@ -54,7 +54,7 @@ function renderClientShell(options: {
                     alt="{{businessName}} logo"
                     width="{{businessLogoImageWidthAttr}}"
                     height="{{businessLogoImageHeightAttr}}"
-                    style="display:block;width:{{businessLogoImageWidth}};height:{{businessLogoImageHeight}};max-width:{{businessLogoImageWidth}};max-height:{{businessLogoImageHeight}};object-fit:{{businessLogoObjectFit}};filter:{{businessLogoFilter}};transform:{{businessLogoTransform}};transform-origin:center center;border:0;outline:none;text-decoration:none;margin:0 auto;"
+                    style="display:block;width:{{businessLogoImageWidth}};height:{{businessLogoImageHeight}};max-width:none;max-height:none;object-fit:{{businessLogoObjectFit}};filter:{{businessLogoFilter}};transform:{{businessLogoTransform}};transform-origin:center center;border:0;outline:none;text-decoration:none;margin:{{businessLogoImageMarginTop}} 0 0 {{businessLogoImageMarginLeft}};"
                   />
                 </div>
               </div>
