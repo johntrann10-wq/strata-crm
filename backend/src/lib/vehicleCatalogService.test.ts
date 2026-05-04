@@ -72,16 +72,43 @@ describe("vehicle catalog provider", () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
 
     const makes = await provider.listMakes(2024);
-    for (const expectedMake of ["Lexus", "Acura", "Jeep", "Ram", "GMC", "Cadillac", "Genesis", "Rivian"]) {
+    for (const expectedMake of [
+      "Lexus",
+      "Acura",
+      "Jeep",
+      "Ram",
+      "GMC",
+      "Cadillac",
+      "Genesis",
+      "Rivian",
+      "Polestar",
+      "Jaguar",
+      "Alfa Romeo",
+      "Chrysler",
+      "Maserati",
+      "Ferrari",
+      "Lamborghini",
+      "McLaren",
+      "Aston Martin",
+      "Bentley",
+      "Rolls-Royce",
+      "Scion",
+      "Pontiac",
+      "Hummer",
+    ]) {
       expect(makes.map((entry) => entry.value)).toContain(expectedMake);
     }
 
     const lexus = makes.find((entry) => entry.value === "Lexus");
     const jeep = makes.find((entry) => entry.value === "Jeep");
     const ram = makes.find((entry) => entry.value === "Ram");
+    const ferrari = makes.find((entry) => entry.value === "Ferrari");
+    const scion = makes.find((entry) => entry.value === "Scion");
     expect(lexus).toBeDefined();
     expect(jeep).toBeDefined();
     expect(ram).toBeDefined();
+    expect(ferrari).toBeDefined();
+    expect(scion).toBeDefined();
 
     await expect(provider.listModels(2024, lexus!.id, lexus!.value)).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ value: "RX" }), expect.objectContaining({ value: "GX" })])
@@ -91,6 +118,12 @@ describe("vehicle catalog provider", () => {
     );
     await expect(provider.listModels(2024, ram!.id, ram!.value)).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ value: "1500" }), expect.objectContaining({ value: "2500" })])
+    );
+    await expect(provider.listModels(2024, ferrari!.id, ferrari!.value)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "Roma" }), expect.objectContaining({ value: "Purosangue" })])
+    );
+    await expect(provider.listModels(2024, scion!.id, scion!.value)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "FR-S" }), expect.objectContaining({ value: "tC" })])
     );
   });
 });
