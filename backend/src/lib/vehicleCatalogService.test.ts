@@ -35,6 +35,19 @@ describe("vehicle catalog provider", () => {
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
+      if (url.includes("/GetAllMakes?format=json")) {
+        return new Response(
+          JSON.stringify({
+            Results: [
+              { Make_ID: 441, Make_Name: "TESLA" },
+              { Make_ID: 498, Make_Name: "RIVIAN" },
+              { Make_ID: 492, Make_Name: "Oldsmobile" },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
       if (url.includes("/GetModelsForMakeIdYear/makeId/tesla/modelyear/2024?format=json")) {
         return new Response(
           JSON.stringify({ Results: [] }),
@@ -61,6 +74,8 @@ describe("vehicle catalog provider", () => {
     const tesla = makes.find((entry) => entry.value === "Tesla");
     expect(tesla).toBeDefined();
     expect(makes.some((entry) => entry.value === "Rivian")).toBe(true);
+    expect(makes.some((entry) => entry.value === "Oldsmobile")).toBe(true);
+    expect(makes.filter((entry) => entry.value.toLowerCase() === "tesla")).toHaveLength(1);
 
     const models = await provider.listModels(2024, tesla!.id, tesla!.value);
     expect(models.map((entry) => entry.value)).toContain("Cybertruck");

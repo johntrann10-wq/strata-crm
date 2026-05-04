@@ -28,7 +28,14 @@ export class HybridVehicleCatalogProvider implements VehicleCatalogProvider {
   }
 
   async listMakes(year: number): Promise<VehicleCatalogOption[]> {
-    return this.curated.listMakes(year);
+    const curatedMakes = await this.curated.listMakes(year);
+    try {
+      const liveMakes = await this.nhtsa.listMakes(year);
+      return dedupeOptions([...curatedMakes, ...liveMakes]).sort((a, b) => a.label.localeCompare(b.label));
+    } catch {
+      // Keep the vehicle form usable from the curated catalog when NHTSA is unavailable.
+      return curatedMakes;
+    }
   }
 
   async listModels(year: number, makeId: string, makeName?: string | null): Promise<VehicleCatalogOption[]> {
