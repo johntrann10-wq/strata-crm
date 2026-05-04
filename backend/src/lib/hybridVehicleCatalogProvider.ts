@@ -28,24 +28,20 @@ export class HybridVehicleCatalogProvider implements VehicleCatalogProvider {
   }
 
   async listMakes(year: number): Promise<VehicleCatalogOption[]> {
-    const curatedMakes = await this.curated.listMakes(year);
-    try {
-      const liveMakes = await this.nhtsa.listMakes(year);
-      return dedupeOptions([...curatedMakes, ...liveMakes]).sort((a, b) => a.label.localeCompare(b.label));
-    } catch {
-      // Keep the vehicle form usable from the curated catalog when NHTSA is unavailable.
-      return curatedMakes;
-    }
+    return this.curated.listMakes(year);
   }
 
   async listModels(year: number, makeId: string, makeName?: string | null): Promise<VehicleCatalogOption[]> {
+    const curatedRecords = await this.curated.listModels(year, makeId, makeName);
     try {
       const records = dedupeOptions(await this.nhtsa.listModels(year, makeId, makeName));
-      if (records.length > 0) return records;
+      if (records.length > 0) {
+        return dedupeOptions([...curatedRecords, ...records]).sort((a, b) => a.label.localeCompare(b.label));
+      }
     } catch {
       // Fall back to the curated catalog when NHTSA is unavailable.
     }
-    return this.curated.listModels(year, makeId, makeName);
+    return curatedRecords;
   }
 
   async listTrims(year: number, makeId: string, modelName: string, makeName?: string | null): Promise<VehicleTrimOption[]> {
