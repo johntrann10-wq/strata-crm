@@ -132,7 +132,7 @@ type FinanceInvoiceSnapshot = {
   total: number | string | null;
   dueDate: Date | null;
   createdAt: Date;
-  issuedAt: Date;
+  issuedAt: Date | string;
   totalPaid: number | string | null;
   clientFirstName: string | null;
   clientLastName: string | null;
@@ -1144,6 +1144,9 @@ actionsRouter.post("/getFinanceDashboard", requireAuth, requireTenant, requirePe
     const amountPaid = getInvoiceMoneyTotal(invoice.totalPaid);
     const balanceDue = getInvoiceBalanceDue(invoice.total, invoice.totalPaid);
     const normalizedStatus = normalizeFinanceInvoiceStatus(invoice, now);
+    const createdAtIso = toNullableIsoString(invoice.createdAt) ?? now.toISOString();
+    const issuedAtIso = toNullableIsoString(invoice.issuedAt) ?? createdAtIso;
+    const issuedAtDate = new Date(issuedAtIso);
     return {
       id: invoice.id,
       clientName: getFinanceClientName(invoice.clientFirstName, invoice.clientLastName),
@@ -1153,9 +1156,9 @@ actionsRouter.post("/getFinanceDashboard", requireAuth, requireTenant, requirePe
       balanceDue,
       dueDate: invoice.dueDate ? invoice.dueDate.toISOString() : null,
       status: normalizedStatus,
-      createdAt: invoice.createdAt.toISOString(),
-      issuedAt: invoice.issuedAt.toISOString(),
-      isCurrentMonth: invoice.issuedAt >= monthStart && invoice.issuedAt <= monthEnd,
+      createdAt: createdAtIso,
+      issuedAt: issuedAtIso,
+      isCurrentMonth: issuedAtDate >= monthStart && issuedAtDate <= monthEnd,
     };
   });
 
