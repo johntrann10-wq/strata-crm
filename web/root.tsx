@@ -27,6 +27,14 @@ import {
   resolveAppReturnState,
   resolveNativeShellReturnUrl,
 } from "./lib/mobileShell";
+import {
+  applyThemePreference,
+  normalizeThemePreference,
+  readThemePreference,
+  STRATA_THEME_CHANGE_EVENT,
+  STRATA_THEME_STORAGE_KEY,
+  type StrataThemePreference,
+} from "./lib/theme";
 
 const isProduction = import.meta.env.PROD;
 const siteUrl = "https://stratacrm.app";
@@ -113,6 +121,56 @@ function ClientToaster() {
   useEffect(() => setMounted(true), []);
 
   return mounted ? <Toaster richColors /> : null;
+}
+
+function ThemePreferenceController() {
+  useEffect(() => {
+    applyThemePreference(readThemePreference());
+
+    const handleThemeChange = (event: Event) => {
+      const nextTheme = normalizeThemePreference((event as CustomEvent<StrataThemePreference>).detail);
+      applyThemePreference(nextTheme);
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === STRATA_THEME_STORAGE_KEY) {
+        applyThemePreference(normalizeThemePreference(event.newValue));
+      }
+    };
+
+    window.addEventListener(STRATA_THEME_CHANGE_EVENT, handleThemeChange);
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener(STRATA_THEME_CHANGE_EVENT, handleThemeChange);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
+  return null;
+}
+
+function ThemePreferenceScript() {
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `
+          (function() {
+            try {
+              var key = ${JSON.stringify(STRATA_THEME_STORAGE_KEY)};
+              var theme = window.localStorage && window.localStorage.getItem(key) === "dark" ? "dark" : "light";
+              var root = document.documentElement;
+              root.classList.toggle("dark", theme === "dark");
+              root.classList.toggle("light", theme !== "dark");
+              root.dataset.theme = theme;
+              root.style.colorScheme = theme;
+              var themeColor = document.querySelector('meta[name="theme-color"]');
+              if (themeColor) themeColor.setAttribute("content", theme === "dark" ? "#11151d" : "#f97316");
+            } catch (error) {}
+          })();
+        `,
+      }}
+    />
+  );
 }
 
 function BrowserErrorReporter() {
@@ -408,10 +466,11 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const robotsContent = shouldIndex ? "index,follow" : "noindex,nofollow";
 
   return (
-    <html lang="en" className="light">
+    <html lang="en" className="light" suppressHydrationWarning>
       <head>
         <Meta />
         <Links />
+        <ThemePreferenceScript />
         <link rel="canonical" href={canonicalUrl} />
         <meta name="robots" content={robotsContent} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
@@ -421,6 +480,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       <body>
         <Suspense>
           <MobileShellBridge />
+          <ThemePreferenceController />
           <AuthHashConsumer />
           <AnalyticsRouteTracker />
           <BrowserErrorReporter />

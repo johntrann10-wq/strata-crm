@@ -327,6 +327,24 @@ function getSelectedServiceCategoryKeys(
   );
 }
 
+function buildSelectedAddonSuggestions(
+  services: ServiceCatalogRecord[],
+  addonLinks: PackageAddonLinkRecord[],
+  selectedServiceIds: string[],
+) {
+  return services
+    .filter((service) => selectedServiceIds.includes(service.id))
+    .map((baseService) => {
+      const linkedAddons = addonLinks
+        .filter((link) => link.parentServiceId === baseService.id)
+        .map((link) => services.find((candidate) => candidate.id === link.addonServiceId))
+        .filter((addon): addon is ServiceCatalogRecord => Boolean(addon) && !selectedServiceIds.includes(addon.id));
+
+      return linkedAddons.length > 0 ? { baseService, linkedAddons } : null;
+    })
+    .filter(Boolean) as Array<{ baseService: ServiceCatalogRecord; linkedAddons: ServiceCatalogRecord[] }>;
+}
+
 function normalizePriceDraft(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -1451,6 +1469,10 @@ export default function NewAppointmentPage() {
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [selectedServiceIds, services]
   );
+  const selectedAddonSuggestions = useMemo(
+    () => buildSelectedAddonSuggestions(services as ServiceCatalogRecord[], addonLinks, selectedServiceIds),
+    [addonLinks, selectedServiceIds, services]
+  );
   const sourcePreviewLines = useMemo<string[]>(
     () =>
       sourceContext
@@ -1833,6 +1855,47 @@ export default function NewAppointmentPage() {
                       <p className="mt-4 text-xs text-muted-foreground">No services selected.</p>
                     )}
                   </div>
+
+                  {selectedAddonSuggestions.length > 0 ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/75 p-4 shadow-sm">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-950">Optional add-ons</p>
+                          <p className="text-xs text-amber-800">
+                            Add configured upgrades without digging through the full service list.
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-900">
+                          Revenue lift
+                        </Badge>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {selectedAddonSuggestions.map((suggestion) => (
+                          <div key={suggestion.baseService.id} className="space-y-2">
+                            <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-800">
+                              For {suggestion.baseService.name}
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {suggestion.linkedAddons.map((addon) => (
+                                <button
+                                  key={addon.id}
+                                  type="button"
+                                  onClick={() => toggleService(addon.id)}
+                                  className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50"
+                                >
+                                  <span className="min-w-0 break-words font-medium text-slate-950">{addon.name}</span>
+                                  <span className="inline-flex shrink-0 items-center gap-1 text-slate-600">
+                                    <Plus className="h-3.5 w-3.5" />
+                                    ${toMoneyNumber(addon.price).toFixed(2)}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {recommendedPackageTemplates.length + otherPackageTemplates.length > 0 && (
                     <Accordion type="single" collapsible className="rounded-2xl border border-border/70 bg-card px-3 sm:px-4">

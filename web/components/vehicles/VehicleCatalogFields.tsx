@@ -51,6 +51,7 @@ function SearchableCatalogSelect({
   emptyMessage,
   disabled,
   loading,
+  mobileDropdown = false,
   onSelect,
 }: {
   options: CatalogOption[];
@@ -61,49 +62,62 @@ function SearchableCatalogSelect({
   emptyMessage: string;
   disabled?: boolean;
   loading?: boolean;
+  mobileDropdown?: boolean;
   onSelect: (option: CatalogOption) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const displayLabel = loading ? placeholder.replace("Select", "Loading") : selectedLabel || placeholder;
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      role="combobox"
+      aria-expanded={open}
+      disabled={disabled}
+      className="h-10 w-full justify-between rounded-md px-3 font-normal"
+    >
+      <span className={cn("truncate", !selectedLabel && "text-muted-foreground")}>{displayLabel}</span>
+      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+    </Button>
+  );
+  const optionList = (
+    <Command shouldFilter>
+      <CommandInput placeholder={searchPlaceholder} />
+      <CommandList className={cn(mobileDropdown ? "max-h-[min(15rem,42dvh)]" : "max-h-72")}>
+        <CommandEmpty>{emptyMessage}</CommandEmpty>
+        <CommandGroup>
+          {options.map((option) => (
+            <CommandItem
+              key={option.id}
+              value={`${option.label} ${option.value}`}
+              onSelect={() => {
+                onSelect(option);
+                setOpen(false);
+              }}
+            >
+              <Check className={cn("mr-2 h-4 w-4", value === option.id ? "opacity-100" : "opacity-0")} />
+              <span className="truncate">{option.label}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="h-10 w-full justify-between rounded-md px-3 font-normal"
-        >
-          <span className={cn("truncate", !selectedLabel && "text-muted-foreground")}>
-            {loading ? placeholder.replace("Select", "Loading") : selectedLabel || placeholder}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+        {trigger}
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] overflow-hidden p-0" align="start">
-        <Command shouldFilter>
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.id}
-                  value={`${option.label} ${option.value}`}
-                  onSelect={() => {
-                    onSelect(option);
-                    setOpen(false);
-                  }}
-                >
-                  <Check className={cn("mr-2 h-4 w-4", value === option.id ? "opacity-100" : "opacity-0")} />
-                  <span className="truncate">{option.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+      <PopoverContent
+        className={cn(
+          "z-[80] w-[--radix-popover-trigger-width] overflow-hidden rounded-xl p-0 shadow-lg",
+          mobileDropdown && "max-w-[calc(100vw-2rem)]"
+        )}
+        align="start"
+        sideOffset={6}
+      >
+        {optionList}
       </PopoverContent>
     </Popover>
   );
@@ -419,6 +433,7 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
               emptyMessage={value.year ? "No makes found." : "Select a year first."}
               disabled={!value.year || loadingMakes}
               loading={loadingMakes}
+              mobileDropdown={useNativeMobileSelects}
               onSelect={(selected) => {
                 updateValue({
                   makeId: selected.id,
@@ -448,6 +463,7 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
               emptyMessage={value.makeId ? "No models found." : "Select a make first."}
               disabled={!value.makeId || loadingModels}
               loading={loadingModels}
+              mobileDropdown={useNativeMobileSelects}
               onSelect={(selected) => {
                 updateValue({
                   modelId: selected.id,

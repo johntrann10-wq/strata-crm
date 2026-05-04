@@ -35,6 +35,7 @@ import {
   ExternalLink,
   Loader2,
   MapPin,
+  Moon,
   RefreshCw,
   Server,
   Shield,
@@ -42,6 +43,7 @@ import {
   Plus,
   Settings,
   Sparkles,
+  Sun,
   Trash2,
   UserCircle,
   Users,
@@ -95,6 +97,12 @@ import {
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
 import { isNativeIOSApp } from "../lib/mobileShell";
+import {
+  applyThemePreference,
+  readThemePreference,
+  writeThemePreference,
+  type StrataThemePreference,
+} from "../lib/theme";
 import {
   businessSettingsFormFromSource,
   DEFAULT_BUSINESS_SETTINGS_FORM,
@@ -1479,6 +1487,7 @@ export default function SettingsPage() {
     checkedAt: null,
   });
   const nativeShellSession = isNativeIOSApp();
+  const [themePreference, setThemePreference] = useState<StrataThemePreference>(() => readThemePreference());
 
   useEffect(() => {
     let cancelled = false;
@@ -1615,7 +1624,6 @@ export default function SettingsPage() {
     integrationStatus?.registry.find((item) => item.provider === "outbound_webhooks") ?? null;
   const outboundWebhookActivity = (outboundWebhookActivityData as OutboundWebhookActivityRecord[] | undefined) ?? [];
   const providerConfiguration = integrationStatus?.infrastructure.providerConfiguration;
-  const vaultConfigured = integrationStatus?.infrastructure.vaultConfigured ?? false;
   const quickBooksBackendConfigured = providerConfiguration?.quickbooks_online ?? false;
   const googleCalendarBackendConfigured = providerConfiguration?.google_calendar ?? false;
   const twilioBackendConfigured = providerConfiguration?.twilio_sms ?? false;
@@ -1670,6 +1678,12 @@ export default function SettingsPage() {
       setActiveTab(tab);
     }
   }, [activeTab, searchParams]);
+
+  useEffect(() => {
+    const currentTheme = readThemePreference();
+    setThemePreference(currentTheme);
+    applyThemePreference(currentTheme);
+  }, []);
 
   useEffect(() => {
     const quickBooksState = searchParams.get("quickbooks");
@@ -2737,6 +2751,39 @@ export default function SettingsPage() {
     automationSettings.reviewRequestsEnabled,
     automationSettings.lapsedClientsEnabled,
   ].filter(Boolean).length;
+
+  const handleThemeToggle = useCallback((enabled: boolean) => {
+    const nextTheme = writeThemePreference(enabled ? "dark" : "light");
+    setThemePreference(nextTheme);
+    toast.success(nextTheme === "dark" ? "Dark mode enabled." : "Light mode enabled.");
+  }, []);
+
+  const appearanceSettingsCard = (
+    <Card className="border-border/80 bg-card">
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              {themePreference === "dark" ? (
+                <Moon className="h-4 w-4 text-primary" />
+              ) : (
+                <Sun className="h-4 w-4 text-primary" />
+              )}
+              <p className="text-sm font-semibold">Dark mode</p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Use the side-nav inspired dark grey theme across this device.
+            </p>
+          </div>
+          <label className="flex min-h-12 items-center justify-between gap-3 rounded-xl border bg-background/70 px-3 py-2 text-sm sm:min-w-[13rem]">
+            <span className="font-medium">{themePreference === "dark" ? "On" : "Off"}</span>
+            <Switch checked={themePreference === "dark"} onCheckedChange={handleThemeToggle} />
+          </label>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   const settingsNavItems = [
     {
       value: "profile",
@@ -2824,6 +2871,8 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {appearanceSettingsCard}
 
         <Tabs
           value={activeTab}
@@ -3711,35 +3760,17 @@ export default function SettingsPage() {
                 <div className="rounded-xl border bg-background p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
-                      <p className="text-sm font-medium">Integration infrastructure</p>
+                      <p className="text-sm font-medium">Connection health</p>
                       <p className="text-sm text-muted-foreground">
-                        Phase 0 foundation status for provider feature flags, encrypted connection state, and background failure visibility.
+                        Provider readiness and background sync visibility for connected tools.
                       </p>
                     </div>
                     <Badge variant="outline">
                       {integrationStatusFetching ? "Refreshing..." : `${integrationStatus?.connections.length ?? 0} connections`}
                     </Badge>
                   </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-4 grid gap-3">
                     <div className="rounded-lg border bg-muted/20 p-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vault</p>
-                      <p className="mt-2 text-sm font-medium">
-                        {integrationStatus?.infrastructure.vaultConfigured ? "Configured" : "Missing"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        `INTEGRATION_VAULT_SECRET` is required for encrypted provider credentials.
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/20 p-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cron secret</p>
-                      <p className="mt-2 text-sm font-medium">
-                        {integrationStatus?.infrastructure.cronSecretConfigured ? "Configured" : "Missing"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Production queue runners are safer when `CRON_SECRET` is enforced.
-                      </p>
-                    </div>
-                    <div className="rounded-lg border bg-muted/20 p-3 md:col-span-2">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider readiness</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {(integrationStatus?.registry ?? []).map((entry) => {
@@ -4252,12 +4283,6 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-
-                {!vaultConfigured ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    Integration connections stay read-only until <span className="font-mono">INTEGRATION_VAULT_SECRET</span> is configured in production.
-                  </div>
-                ) : null}
 
                 <div className="rounded-xl border bg-background p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
