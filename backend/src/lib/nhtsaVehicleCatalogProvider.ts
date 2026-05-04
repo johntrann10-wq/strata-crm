@@ -133,22 +133,57 @@ export class NhtsaVehicleCatalogProvider implements VehicleCatalogProvider {
   async listModels(year: number, makeId: string, makeName?: string | null): Promise<VehicleCatalogOption[]> {
     const encodedMakeId = encodeURIComponent(makeId);
     return withVehicleCatalogCache(`nhtsa:models:${year}:${encodedMakeId}`, DAY_MS, async () => {
-      const body = await fetchJson<VpicResponse<ModelRow>>(
-        `/GetModelsForMakeIdYear/makeId/${encodedMakeId}/modelyear/${encodeURIComponent(String(year))}?format=json`
-      );
-      const rows = (body.Results ?? [])
-        .map(normalizeModelOption)
-        .filter((item): item is VehicleCatalogOption => Boolean(item))
-        .sort((a, b) => a.label.localeCompare(b.label));
+      const rows: VehicleCatalogOption[] = [];
 
-      if (rows.length > 0 || !makeName) return rows;
+      try {
+        const body = await fetchJson<VpicResponse<ModelRow>>(
+          `/GetModelsForMakeIdYear/makeId/${encodedMakeId}/modelyear/${encodeURIComponent(String(year))}?format=json`
+        );
+        rows.push(
+          ...(body.Results ?? [])
+            .map(normalizeModelOption)
+            .filter((item): item is VehicleCatalogOption => Boolean(item))
+        );
+      } catch {
+        // Continue to make-name lookups when the make-id endpoint is unavailable or not useful for curated IDs.
+      }
 
-      const fallbackBody = await fetchJson<VpicResponse<ModelRow>>(
-        `/GetModelsForMakeYear/make/${encodeURIComponent(makeName)}/modelyear/${encodeURIComponent(String(year))}?format=json`
-      );
-      return (fallbackBody.Results ?? [])
-        .map(normalizeModelOption)
-        .filter((item): item is VehicleCatalogOption => Boolean(item))
+      if (makeName) {
+        try {
+          const fallbackBody = await fetchJson<VpicResponse<ModelRow>>(
+            `/GetModelsForMakeYear/make/${encodeURIComponent(makeName)}/modelyear/${encodeURIComponent(String(year))}?format=json`
+          );
+          rows.push(
+            ...(fallbackBody.Results ?? [])
+              .map(normalizeModelOption)
+              .filter((item): item is VehicleCatalogOption => Boolean(item))
+          );
+        } catch {
+          // Continue to the broad all-year model lookup.
+        }
+
+        try {
+          const allYearBody = await fetchJson<VpicResponse<ModelRow>>(
+            `/GetModelsForMake/${encodeURIComponent(makeName)}?format=json`
+          );
+          rows.push(
+            ...(allYearBody.Results ?? [])
+              .map(normalizeModelOption)
+              .filter((item): item is VehicleCatalogOption => Boolean(item))
+          );
+        } catch {
+          // A broad lookup miss should not discard year-specific results.
+        }
+      }
+
+      const seen = new Set<string>();
+      return rows
+        .filter((item) => {
+          const key = item.value.trim().toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
         .sort((a, b) => a.label.localeCompare(b.label));
     });
   }
@@ -174,4 +209,3 @@ export class NhtsaVehicleCatalogProvider implements VehicleCatalogProvider {
     });
   }
 }
-
