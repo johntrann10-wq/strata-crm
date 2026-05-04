@@ -14,6 +14,9 @@ describe("vehicle catalog provider", () => {
     expect(makes.some((entry) => entry.value === "Toyota")).toBe(true);
     expect(makes.some((entry) => entry.value === "Honda")).toBe(true);
     expect(makes.some((entry) => entry.value === "Tesla")).toBe(true);
+    expect(makes.some((entry) => entry.value === "Lexus")).toBe(true);
+    expect(makes.some((entry) => entry.value === "Jeep")).toBe(true);
+    expect(makes.some((entry) => entry.value === "Ram")).toBe(true);
 
     const toyota = makes.find((entry) => entry.value === "Toyota");
     expect(toyota).toBeDefined();
@@ -57,10 +60,37 @@ describe("vehicle catalog provider", () => {
     const makes = await provider.listMakes(2024);
     const tesla = makes.find((entry) => entry.value === "Tesla");
     expect(tesla).toBeDefined();
-    expect(makes.some((entry) => entry.value === "Rivian")).toBe(false);
+    expect(makes.some((entry) => entry.value === "Rivian")).toBe(true);
 
     const models = await provider.listModels(2024, tesla!.id, tesla!.value);
     expect(models.map((entry) => entry.value)).toContain("Cybertruck");
     expect(models.map((entry) => entry.value)).toContain("Model X");
+  });
+
+  it("includes larger curated coverage for popular automakers when live lookup is unavailable", async () => {
+    const provider = getVehicleCatalogProvider();
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+
+    const makes = await provider.listMakes(2024);
+    for (const expectedMake of ["Lexus", "Acura", "Jeep", "Ram", "GMC", "Cadillac", "Genesis", "Rivian"]) {
+      expect(makes.map((entry) => entry.value)).toContain(expectedMake);
+    }
+
+    const lexus = makes.find((entry) => entry.value === "Lexus");
+    const jeep = makes.find((entry) => entry.value === "Jeep");
+    const ram = makes.find((entry) => entry.value === "Ram");
+    expect(lexus).toBeDefined();
+    expect(jeep).toBeDefined();
+    expect(ram).toBeDefined();
+
+    await expect(provider.listModels(2024, lexus!.id, lexus!.value)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "RX" }), expect.objectContaining({ value: "GX" })])
+    );
+    await expect(provider.listModels(2024, jeep!.id, jeep!.value)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "Wrangler" }), expect.objectContaining({ value: "Grand Cherokee" })])
+    );
+    await expect(provider.listModels(2024, ram!.id, ram!.value)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "1500" }), expect.objectContaining({ value: "2500" })])
+    );
   });
 });
