@@ -11,6 +11,14 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
@@ -51,6 +59,7 @@ function SearchableCatalogSelect({
   emptyMessage,
   disabled,
   loading,
+  mobileDialog,
   onSelect,
 }: {
   options: CatalogOption[];
@@ -61,49 +70,73 @@ function SearchableCatalogSelect({
   emptyMessage: string;
   disabled?: boolean;
   loading?: boolean;
+  mobileDialog?: boolean;
   onSelect: (option: CatalogOption) => void;
 }) {
   const [open, setOpen] = useState(false);
 
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      role="combobox"
+      aria-expanded={open}
+      disabled={disabled}
+      className="h-10 w-full justify-between rounded-md px-3 font-normal"
+    >
+      <span className={cn("truncate", !selectedLabel && "text-muted-foreground")}>
+        {loading ? placeholder.replace("Select", "Loading") : selectedLabel || placeholder}
+      </span>
+      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+    </Button>
+  );
+
+  const optionList = (
+    <Command shouldFilter>
+      <CommandInput placeholder={searchPlaceholder} />
+      <CommandList className="max-h-[min(65svh,24rem)]">
+        <CommandEmpty>{emptyMessage}</CommandEmpty>
+        <CommandGroup>
+          {options.map((option) => (
+            <CommandItem
+              key={option.id}
+              value={`${option.label} ${option.value}`}
+              onSelect={() => {
+                onSelect(option);
+                setOpen(false);
+              }}
+            >
+              <Check className={cn("mr-2 h-4 w-4", value === option.id ? "opacity-100" : "opacity-0")} />
+              <span className="truncate">{option.label}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  );
+
+  if (mobileDialog) {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+        <DialogContent className="top-auto bottom-0 max-h-[85svh] translate-y-0 gap-3 rounded-t-[1.75rem] rounded-b-none p-4" showCloseButton>
+          <DialogHeader className="pr-10 text-left">
+            <DialogTitle className="text-lg">{placeholder}</DialogTitle>
+            <DialogDescription>{searchPlaceholder}</DialogDescription>
+          </DialogHeader>
+          <div className="overflow-hidden rounded-2xl border border-border/80 bg-background">
+            {optionList}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="h-10 w-full justify-between rounded-md px-3 font-normal"
-        >
-          <span className={cn("truncate", !selectedLabel && "text-muted-foreground")}>
-            {loading ? placeholder.replace("Select", "Loading") : selectedLabel || placeholder}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] overflow-hidden p-0" align="start">
-        <Command shouldFilter>
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.id}
-                  value={`${option.label} ${option.value}`}
-                  onSelect={() => {
-                    onSelect(option);
-                    setOpen(false);
-                  }}
-                >
-                  <Check className={cn("mr-2 h-4 w-4", value === option.id ? "opacity-100" : "opacity-0")} />
-                  <span className="truncate">{option.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+        {optionList}
       </PopoverContent>
     </Popover>
   );
@@ -419,6 +452,7 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
               emptyMessage={value.year ? "No makes found." : "Select a year first."}
               disabled={!value.year || loadingMakes}
               loading={loadingMakes}
+              mobileDialog={useNativeMobileSelects}
               onSelect={(selected) => {
                 updateValue({
                   makeId: selected.id,
@@ -448,6 +482,7 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
               emptyMessage={value.makeId ? "No models found." : "Select a make first."}
               disabled={!value.makeId || loadingModels}
               loading={loadingModels}
+              mobileDialog={useNativeMobileSelects}
               onSelect={(selected) => {
                 updateValue({
                   modelId: selected.id,
