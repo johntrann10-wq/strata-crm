@@ -218,10 +218,14 @@ export type ResolvedTemplateMessage = {
 const defaultBusinessLogoVars: TemplateVars = {
   businessLogoUrl: undefined,
   businessLogoDisplay: "none",
-  businessLogoFrameWidth: "96px",
-  businessLogoFrameHeight: "72px",
+  businessLogoFrameWidth: "88px",
+  businessLogoFrameHeight: "64px",
   businessLogoFrameRadius: "22px",
-  businessLogoPadding: "14px",
+  businessLogoPadding: "12px",
+  businessLogoImageWidth: "64px",
+  businessLogoImageHeight: "40px",
+  businessLogoImageWidthAttr: 64,
+  businessLogoImageHeightAttr: 40,
   businessLogoBackground: "rgba(255,255,255,0.98)",
   businessLogoBorder: "rgba(226,232,240,0.95)",
   businessLogoShadow: "0 18px 36px rgba(15,23,42,0.08)",
@@ -237,18 +241,22 @@ function buildBusinessLogoTransformCss(params: {
   offsetX: number;
   offsetY: number;
 }) {
-  const frameWidth = params.fitMode === "wordmark" ? 184 : 96;
-  const frameHeight = 72;
-  const padding = params.fitMode === "cover" ? 0 : params.fitMode === "wordmark" ? 16 : 14;
+  const frameWidth = params.fitMode === "wordmark" ? 176 : 88;
+  const frameHeight = params.fitMode === "wordmark" ? 64 : 64;
+  const padding = params.fitMode === "cover" ? 0 : params.fitMode === "wordmark" ? 12 : 12;
   const innerWidth = Math.max(frameWidth - padding * 2, 1);
   const innerHeight = Math.max(frameHeight - padding * 2, 1);
-  const translateX = Math.round(params.offsetX * innerWidth * 0.18 * 100) / 100;
-  const translateY = Math.round(params.offsetY * innerHeight * 0.18 * 100) / 100;
+  const translateX = Math.round(params.offsetX * innerWidth * 0.12 * 100) / 100;
+  const translateY = Math.round(params.offsetY * innerHeight * 0.12 * 100) / 100;
   return {
     width: `${frameWidth}px`,
     height: `${frameHeight}px`,
     radius: `${params.fitMode === "wordmark" ? 22 : 22}px`,
     padding: `${padding}px`,
+    imageWidth: `${innerWidth}px`,
+    imageHeight: `${innerHeight}px`,
+    imageWidthAttr: innerWidth,
+    imageHeightAttr: innerHeight,
     objectFit: params.fitMode === "cover" ? "cover" : "contain",
     transform: `translate(${translateX}px, ${translateY}px) rotate(${params.rotationDeg}deg) scale(${params.zoom})`,
   };
@@ -368,6 +376,10 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
     businessLogoFrameHeight: logoFrame.height,
     businessLogoFrameRadius: logoFrame.radius,
     businessLogoPadding: logoFrame.padding,
+    businessLogoImageWidth: logoFrame.imageWidth,
+    businessLogoImageHeight: logoFrame.imageHeight,
+    businessLogoImageWidthAttr: logoFrame.imageWidthAttr,
+    businessLogoImageHeightAttr: logoFrame.imageHeightAttr,
     businessLogoBackground: plate.background,
     businessLogoBorder: plate.border,
     businessLogoShadow: plate.shadow,
