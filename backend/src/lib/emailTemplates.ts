@@ -47,17 +47,18 @@ function renderClientShell(options: {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
           <tr>
             <td style="display:{{businessLogoDisplay}};width:{{businessLogoFrameWidth}};padding:0 14px 0 0;vertical-align:middle;">
-              <div style="width:{{businessLogoFrameWidth}};height:{{businessLogoFrameHeight}};border-radius:{{businessLogoFrameRadius}};overflow:hidden;background:{{businessLogoBackground}};border:1px solid {{businessLogoBorder}};box-shadow:{{businessLogoShadow}};text-align:center;line-height:0;">
-                <div style="padding:{{businessLogoPadding}};line-height:0;">
-                  <img
-                    src="{{businessLogoUrl}}"
-                    alt="{{businessName}} logo"
-                    width="{{businessLogoImageWidthAttr}}"
-                    height="{{businessLogoImageHeightAttr}}"
-                    style="display:block;width:{{businessLogoImageWidth}};height:{{businessLogoImageHeight}};max-width:none;max-height:none;object-fit:{{businessLogoObjectFit}};filter:{{businessLogoFilter}};transform:{{businessLogoTransform}};transform-origin:center center;border:0;outline:none;text-decoration:none;margin:{{businessLogoImageMarginTop}} 0 0 {{businessLogoImageMarginLeft}};"
-                  />
-                </div>
-              </div>
+              <table role="presentation" width="{{businessLogoFrameWidth}}" height="{{businessLogoFrameHeight}}" cellspacing="0" cellpadding="0" style="width:{{businessLogoFrameWidth}};height:{{businessLogoFrameHeight}};border-collapse:separate;border-radius:{{businessLogoFrameRadius}};background:{{businessLogoBackground}};border:1px solid {{businessLogoBorder}};box-shadow:{{businessLogoShadow}};">
+                <tr>
+                  <td width="{{businessLogoFrameWidth}}" height="{{businessLogoFrameHeight}}" align="center" valign="middle" style="width:{{businessLogoFrameWidth}};height:{{businessLogoFrameHeight}};text-align:center;vertical-align:middle;line-height:0;padding:0;">
+                    <img
+                      src="{{businessLogoUrl}}"
+                      alt="{{businessName}} logo"
+                      width="{{businessLogoImageWidthAttr}}"
+                      style="display:inline-block;width:auto;max-width:{{businessLogoImageMaxWidth}};height:auto;max-height:{{businessLogoImageMaxHeight}};filter:{{businessLogoFilter}};border:0;outline:none;text-decoration:none;vertical-align:middle;"
+                    />
+                  </td>
+                </tr>
+              </table>
             </td>
             <td style="vertical-align:middle;">
               <div style="font-size:18px;line-height:1.25;font-weight:700;color:#0f172a;">${options.businessName}</div>
