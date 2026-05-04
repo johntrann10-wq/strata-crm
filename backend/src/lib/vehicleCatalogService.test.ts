@@ -30,7 +30,7 @@ describe("vehicle catalog provider", () => {
     expect(trims.find((entry) => entry.value === "SE")?.bodyStyle).toBe("Sedan");
   });
 
-  it("keeps the make list fast while using the broader NHTSA catalog for models when available", async () => {
+  it("keeps the make list fast and clean while using NHTSA for extra models when available", async () => {
     const provider = getVehicleCatalogProvider();
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -75,7 +75,9 @@ describe("vehicle catalog provider", () => {
     expect(tesla).toBeDefined();
     expect(makes.some((entry) => entry.value === "Rivian")).toBe(true);
     expect(makes.some((entry) => entry.value === "Oldsmobile")).toBe(true);
+    expect(makes.some((entry) => entry.value.toLowerCase().includes("tractor"))).toBe(false);
     expect(makes.filter((entry) => entry.value.toLowerCase() === "tesla")).toHaveLength(1);
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([input]) => String(input).includes("/GetAllMakes"))).toBe(false);
 
     const models = await provider.listModels(2024, tesla!.id, tesla!.value);
     expect(models.map((entry) => entry.value)).toContain("Cybertruck");
@@ -119,14 +121,16 @@ describe("vehicle catalog provider", () => {
     const ram = makes.find((entry) => entry.value === "Ram");
     const ferrari = makes.find((entry) => entry.value === "Ferrari");
     const scion = makes.find((entry) => entry.value === "Scion");
+    const oldsmobile = makes.find((entry) => entry.value === "Oldsmobile");
     expect(lexus).toBeDefined();
     expect(jeep).toBeDefined();
     expect(ram).toBeDefined();
     expect(ferrari).toBeDefined();
     expect(scion).toBeDefined();
+    expect(oldsmobile).toBeDefined();
 
     await expect(provider.listModels(2024, lexus!.id, lexus!.value)).resolves.toEqual(
-      expect.arrayContaining([expect.objectContaining({ value: "RX" }), expect.objectContaining({ value: "GX" })])
+      expect.arrayContaining([expect.objectContaining({ value: "RX" }), expect.objectContaining({ value: "GX" }), expect.objectContaining({ value: "RZ" })])
     );
     await expect(provider.listModels(2024, jeep!.id, jeep!.value)).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ value: "Wrangler" }), expect.objectContaining({ value: "Grand Cherokee" })])
@@ -139,6 +143,9 @@ describe("vehicle catalog provider", () => {
     );
     await expect(provider.listModels(2024, scion!.id, scion!.value)).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ value: "FR-S" }), expect.objectContaining({ value: "tC" })])
+    );
+    await expect(provider.listModels(2024, oldsmobile!.id, oldsmobile!.value)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "Alero" }), expect.objectContaining({ value: "Bravada" })])
     );
   });
 });

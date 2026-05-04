@@ -623,6 +623,229 @@ const MAKES: MakeSeed[] = [
   },
 ];
 
+const ADDITIONAL_MAKES: MakeSeed[] = [
+  {
+    name: "Oldsmobile",
+    models: [
+      model("Alero", "Sedan", "2.4L I4", ["GX", "GL", "GLS"]),
+      model("Aurora", "Sedan", "4.0L V8", ["Base", "V8"]),
+      model("Bravada", "SUV", "4.2L I6", ["Base", "AWD"]),
+      model("Cutlass", "Sedan", "3.1L V6", ["Base", "Supreme"]),
+      model("Intrigue", "Sedan", "3.5L V6", ["GX", "GL", "GLS"]),
+    ],
+  },
+  {
+    name: "Plymouth",
+    models: [
+      model("Breeze", "Sedan", "2.4L I4", ["Base", "Expresso"]),
+      model("Neon", "Sedan", "2.0L I4", ["Base", "Highline"]),
+      model("Prowler", "Convertible", "3.5L V6", ["Base"]),
+      model("Voyager", "Minivan", "3.3L V6", ["Base", "SE", "LX"]),
+    ],
+  },
+  {
+    name: "Maybach",
+    models: [
+      model("57", "Sedan", "5.5L Twin Turbo V12", ["Base", "S"]),
+      model("62", "Sedan", "5.5L Twin Turbo V12", ["Base", "S"]),
+      model("S 580", "Sedan", "4.0L Twin Turbo V8", ["4MATIC"]),
+      model("S 680", "Sedan", "6.0L Twin Turbo V12", ["4MATIC"]),
+      model("GLS 600", "SUV", "4.0L Twin Turbo V8", ["4MATIC"]),
+    ],
+  },
+  {
+    name: "VinFast",
+    models: [
+      model("VF 6", "SUV", "Electric", ["Eco", "Plus"]),
+      model("VF 7", "SUV", "Electric", ["Eco", "Plus"]),
+      model("VF 8", "SUV", "Dual Motor Electric", ["Eco", "Plus"]),
+      model("VF 9", "SUV", "Dual Motor Electric", ["Eco", "Plus"]),
+    ],
+  },
+  {
+    name: "Fisker",
+    models: [
+      model("Ocean", "SUV", "Dual Motor Electric", ["Sport", "Ultra", "Extreme"]),
+      model("Karma", "Sedan", "Plug-In Hybrid", ["EcoSport", "EcoChic"]),
+    ],
+  },
+  {
+    name: "INEOS",
+    models: [
+      model("Grenadier", "SUV", "3.0L Turbo I6", ["Base", "Trialmaster", "Fieldmaster"]),
+      model("Quartermaster", "Truck", "3.0L Turbo I6", ["Base", "Trialmaster", "Fieldmaster"]),
+    ],
+  },
+];
+
+const EXTRA_MODELS_BY_MAKE: Record<string, ModelSeed[]> = {
+  Toyota: [
+    model("Avalon", "Sedan", "3.5L V6", ["XLE", "Touring", "Limited"]),
+    model("C-HR", "SUV", "2.0L I4", ["LE", "XLE", "Limited"]),
+    model("Crown", "Sedan", "2.5L Hybrid", ["XLE", "Limited", "Platinum"]),
+    model("Venza", "SUV", "2.5L Hybrid", ["LE", "XLE", "Limited"]),
+    model("Sequoia", "SUV", "3.4L Hybrid V6", ["SR5", "Limited", "Platinum", "Capstone"]),
+    model("Land Cruiser", "SUV", "2.4L Hybrid I4", ["1958", "Land Cruiser", "First Edition"]),
+    model("bZ4X", "SUV", "Electric", ["XLE", "Limited"]),
+    model("Yaris", "Hatchback", "1.5L I4", ["L", "LE", "SE"]),
+  ],
+  Honda: [
+    model("Fit", "Hatchback", "1.5L I4", ["LX", "Sport", "EX"]),
+    model("Insight", "Sedan", "1.5L Hybrid", ["LX", "EX", "Touring"]),
+    model("Clarity", "Sedan", "Plug-In Hybrid", ["Base", "Touring"]),
+    model("Element", "SUV", "2.4L I4", ["LX", "EX", "SC"]),
+    model("Crosstour", "Hatchback", "3.5L V6", ["EX", "EX-L"]),
+    model("S2000", "Convertible", "2.2L I4", ["Base", "CR"]),
+    model("Prologue", "SUV", "Dual Motor Electric", ["EX", "Touring", "Elite"]),
+  ],
+  Ford: [
+    model("Super Duty F-250", "Truck", "6.8L V8", ["XL", "XLT", "Lariat", "Platinum"]),
+    model("Super Duty F-350", "Truck", "6.8L V8", ["XL", "XLT", "Lariat", "Platinum"]),
+    model("Edge", "SUV", "2.0L EcoBoost I4", ["SE", "SEL", "Titanium", "ST"]),
+    model("Fusion", "Sedan", "2.5L I4", ["S", "SE", "Titanium", "Hybrid"]),
+    model("Focus", "Hatchback", "2.0L I4", ["S", "SE", "ST", "RS"]),
+    model("Fiesta", "Hatchback", "1.6L I4", ["S", "SE", "ST"]),
+    model("Taurus", "Sedan", "3.5L V6", ["SE", "SEL", "Limited", "SHO"]),
+    model("Transit", "Van", "3.5L V6", ["Cargo Van", "Passenger Van", "Crew Van"]),
+    model("Transit Connect", "Van", "2.0L I4", ["XL", "XLT", "Titanium"]),
+    model("E-Series", "Van", "7.3L V8", ["Cutaway", "Stripped Chassis"]),
+    model("Mach-E", "SUV", "Dual Motor Electric", ["Select", "Premium", "GT"]),
+  ],
+  Chevrolet: [
+    model("Silverado 2500HD", "Truck", "6.6L V8", ["Work Truck", "LT", "LTZ", "High Country"]),
+    model("Silverado 3500HD", "Truck", "6.6L V8", ["Work Truck", "LT", "LTZ", "High Country"]),
+    model("Suburban", "SUV", "5.3L V8", ["LS", "LT", "RST", "Premier", "High Country"]),
+    model("Trailblazer", "SUV", "1.3L Turbo I3", ["LS", "LT", "RS", "Activ"]),
+    model("Trax", "SUV", "1.2L Turbo I3", ["LS", "LT", "RS", "Activ"]),
+    model("Impala", "Sedan", "3.6L V6", ["LS", "LT", "Premier"]),
+    model("Cruze", "Sedan", "1.4L Turbo I4", ["L", "LS", "LT", "Premier"]),
+    model("Sonic", "Hatchback", "1.4L Turbo I4", ["LS", "LT", "Premier"]),
+    model("Bolt EV", "Hatchback", "Electric", ["LT", "Premier", "2LT"]),
+    model("Bolt EUV", "SUV", "Electric", ["LT", "Premier"]),
+    model("Express", "Van", "4.3L V6", ["Cargo Van", "Passenger Van", "Cutaway"]),
+    model("Avalanche", "Truck", "5.3L V8", ["LS", "LT", "LTZ"]),
+  ],
+  BMW: [
+    model("230i", "Coupe", "2.0L Turbo I4", ["Base", "M Sport"]),
+    model("530i", "Sedan", "2.0L Turbo I4", ["Base", "M Sport"]),
+    model("540i", "Sedan", "3.0L Turbo I6", ["Base", "M Sport"]),
+    model("740i", "Sedan", "3.0L Turbo I6", ["Base", "M Sport"]),
+    model("M2", "Coupe", "3.0L Twin Turbo I6", ["Base"]),
+    model("M5", "Sedan", "4.4L Twin Turbo V8", ["Base", "Competition"]),
+    model("X1", "SUV", "2.0L Turbo I4", ["sDrive28i", "xDrive28i", "M35i"]),
+    model("X2", "SUV", "2.0L Turbo I4", ["xDrive28i", "M35i"]),
+    model("X4", "SUV", "2.0L Turbo I4", ["xDrive30i", "M40i"]),
+    model("X6", "SUV", "3.0L Turbo I6", ["xDrive40i", "M60i"]),
+    model("Z4", "Convertible", "2.0L Turbo I4", ["sDrive30i", "M40i"]),
+    model("i4", "Sedan", "Electric", ["eDrive35", "eDrive40", "M50"]),
+    model("iX", "SUV", "Dual Motor Electric", ["xDrive50", "M60"]),
+  ],
+  "Mercedes-Benz": [
+    model("A 220", "Sedan", "2.0L Turbo I4", ["Base", "4MATIC"]),
+    model("S 500", "Sedan", "3.0L Turbo I6", ["Base", "4MATIC"]),
+    model("S 580", "Sedan", "4.0L Twin Turbo V8", ["Base", "4MATIC"]),
+    model("GLA 250", "SUV", "2.0L Turbo I4", ["Base", "4MATIC"]),
+    model("GLB 250", "SUV", "2.0L Turbo I4", ["Base", "4MATIC"]),
+    model("G 550", "SUV", "4.0L Twin Turbo V8", ["Base"]),
+    model("AMG GT", "Coupe", "4.0L Twin Turbo V8", ["43", "53", "63"]),
+    model("SL", "Convertible", "4.0L Twin Turbo V8", ["43", "55", "63"]),
+    model("Sprinter", "Van", "2.0L Turbo Diesel I4", ["Cargo Van", "Crew Van", "Passenger Van"]),
+    model("Metris", "Van", "2.0L Turbo I4", ["Cargo Van", "Passenger Van"]),
+    model("EQB", "SUV", "Dual Motor Electric", ["250+", "300", "350"]),
+    model("EQE", "Sedan", "Dual Motor Electric", ["350", "500", "AMG"]),
+    model("EQS", "Sedan", "Dual Motor Electric", ["450+", "580", "AMG"]),
+  ],
+  Audi: [
+    model("A3", "Sedan", "2.0L Turbo I4", ["Premium", "Premium Plus"]),
+    model("A7", "Sedan", "3.0L Turbo V6", ["Premium", "Premium Plus", "Prestige"]),
+    model("A8", "Sedan", "3.0L Turbo V6", ["Base", "L"]),
+    model("S3", "Sedan", "2.0L Turbo I4", ["Premium", "Premium Plus"]),
+    model("S5", "Coupe", "3.0L Turbo V6", ["Premium", "Premium Plus", "Prestige"]),
+    model("SQ5", "SUV", "3.0L Turbo V6", ["Premium", "Premium Plus", "Prestige"]),
+    model("Q4 e-tron", "SUV", "Electric", ["Premium", "Premium Plus", "Prestige"]),
+    model("Q8", "SUV", "3.0L Turbo V6", ["Premium", "Premium Plus", "Prestige"]),
+    model("e-tron", "SUV", "Dual Motor Electric", ["Premium", "Premium Plus", "Prestige"]),
+    model("TT", "Coupe", "2.0L Turbo I4", ["Base", "S"]),
+    model("R8", "Coupe", "5.2L V10", ["V10", "Performance"]),
+  ],
+  Nissan: [
+    model("Versa", "Sedan", "1.6L I4", ["S", "SV", "SR"]),
+    model("Maxima", "Sedan", "3.5L V6", ["SV", "SR", "Platinum"]),
+    model("Leaf", "Hatchback", "Electric", ["S", "SV Plus"]),
+    model("Kicks", "SUV", "1.6L I4", ["S", "SV", "SR"]),
+    model("Murano", "SUV", "3.5L V6", ["SV", "SL", "Platinum"]),
+    model("Pathfinder", "SUV", "3.5L V6", ["SV", "SL", "Platinum", "Rock Creek"]),
+    model("Ariya", "SUV", "Dual Motor Electric", ["Engage", "Evolve+", "Platinum+"]),
+    model("Titan", "Truck", "5.6L V8", ["S", "SV", "PRO-4X", "Platinum Reserve"]),
+    model("Quest", "Minivan", "3.5L V6", ["S", "SV", "SL", "Platinum"]),
+    model("Juke", "SUV", "1.6L Turbo I4", ["S", "SV", "SL", "NISMO"]),
+  ],
+  Hyundai: [
+    model("Accent", "Sedan", "1.6L I4", ["SE", "SEL", "Limited"]),
+    model("Venue", "SUV", "1.6L I4", ["SE", "SEL", "Limited"]),
+    model("Veloster", "Hatchback", "2.0L I4", ["Base", "Turbo", "N"]),
+    model("Ioniq", "Hatchback", "Hybrid", ["Blue", "SEL", "Limited"]),
+    model("IONIQ 6", "Sedan", "Dual Motor Electric", ["SE", "SEL", "Limited"]),
+    model("Santa Cruz", "Truck", "2.5L I4", ["SE", "SEL", "Limited"]),
+    model("Nexo", "SUV", "Hydrogen Fuel Cell", ["Blue", "Limited"]),
+  ],
+  Kia: [
+    model("Rio", "Sedan", "1.6L I4", ["LX", "S"]),
+    model("Soul", "Hatchback", "2.0L I4", ["LX", "S", "GT-Line"]),
+    model("Seltos", "SUV", "2.0L I4", ["LX", "S", "EX", "SX"]),
+    model("Niro", "SUV", "Hybrid", ["LX", "EX", "SX"]),
+    model("Carnival", "Minivan", "3.5L V6", ["LX", "EX", "SX", "SX Prestige"]),
+    model("Cadenza", "Sedan", "3.3L V6", ["Premium", "Technology", "Limited"]),
+    model("Optima", "Sedan", "2.4L I4", ["LX", "EX", "SX", "Hybrid"]),
+    model("EV9", "SUV", "Dual Motor Electric", ["Light", "Wind", "Land", "GT-Line"]),
+  ],
+  Volkswagen: [
+    model("Passat", "Sedan", "2.0L Turbo I4", ["S", "SE", "R-Line"]),
+    model("Beetle", "Hatchback", "2.0L Turbo I4", ["S", "SE", "Dune"]),
+    model("Arteon", "Sedan", "2.0L Turbo I4", ["SE", "SEL R-Line", "Premium"]),
+    model("Atlas Cross Sport", "SUV", "2.0L Turbo I4", ["SE", "SEL", "SEL Premium"]),
+    model("ID.4", "SUV", "Electric", ["Standard", "Pro", "Pro S"]),
+    model("Touareg", "SUV", "3.6L V6", ["Sport", "Lux", "Executive"]),
+    model("CC", "Sedan", "2.0L Turbo I4", ["Sport", "R-Line", "Executive"]),
+  ],
+  GMC: [
+    model("Savana", "Van", "4.3L V6", ["Cargo Van", "Passenger Van", "Cutaway"]),
+    model("Sierra 2500HD", "Truck", "6.6L V8", ["Pro", "SLE", "SLT", "AT4", "Denali"]),
+    model("Sierra 3500HD", "Truck", "6.6L V8", ["Pro", "SLE", "SLT", "AT4", "Denali"]),
+    model("Yukon XL", "SUV", "5.3L V8", ["SLE", "SLT", "AT4", "Denali"]),
+  ],
+  Subaru: [
+    model("Legacy", "Sedan", "2.5L H4", ["Premium", "Sport", "Limited", "Touring XT"]),
+    model("Solterra", "SUV", "Dual Motor Electric", ["Premium", "Limited", "Touring"]),
+    model("Tribeca", "SUV", "3.6L H6", ["Base", "Limited", "Touring"]),
+  ],
+  Mazda: [
+    model("Mazda6", "Sedan", "2.5L I4", ["Sport", "Touring", "Grand Touring"]),
+    model("CX-3", "SUV", "2.0L I4", ["Sport", "Touring", "Grand Touring"]),
+    model("CX-7", "SUV", "2.5L I4", ["i SV", "i Sport", "s Touring"]),
+    model("CX-9", "SUV", "2.5L Turbo I4", ["Sport", "Touring", "Grand Touring", "Signature"]),
+    model("RX-8", "Coupe", "1.3L Rotary", ["Sport", "Grand Touring", "R3"]),
+  ],
+  Lexus: [
+    model("CT", "Hatchback", "1.8L Hybrid", ["200h", "Premium", "F Sport"]),
+    model("HS", "Sedan", "2.4L Hybrid", ["250h", "Premium"]),
+      model("LFA", "Coupe", "4.8L V10", ["Base", "Nurburgring"]),
+    model("RZ", "SUV", "Dual Motor Electric", ["300e", "450e"]),
+  ],
+  Acura: [
+    model("ILX", "Sedan", "2.4L I4", ["Base", "Premium", "A-Spec"]),
+    model("TSX", "Sedan", "2.4L I4", ["Base", "Special Edition"]),
+    model("RLX", "Sedan", "3.5L V6", ["Base", "Sport Hybrid"]),
+  ],
+  Jeep: [
+    model("Commander", "SUV", "3.7L V6", ["Sport", "Limited", "Overland"]),
+    model("Liberty", "SUV", "3.7L V6", ["Sport", "Limited"]),
+    model("Patriot", "SUV", "2.4L I4", ["Sport", "Latitude", "Limited"]),
+  ],
+};
+
+const ALL_MAKES = [...MAKES, ...ADDITIONAL_MAKES];
+
 function makeId(make: string) {
   return make.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
@@ -633,6 +856,20 @@ function modelId(make: string, model: string) {
 
 function trimId(make: string, model: string, trim: string) {
   return `${modelId(make, model)}:${trim.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
+function findMake(makeIdValue: string, makeName?: string | null): MakeSeed | undefined {
+  return ALL_MAKES.find((entry) => makeId(entry.name) === makeIdValue || entry.name.toLowerCase() === String(makeName ?? "").toLowerCase());
+}
+
+function getModelsForMake(make: MakeSeed): ModelSeed[] {
+  const seen = new Set<string>();
+  return [...make.models, ...(EXTRA_MODELS_BY_MAKE[make.name] ?? [])].filter((entry) => {
+    const key = entry.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 const years = Array.from({ length: new Date().getFullYear() - 1980 }, (_, index) => new Date().getFullYear() + 1 - index);
@@ -646,7 +883,7 @@ export class CuratedVehicleCatalogProvider implements VehicleCatalogProvider {
   }
 
   async listMakes(_year: number): Promise<VehicleCatalogOption[]> {
-    return MAKES.map((make) => ({
+    return ALL_MAKES.map((make) => ({
       id: makeId(make.name),
       label: make.name,
       value: make.name,
@@ -656,9 +893,9 @@ export class CuratedVehicleCatalogProvider implements VehicleCatalogProvider {
   }
 
   async listModels(_year: number, makeIdValue: string, makeName?: string | null): Promise<VehicleCatalogOption[]> {
-    const make = MAKES.find((entry) => makeId(entry.name) === makeIdValue || entry.name.toLowerCase() === String(makeName ?? "").toLowerCase());
+    const make = findMake(makeIdValue, makeName);
     if (!make) return [];
-    return make.models.map((model) => ({
+    return getModelsForMake(make).map((model) => ({
       id: modelId(make.name, model.name),
       label: model.name,
       value: model.name,
@@ -668,8 +905,8 @@ export class CuratedVehicleCatalogProvider implements VehicleCatalogProvider {
   }
 
   async listTrims(_year: number, makeIdValue: string, modelName: string, makeName?: string | null): Promise<VehicleTrimOption[]> {
-    const make = MAKES.find((entry) => makeId(entry.name) === makeIdValue || entry.name.toLowerCase() === String(makeName ?? "").toLowerCase());
-    const model = make?.models.find((entry) => entry.name.toLowerCase() === modelName.toLowerCase());
+    const make = findMake(makeIdValue, makeName);
+    const model = make ? getModelsForMake(make).find((entry) => entry.name.toLowerCase() === modelName.toLowerCase()) : undefined;
     if (!make || !model) return [];
     return model.trims.map((trim) => ({
       id: trimId(make.name, model.name, trim.name),
