@@ -1,8 +1,17 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { api } from "../../api";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -10,11 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, ScanLine, Wrench } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, ScanLine, Wrench } from "lucide-react";
 import {
   buildVehicleDisplayName,
   type VehicleCatalogFormValue,
 } from "../../lib/vehicles";
+import { cn } from "@/lib/utils";
 
 type CatalogOption = {
   id: string;
@@ -31,6 +41,73 @@ type Props = {
   setValue: Dispatch<SetStateAction<VehicleCatalogFormValue>>;
   compact?: boolean;
 };
+
+function SearchableCatalogSelect({
+  options,
+  value,
+  selectedLabel,
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
+  disabled,
+  loading,
+  onSelect,
+}: {
+  options: CatalogOption[];
+  value: string;
+  selectedLabel: string;
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyMessage: string;
+  disabled?: boolean;
+  loading?: boolean;
+  onSelect: (option: CatalogOption) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="h-10 w-full justify-between rounded-md px-3 font-normal"
+        >
+          <span className={cn("truncate", !selectedLabel && "text-muted-foreground")}>
+            {loading ? placeholder.replace("Select", "Loading") : selectedLabel || placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] overflow-hidden p-0" align="start">
+        <Command shouldFilter>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList>
+            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.id}
+                  value={`${option.label} ${option.value}`}
+                  onSelect={() => {
+                    onSelect(option);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === option.id ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function VehicleCatalogFields({ value, setValue, compact = false }: Props) {
   const [years, setYears] = useState<Array<{ id: string; year: number; label: string }>>([]);
@@ -333,126 +410,56 @@ export function VehicleCatalogFields({ value, setValue, compact = false }: Props
             <Label>
               Make <span className="text-destructive">*</span>
             </Label>
-            {useNativeMobileSelects ? (
-              <select
-                className={mobileSelectClassName}
-                value={value.makeId}
-                onChange={(event) => {
-                  const nextMakeId = event.target.value;
-                  const selected = makes.find((entry) => entry.id === nextMakeId);
-                  updateValue({
-                    makeId: nextMakeId,
-                    make: selected?.value ?? "",
-                    model: "",
-                    modelId: "",
-                    trim: "",
-                    bodyStyle: "",
-                    engine: "",
-                    source: selected?.source ?? "nhtsa_vpic",
-                    sourceVehicleId: selected?.sourceVehicleId ?? "",
-                  });
-                }}
-                disabled={!value.year || loadingMakes}
-              >
-                <option value="">{loadingMakes ? "Loading makes..." : "Select make"}</option>
-                {makes.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Select
-                value={value.makeId}
-                onValueChange={(nextMakeId) => {
-                  const selected = makes.find((entry) => entry.id === nextMakeId);
-                  updateValue({
-                    makeId: nextMakeId,
-                    make: selected?.value ?? "",
-                    model: "",
-                    modelId: "",
-                    trim: "",
-                    bodyStyle: "",
-                    engine: "",
-                    source: selected?.source ?? "nhtsa_vpic",
-                    sourceVehicleId: selected?.sourceVehicleId ?? "",
-                  });
-                }}
-                disabled={!value.year || loadingMakes}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingMakes ? "Loading makes..." : "Select make"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {makes.map((entry) => (
-                    <SelectItem key={entry.id} value={entry.id}>
-                      {entry.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <SearchableCatalogSelect
+              options={makes}
+              value={value.makeId}
+              selectedLabel={value.make}
+              placeholder="Select make"
+              searchPlaceholder="Search makes..."
+              emptyMessage={value.year ? "No makes found." : "Select a year first."}
+              disabled={!value.year || loadingMakes}
+              loading={loadingMakes}
+              onSelect={(selected) => {
+                updateValue({
+                  makeId: selected.id,
+                  make: selected.value,
+                  model: "",
+                  modelId: "",
+                  trim: "",
+                  bodyStyle: "",
+                  engine: "",
+                  source: selected.source ?? "nhtsa_vpic",
+                  sourceVehicleId: selected.sourceVehicleId ?? "",
+                });
+              }}
+            />
           </div>
 
           <div className="space-y-2">
             <Label>
               Model <span className="text-destructive">*</span>
             </Label>
-            {useNativeMobileSelects ? (
-              <select
-                className={mobileSelectClassName}
-                value={value.modelId}
-                onChange={(event) => {
-                  const nextModelId = event.target.value;
-                  const selected = models.find((entry) => entry.id === nextModelId);
-                  updateValue({
-                    modelId: nextModelId,
-                    model: selected?.value ?? "",
-                    trim: "",
-                    bodyStyle: "",
-                    engine: "",
-                    source: selected?.source ?? "nhtsa_vpic",
-                    sourceVehicleId: selected?.sourceVehicleId ?? "",
-                  });
-                }}
-                disabled={!value.makeId || loadingModels}
-              >
-                <option value="">{loadingModels ? "Loading models..." : "Select model"}</option>
-                {models.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Select
-                value={value.modelId}
-                onValueChange={(nextModelId) => {
-                  const selected = models.find((entry) => entry.id === nextModelId);
-                  updateValue({
-                    modelId: nextModelId,
-                    model: selected?.value ?? "",
-                    trim: "",
-                    bodyStyle: "",
-                    engine: "",
-                    source: selected?.source ?? "nhtsa_vpic",
-                    sourceVehicleId: selected?.sourceVehicleId ?? "",
-                  });
-                }}
-                disabled={!value.makeId || loadingModels}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingModels ? "Loading models..." : "Select model"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((entry) => (
-                    <SelectItem key={entry.id} value={entry.id}>
-                      {entry.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <SearchableCatalogSelect
+              options={models}
+              value={value.modelId}
+              selectedLabel={value.model}
+              placeholder="Select model"
+              searchPlaceholder="Search models..."
+              emptyMessage={value.makeId ? "No models found." : "Select a make first."}
+              disabled={!value.makeId || loadingModels}
+              loading={loadingModels}
+              onSelect={(selected) => {
+                updateValue({
+                  modelId: selected.id,
+                  model: selected.value,
+                  trim: "",
+                  bodyStyle: "",
+                  engine: "",
+                  source: selected.source ?? "nhtsa_vpic",
+                  sourceVehicleId: selected.sourceVehicleId ?? "",
+                });
+              }}
+            />
           </div>
 
           <div className="space-y-2">
