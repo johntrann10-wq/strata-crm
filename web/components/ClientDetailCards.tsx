@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { getDisplayedAppointmentAmount } from "@/lib/appointmentAmounts";
 import { Car, CalendarDays, Plus } from "lucide-react";
 
@@ -201,9 +202,9 @@ export function ClientEditForm({
       {/* Phone */}
       <div className="flex flex-col gap-1">
         <Label className="text-xs">Phone</Label>
-        <Input
+        <PhoneInput
           value={formState.phone}
-          onChange={(e) => setFormState((p) => ({ ...p, phone: e.target.value }))}
+          onChange={(value) => setFormState((p) => ({ ...p, phone: value }))}
         />
       </div>
 

@@ -79,6 +79,7 @@ import {
   type RuntimeErrorEntry,
 } from "../lib/runtimeErrors";
 import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
+import { PhoneInput } from "../components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import {
   getBillingAccessLabel,
@@ -103,6 +104,7 @@ import {
   parseAppointmentBufferDraft,
   type BusinessSettingsFormData,
 } from "../lib/businessSettingsForm";
+import { getPhoneNumberInputError } from "../lib/phone";
 
 const BUSINESS_TYPES = [
   { value: "auto_detailing", label: "Auto Detailing" },
@@ -2432,6 +2434,11 @@ export default function SettingsPage() {
 
   const handleSaveLocation = async () => {
     if (!locForm.name.trim() || !business?.id) return;
+    const phoneError = getPhoneNumberInputError(locForm.phone, "Location phone");
+    if (phoneError) {
+      toast.error(phoneError);
+      return;
+    }
 
     if (editingLocation) {
       await updateLocation({
@@ -2629,6 +2636,11 @@ export default function SettingsPage() {
   const handleSave = async () => {
     if (!business?.id) {
       toast.error("No business found to save.");
+      return;
+    }
+    const phoneError = getPhoneNumberInputError(formData.phone, "Business phone");
+    if (phoneError) {
+      toast.error(phoneError);
       return;
     }
 
@@ -2909,11 +2921,10 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="phone">Phone</Label>
-                    <Input
+                    <PhoneInput
                       id="phone"
-                      type="tel"
                       value={formData.phone}
-                      onChange={(e) => handleFieldChange("phone", e.target.value)}
+                      onChange={(value) => handleFieldChange("phone", value)}
                       placeholder="(555) 000-0000"
                     />
                   </div>
@@ -5344,9 +5355,9 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Phone</Label>
-              <Input
+              <PhoneInput
                 value={locForm.phone}
-                onChange={(e) => setLocForm((current) => ({ ...current, phone: e.target.value }))}
+                onChange={(value) => setLocForm((current) => ({ ...current, phone: value }))}
                 placeholder="(555) 000-0000"
               />
             </div>

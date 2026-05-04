@@ -7,8 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { getPhoneNumberInputError } from "@/lib/phone";
 import {
   resolvePublicShareMetadata,
   usePublicShareMeta,
@@ -170,6 +172,11 @@ export default function PublicLeadCapturePage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!businessId) return;
+    const phoneError = getPhoneNumberInputError(form.phone);
+    if (phoneError) {
+      setError(phoneError);
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -347,11 +354,10 @@ export default function PublicLeadCapturePage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lead-phone">Best phone number</Label>
-                      <Input
+                      <PhoneInput
                         id="lead-phone"
-                        type="tel"
                         value={form.phone}
-                        onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
+                        onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
                         placeholder="(555) 111-2222"
                         className="h-11 rounded-2xl bg-slate-50/60 px-4 shadow-none focus-visible:bg-white"
                       />

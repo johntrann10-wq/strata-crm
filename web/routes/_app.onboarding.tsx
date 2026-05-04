@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
+import { PhoneInput } from "@/components/shared/PhoneInput";
+import { getPhoneNumberInputError } from "@/lib/phone";
 import {
   ArrowLeft,
   ArrowRight,
@@ -143,6 +145,11 @@ export default function OnboardingPage() {
     setValidationError(null);
   };
 
+  const handlePhoneChange = (value: string) => {
+    setFormData((current) => ({ ...current, phone: value }));
+    setValidationError(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedType) {
@@ -153,6 +160,12 @@ export default function OnboardingPage() {
     const typeDefaults = getBusinessTypeWorkspaceDefaults(selectedType);
     if (!formData.name.trim()) {
       setValidationError("Business name is required.");
+      return;
+    }
+    const phoneError = getPhoneNumberInputError(formData.phone, "Business phone");
+    if (phoneError) {
+      setValidationError(phoneError);
+      setShowOptionalBasics(true);
       return;
     }
 
@@ -362,7 +375,7 @@ export default function OnboardingPage() {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label htmlFor="phone" className="text-sm font-medium text-[#d1d5db]">Phone</Label>
-                          <Input id="phone" type="tel" value={formData.phone} onChange={handleFieldChange("phone")} placeholder="(555) 000-0000" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
+                          <PhoneInput id="phone" value={formData.phone} onChange={handlePhoneChange} placeholder="(555) 000-0000" className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="email" className="text-sm font-medium text-[#d1d5db]">Email</Label>

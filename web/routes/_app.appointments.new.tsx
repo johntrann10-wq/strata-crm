@@ -65,6 +65,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PhoneInput } from "../components/shared/PhoneInput";
 import { VehicleCatalogFields } from "../components/vehicles/VehicleCatalogFields";
 import {
   buildQuarterHourOptions,
@@ -77,6 +78,7 @@ import {
   formatVehicleLabel,
   type VehicleCatalogFormValue,
 } from "../lib/vehicles";
+import { getPhoneNumberInputError } from "../lib/phone";
 
 const toMoneyNumber = (value: unknown): number => {
   const numeric = Number(value ?? 0);
@@ -1086,6 +1088,11 @@ export default function NewAppointmentPage() {
       setQuickClientError("First and last name are required.");
       return;
     }
+    const phoneError = getPhoneNumberInputError(phone);
+    if (phoneError) {
+      setQuickClientError(phoneError);
+      return;
+    }
     setQuickClientError("");
     const result = await createClient({
       firstName,
@@ -1670,11 +1677,10 @@ export default function NewAppointmentPage() {
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="quick-client-phone">Phone</Label>
-                        <Input
+                        <PhoneInput
                           id="quick-client-phone"
-                          type="tel"
                           value={quickClientForm.phone}
-                          onChange={(event) => handleQuickClientFieldChange("phone", event.target.value)}
+                          onChange={(value) => handleQuickClientFieldChange("phone", value)}
                           placeholder="(555) 000-0000"
                           autoComplete="tel"
                         />

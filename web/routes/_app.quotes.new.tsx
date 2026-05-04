@@ -42,6 +42,8 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
+import { PhoneInput } from "../components/shared/PhoneInput";
+import { getPhoneNumberInputError } from "../lib/phone";
 
 type LineItem = {
   id: string;
@@ -548,6 +550,11 @@ export default function NewQuotePage() {
 
     if (!firstName || !lastName) {
       setQuickClientError("First and last name are required.");
+      return;
+    }
+    const phoneError = getPhoneNumberInputError(phone);
+    if (phoneError) {
+      setQuickClientError(phoneError);
       return;
     }
 
@@ -1303,11 +1310,10 @@ export default function NewQuotePage() {
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="quote-client-phone">Phone</Label>
-                        <Input
+                        <PhoneInput
                           id="quote-client-phone"
-                          type="tel"
                           value={quickClientForm.phone}
-                          onChange={(event) => handleQuickClientFieldChange("phone", event.target.value)}
+                          onChange={(value) => handleQuickClientFieldChange("phone", value)}
                           placeholder="(555) 000-0000"
                           autoComplete="tel"
                         />
