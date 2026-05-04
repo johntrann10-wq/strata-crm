@@ -34,10 +34,12 @@ describe("builtin email templates", () => {
     const html = getBuiltinTemplate("appointment_confirmation")?.bodyHtml ?? "";
     expect(html).toContain('role="presentation"');
     expect(html).toContain("{{businessLogoImageWidthAttr}}");
-    expect(html).toContain("{{businessLogoImageHeightAttr}}");
+    expect(html).toContain("{{businessLogoImageMaxWidth}}");
+    expect(html).toContain("{{businessLogoImageMaxHeight}}");
     expect(html).not.toContain("display:flex");
     expect(html).not.toContain("calc(");
     expect(html).not.toContain("position:absolute");
     expect(html).not.toContain("scale(");
+    expect(html).not.toContain("margin:{{businessLogoImageMarginTop}}");
   });
 });
