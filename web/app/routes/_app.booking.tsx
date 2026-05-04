@@ -507,6 +507,89 @@ function getUnsupportedBookingBuilderKeys(message: string | undefined): string[]
 const MAX_BOOKING_LOGO_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_BOOKING_LOGO_DIMENSION = 1200;
 const MAX_BOOKING_LOGO_DATA_URL_LENGTH = 400_000;
+const BOOKING_LOGO_ALPHA_THRESHOLD = 16;
+const BOOKING_LOGO_WHITE_THRESHOLD = 246;
+const BOOKING_LOGO_CROP_PADDING_RATIO = 0.1;
+
+type LogoPixelBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+type BookingLogoDataUrlResult = {
+  dataUrl: string;
+  fitMode: BookingBrandLogoTransform["fitMode"];
+};
+
+function createEmptyLogoBounds(): LogoPixelBounds {
+  return { minX: Number.POSITIVE_INFINITY, minY: Number.POSITIVE_INFINITY, maxX: -1, maxY: -1 };
+}
+
+function extendLogoBounds(bounds: LogoPixelBounds, x: number, y: number) {
+  bounds.minX = Math.min(bounds.minX, x);
+  bounds.minY = Math.min(bounds.minY, y);
+  bounds.maxX = Math.max(bounds.maxX, x);
+  bounds.maxY = Math.max(bounds.maxY, y);
+}
+
+function hasLogoBounds(bounds: LogoPixelBounds) {
+  return bounds.maxX >= bounds.minX && bounds.maxY >= bounds.minY;
+}
+
+function detectLogoContentBounds(imageData: ImageData): LogoPixelBounds | null {
+  const alphaBounds = createEmptyLogoBounds();
+  const nonWhiteBounds = createEmptyLogoBounds();
+  const { data, width, height } = imageData;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const alpha = data[index + 3] ?? 0;
+      if (alpha <= BOOKING_LOGO_ALPHA_THRESHOLD) continue;
+
+      extendLogoBounds(alphaBounds, x, y);
+
+      const red = data[index] ?? 255;
+      const green = data[index + 1] ?? 255;
+      const blue = data[index + 2] ?? 255;
+      const isNearWhite =
+        red >= BOOKING_LOGO_WHITE_THRESHOLD &&
+        green >= BOOKING_LOGO_WHITE_THRESHOLD &&
+        blue >= BOOKING_LOGO_WHITE_THRESHOLD;
+      if (!isNearWhite) {
+        extendLogoBounds(nonWhiteBounds, x, y);
+      }
+    }
+  }
+
+  if (hasLogoBounds(nonWhiteBounds)) {
+    return nonWhiteBounds;
+  }
+  if (hasLogoBounds(alphaBounds)) {
+    return alphaBounds;
+  }
+  return null;
+}
+
+function padLogoBounds(bounds: LogoPixelBounds, width: number, height: number): LogoPixelBounds {
+  const contentWidth = bounds.maxX - bounds.minX + 1;
+  const contentHeight = bounds.maxY - bounds.minY + 1;
+  const padding = Math.max(8, Math.round(Math.max(contentWidth, contentHeight) * BOOKING_LOGO_CROP_PADDING_RATIO));
+
+  return {
+    minX: Math.max(0, bounds.minX - padding),
+    minY: Math.max(0, bounds.minY - padding),
+    maxX: Math.min(width - 1, bounds.maxX + padding),
+    maxY: Math.min(height - 1, bounds.maxY + padding),
+  };
+}
+
+function inferLogoFitMode(width: number, height: number): BookingBrandLogoTransform["fitMode"] {
+  const aspectRatio = width / Math.max(height, 1);
+  return aspectRatio >= 2.2 ? "wordmark" : "contain";
+}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -540,7 +623,7 @@ function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   });
 }
 
-async function buildBookingLogoDataUrl(file: File): Promise<string> {
+async function buildBookingLogoDataUrl(file: File): Promise<BookingLogoDataUrlResult> {
   if (file.size > MAX_BOOKING_LOGO_FILE_BYTES) {
     throw new Error("Logo image must be smaller than 4 MB.");
   }
@@ -550,7 +633,7 @@ async function buildBookingLogoDataUrl(file: File): Promise<string> {
     if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
       throw new Error("That SVG is too large. Try a smaller logo file.");
     }
-    return dataUrl;
+    return { dataUrl, fitMode: defaultBookingBrandLogoTransform.fitMode };
   }
 
   const image = await loadImageFromFile(file);
@@ -571,21 +654,60 @@ async function buildBookingLogoDataUrl(file: File): Promise<string> {
   context.clearRect(0, 0, width, height);
   context.drawImage(image, 0, 0, width, height);
 
-  let dataUrl = canvas.toDataURL("image/webp", 0.9);
+  const detectedBounds = detectLogoContentBounds(context.getImageData(0, 0, width, height));
+  const paddedBounds = detectedBounds ? padLogoBounds(detectedBounds, width, height) : null;
+  const croppedWidth = paddedBounds ? paddedBounds.maxX - paddedBounds.minX + 1 : width;
+  const croppedHeight = paddedBounds ? paddedBounds.maxY - paddedBounds.minY + 1 : height;
+  const cropArea = croppedWidth * croppedHeight;
+  const fullArea = width * height;
+  const shouldCrop = paddedBounds && cropArea > 0 && cropArea < fullArea * 0.92;
+  const outputScale = Math.min(1, MAX_BOOKING_LOGO_DIMENSION / Math.max(croppedWidth, croppedHeight, 1));
+  const outputWidth = Math.max(1, Math.round(croppedWidth * outputScale));
+  const outputHeight = Math.max(1, Math.round(croppedHeight * outputScale));
+  const outputCanvas = document.createElement("canvas");
+  outputCanvas.width = outputWidth;
+  outputCanvas.height = outputHeight;
+
+  const outputContext = outputCanvas.getContext("2d");
+  if (!outputContext) {
+    throw new Error("Could not process that image.");
+  }
+
+  outputContext.clearRect(0, 0, outputWidth, outputHeight);
+  if (shouldCrop && paddedBounds) {
+    outputContext.drawImage(
+      canvas,
+      paddedBounds.minX,
+      paddedBounds.minY,
+      croppedWidth,
+      croppedHeight,
+      0,
+      0,
+      outputWidth,
+      outputHeight
+    );
+  } else {
+    outputContext.drawImage(canvas, 0, 0, width, height, 0, 0, outputWidth, outputHeight);
+  }
+
+  let dataUrl = outputCanvas.toDataURL("image/webp", 0.9);
   if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
-    dataUrl = canvas.toDataURL("image/png");
+    dataUrl = outputCanvas.toDataURL("image/png");
   }
   if (dataUrl.length > MAX_BOOKING_LOGO_DATA_URL_LENGTH) {
     throw new Error("That logo is too detailed. Try a simpler image or smaller file.");
   }
 
-  return dataUrl;
+  return { dataUrl, fitMode: inferLogoFitMode(outputWidth, outputHeight) };
 }
 
-function createFreshLogoTransform(current?: BookingBrandLogoTransform | null): BookingBrandLogoTransform {
+function createFreshLogoTransform(
+  current?: BookingBrandLogoTransform | null,
+  inferredFitMode?: BookingBrandLogoTransform["fitMode"]
+): BookingBrandLogoTransform {
   return {
     ...defaultBookingBrandLogoTransform,
-    fitMode: current?.fitMode ?? defaultBookingBrandLogoTransform.fitMode,
+    fitMode: inferredFitMode ?? current?.fitMode ?? defaultBookingBrandLogoTransform.fitMode,
     backgroundPlate: current?.backgroundPlate ?? defaultBookingBrandLogoTransform.backgroundPlate,
   };
 }
@@ -969,9 +1091,9 @@ export default function BookingBuilderPage() {
 
     setLogoUploading(true);
     try {
-      const nextLogoUrl = await buildBookingLogoDataUrl(file);
-      openLogoEditor(nextLogoUrl, createFreshLogoTransform(form.bookingBrandLogoTransform));
-      toast.success("Logo ready to frame.");
+      const nextLogo = await buildBookingLogoDataUrl(file);
+      openLogoEditor(nextLogo.dataUrl, createFreshLogoTransform(form.bookingBrandLogoTransform, nextLogo.fitMode));
+      toast.success("Logo auto-fitted. Review the framing, then save.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not upload that logo.");
     } finally {
