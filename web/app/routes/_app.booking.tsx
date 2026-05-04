@@ -726,6 +726,7 @@ export default function BookingBuilderPage() {
   const [logoEditorTransform, setLogoEditorTransform] = useState<BookingBrandLogoTransform>(
     defaultBookingBrandLogoTransform
   );
+  const [logoEditorCompact, setLogoEditorCompact] = useState(false);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [serviceForm, setServiceForm] = useState<BookingBuilderServiceFormState>(
     buildServiceFormState(null)
@@ -740,6 +741,15 @@ export default function BookingBuilderPage() {
     startOffsetX: number;
     startOffsetY: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const sync = () => setLogoEditorCompact(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
 
   const [{ data: business, fetching, error }, refetchBusiness] = useFindOne(api.business, businessId ?? "", {
     pause: !businessId || !canRead,
@@ -1675,24 +1685,24 @@ export default function BookingBuilderPage() {
       </div>
 
       <Dialog open={logoEditorOpen} onOpenChange={setLogoEditorOpen}>
-        <DialogContent className="max-w-[1120px] border-slate-200/80 bg-white/98 p-0 sm:max-w-[1120px]">
-          <DialogHeader className="border-b border-slate-200/80 px-6 pt-6">
+        <DialogContent className="max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[1120px] overflow-y-auto border-slate-200/80 bg-white/98 p-0 sm:max-w-[1120px]">
+          <DialogHeader className="border-b border-slate-200/80 px-4 pt-4 sm:px-6 sm:pt-6">
             <DialogTitle>Logo crop and framing</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm leading-5">
               Drag to reposition, rotate in fine steps, and choose the fit that should carry through the booking page, confirmation view, emails, and social previews.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="border-b border-slate-200/80 bg-slate-50/70 p-6 lg:border-r lg:border-b-0">
-              <div className="space-y-4 rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-slate-200/80 bg-slate-50/70 p-3 sm:p-6 lg:border-r lg:border-b-0">
+              <div className="space-y-3 rounded-[1.5rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.14),transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-3 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:space-y-4 sm:rounded-[2rem] sm:p-6">
                 <div className="space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Editor canvas</p>
                   <p className="text-sm leading-6 text-slate-600">
                     Drag inside the frame to set the visible crop. Wordmarks get a wider stage automatically.
                   </p>
                 </div>
-                <div className="flex min-h-[380px] items-center justify-center rounded-[1.75rem] border border-slate-200/80 bg-slate-950/[0.03] p-6">
+                <div className="flex min-h-[220px] items-center justify-center rounded-[1.25rem] border border-slate-200/80 bg-slate-950/[0.03] p-3 sm:min-h-[380px] sm:rounded-[1.75rem] sm:p-6">
                   <div ref={logoEditorFrameRef} className="inline-flex">
                     <BookingBrandLogo
                       businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
@@ -1701,12 +1711,12 @@ export default function BookingBuilderPage() {
                         logoUrl: logoEditorSourceUrl || null,
                         logoTransform: logoEditorTransform,
                       }}
-                      preset="editor"
+                      preset={logoEditorCompact ? "share" : "editor"}
                       onPointerDown={handleLogoEditorPointerDown}
                     />
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-4">
                   {[
                     {
                       key: "booking",
@@ -1734,7 +1744,7 @@ export default function BookingBuilderPage() {
                       className="rounded-[1.25rem] border border-slate-200/80 bg-white/90 p-4"
                       data-logo-preview={preview.key}
                     >
-                      <div className="flex min-h-[128px] items-center justify-center rounded-[1rem] border border-dashed border-slate-200 bg-slate-50/70">
+                      <div className="flex min-h-[108px] items-center justify-center rounded-[1rem] border border-dashed border-slate-200 bg-slate-50/70 sm:min-h-[128px]">
                         <BookingBrandLogo
                           businessName={form.bookingPageTitle.trim() || businessRecord?.name || "Strata"}
                           branding={{
@@ -1754,7 +1764,7 @@ export default function BookingBuilderPage() {
               </div>
             </div>
 
-            <div className="space-y-5 px-6 py-6">
+            <div className="space-y-4 px-4 py-4 sm:space-y-5 sm:px-6 sm:py-6">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <Field label="Fit mode">
                   <StableBuilderSelect
@@ -1906,7 +1916,7 @@ export default function BookingBuilderPage() {
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200/80 px-6 py-5">
+          <DialogFooter className="sticky bottom-0 border-t border-slate-200/80 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5">
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button type="button" variant="ghost" onClick={resetLogoEditor}>
                 Reset framing
