@@ -122,6 +122,16 @@ function parseStoredObject(value: string | null | undefined): Record<string, unk
   }
 }
 
+function readMetadataString(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(metadata: Record<string, unknown>, key: string): number | null {
+  const value = Number(metadata[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
 function buildSourceVehicleSummary(params: {
   year: number | null | undefined;
   make: string | null | undefined;
@@ -1577,6 +1587,62 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
     bookingRequestId: row.sourceBookingRequestId,
     metadata: sourceMetadata,
   });
+  const customerAddonActivityRows = await db
+    .select({
+      id: activityLogs.id,
+      action: activityLogs.action,
+      metadata: activityLogs.metadata,
+      createdAt: activityLogs.createdAt,
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.businessId, bid),
+        eq(activityLogs.entityType, "appointment"),
+        eq(activityLogs.entityId, row.id),
+        sql`${activityLogs.action} in (
+          'appointment.public_addon_requested',
+          'appointment.public_addon_approved',
+          'appointment.public_addon_declined'
+        )`
+      )
+    )
+    .orderBy(asc(activityLogs.createdAt));
+  const customerAddonRequestMap = new Map<
+    string,
+    {
+      activityId: string;
+      addonServiceId: string;
+      addonName: string;
+      addonPrice: number | null;
+      addonDurationMinutes: number | null;
+      parentServiceName: string | null;
+      clientName: string | null;
+      createdAt: Date;
+    }
+  >();
+  for (const activity of customerAddonActivityRows) {
+    const metadata = parseStoredObject(activity.metadata);
+    const addonServiceId = readMetadataString(metadata, "addonServiceId");
+    if (!addonServiceId) continue;
+    if (activity.action === "appointment.public_addon_requested") {
+      customerAddonRequestMap.set(addonServiceId, {
+        activityId: activity.id,
+        addonServiceId,
+        addonName: readMetadataString(metadata, "addonName") ?? "Requested add-on",
+        addonPrice: readMetadataNumber(metadata, "addonPrice"),
+        addonDurationMinutes: readMetadataNumber(metadata, "addonDurationMinutes"),
+        parentServiceName: readMetadataString(metadata, "parentServiceName"),
+        clientName: readMetadataString(metadata, "clientName"),
+        createdAt: activity.createdAt,
+      });
+      continue;
+    }
+    customerAddonRequestMap.delete(addonServiceId);
+  }
+  const customerAddonRequests = Array.from(customerAddonRequestMap.values()).sort(
+    (left, right) => right.createdAt.getTime() - left.createdAt.getTime()
+  );
 
   res.json({
     // Keep flat columns for existing clients
@@ -1660,6 +1726,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
             href: sourceHref,
           }
         : null,
+    customerAddonRequests,
     business: { id: row.businessId },
   });
 }));

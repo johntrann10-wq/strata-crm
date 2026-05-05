@@ -373,6 +373,7 @@ type AppointmentDetailRecord = {
     href?: string | null;
     metadata?: Record<string, unknown>;
   } | null;
+  customerAddonRequests?: CustomerAddonRequest[] | null;
 };
 
 type AppointmentServiceCatalogRecord = {
@@ -1006,11 +1007,18 @@ export default function AppointmentDetail() {
       metadata?: unknown;
       createdAt?: string | Date | null;
     }>;
+  const appointmentCustomerAddonRequests = Array.isArray((appointment as AppointmentDetailRecord | null)?.customerAddonRequests)
+    ? ((appointment as AppointmentDetailRecord).customerAddonRequests ?? [])
+    : [];
   const resolvedCustomerAddonRequestIds = getResolvedCustomerAddonRequestIds(customerAddonActivityRecords);
-  const customerAddonRequests = parseCustomerAddonRequests(customerAddonActivityRecords).filter(
-    (request) =>
-      !existingServiceIds.has(request.addonServiceId) &&
-      !resolvedCustomerAddonRequestIds.has(request.addonServiceId)
+  const customerAddonRequests = Array.from(
+    [...appointmentCustomerAddonRequests, ...parseCustomerAddonRequests(customerAddonActivityRecords)]
+      .reduce((acc, request) => {
+        if (!request.addonServiceId || resolvedCustomerAddonRequestIds.has(request.addonServiceId)) return acc;
+        if (!acc.has(request.addonServiceId)) acc.set(request.addonServiceId, request);
+        return acc;
+      }, new Map<string, CustomerAddonRequest>())
+      .values()
   );
 
   useEffect(() => {
@@ -1302,28 +1310,34 @@ export default function AppointmentDetail() {
     void refetchActivity();
   };
 
-  const handleAddRequestedService = async (serviceId: string) => {
-    if (!appointment?.id || !serviceId) return;
-    setAddingRequestedAddonId(serviceId);
+  const handleApproveRequestedService = async (request: CustomerAddonRequest, alreadyAdded: boolean) => {
+    if (!appointment?.id || !request.addonServiceId) return;
+    setAddingRequestedAddonId(request.addonServiceId);
     await triggerImpactFeedback("light");
-    const result = await runAddAppointmentService({
-      appointmentId: appointment.id,
-      serviceId,
-    }).finally(() => setAddingRequestedAddonId(null));
-    if (result.error) {
-      toast.error(`Failed to add requested add-on: ${result.error.message}`);
-      void triggerNotificationFeedback("error");
-      return;
+    if (!alreadyAdded) {
+      const result = await runAddAppointmentService({
+        appointmentId: appointment.id,
+        serviceId: request.addonServiceId,
+      });
+      if (result.error) {
+        setAddingRequestedAddonId(null);
+        toast.error(`Failed to add requested add-on: ${result.error.message}`);
+        void triggerNotificationFeedback("error");
+        return;
+      }
     }
     const reviewResult = await runReviewAddonRequest({
       id: appointment.id,
-      addonServiceId: serviceId,
+      addonServiceId: request.addonServiceId,
+      addonName: request.addonName,
       action: "approved",
-    });
+    }).finally(() => setAddingRequestedAddonId(null));
     if (reviewResult.error) {
-      toast.warning("Add-on was added, but the request still needs to be cleared.");
+      toast.warning("Add-on was added, but the request still needs review.");
+      void triggerNotificationFeedback("warning");
+      return;
     }
-    toast.success("Requested add-on added to appointment");
+    toast.success(alreadyAdded ? "Add-on request approved" : "Requested add-on added to appointment");
     void triggerNotificationFeedback("success");
     void refetchAppointment();
     void refetchAppointmentServices();
@@ -1347,6 +1361,7 @@ export default function AppointmentDetail() {
     }
     toast.success("Add-on request dismissed");
     void triggerNotificationFeedback("success");
+    void refetchAppointment();
     void refetchActivity();
   };
 
@@ -1980,8 +1995,8 @@ export default function AppointmentDetail() {
                         size="sm"
                         className="min-h-11 w-full rounded-full px-4 md:w-auto"
                         variant={alreadyAdded ? "outline" : "default"}
-                        onClick={() => void handleAddRequestedService(request.addonServiceId)}
-                        disabled={addingService || reviewingAddonRequest || alreadyAdded || !catalogService}
+                        onClick={() => void handleApproveRequestedService(request, alreadyAdded)}
+                        disabled={addingService || reviewingAddonRequest || (!alreadyAdded && !catalogService)}
                       >
                         {isAddingThisRequest ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1990,7 +2005,7 @@ export default function AppointmentDetail() {
                         ) : (
                           <Plus className="mr-2 h-4 w-4" />
                         )}
-                        {alreadyAdded ? "Already added" : catalogService ? "Approve & add" : "Unavailable"}
+                        {alreadyAdded ? "Mark approved" : catalogService ? "Approve & add" : "Unavailable"}
                       </Button>
                       <Button
                         type="button"
@@ -3066,8 +3081,8 @@ export default function AppointmentDetail() {
                                 size="sm"
                                 className="min-h-10 w-full sm:w-auto"
                                 variant={alreadyAdded ? "outline" : "default"}
-                                onClick={() => void handleAddRequestedService(request.addonServiceId)}
-                                disabled={addingService || reviewingAddonRequest || alreadyAdded || !catalogService}
+                                onClick={() => void handleApproveRequestedService(request, alreadyAdded)}
+                                disabled={addingService || reviewingAddonRequest || (!alreadyAdded && !catalogService)}
                               >
                                 {isAddingThisRequest ? (
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -3076,7 +3091,7 @@ export default function AppointmentDetail() {
                                 ) : (
                                   <Plus className="mr-2 h-4 w-4" />
                                 )}
-                                {alreadyAdded ? "Already added" : catalogService ? "Approve & add" : "Unavailable"}
+                                {alreadyAdded ? "Mark approved" : catalogService ? "Approve & add" : "Unavailable"}
                               </Button>
                               <Button
                                 type="button"
