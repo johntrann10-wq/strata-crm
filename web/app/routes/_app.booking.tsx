@@ -9,9 +9,10 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
+  type ReactNode,
 } from "react";
 import { useOutletContext } from "react-router";
-import { Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Share2, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Copy, ExternalLink, LoaderCircle, RotateCcw, RotateCw, Share2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "../../api";
@@ -35,6 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useSmallViewport } from "@/lib/useSmallViewport";
 import {
   bookingBrandAccentColorOptions,
   bookingBrandBackgroundToneOptions,
@@ -361,7 +363,66 @@ function ToggleRow({
   );
 }
 
+function getReactNodeText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(getReactNodeText).filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+
+  let text = "";
+  Children.forEach(node, (child) => {
+    const childText = getReactNodeText(child);
+    if (childText) text = [text, childText].filter(Boolean).join(" ");
+  });
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function getNativeSelectOptions(children: ReactNode): Array<{ value: string; label: string; disabled?: boolean }> {
+  const options: Array<{ value: string; label: string; disabled?: boolean }> = [];
+
+  const visit = (node: ReactNode) => {
+    Children.forEach(node, (child) => {
+      if (!isValidElement(child)) return;
+      if (child.type === SelectItem) {
+        const item = child as ReactElement<React.ComponentProps<typeof SelectItem>>;
+        if (typeof item.props.value !== "string") return;
+        options.push({
+          value: item.props.value,
+          label: getReactNodeText(item.props.children) || item.props.value,
+          disabled: item.props.disabled,
+        });
+        return;
+      }
+      visit((child.props as { children?: ReactNode }).children);
+    });
+  };
+
+  visit(children);
+  return options;
+}
+
+function getNativeSelectPlaceholder(children: ReactNode) {
+  let placeholder = "Select";
+
+  const visit = (node: ReactNode) => {
+    Children.forEach(node, (child) => {
+      if (!isValidElement(child)) return;
+      if (child.type === SelectValue) {
+        const value = child as ReactElement<React.ComponentProps<typeof SelectValue>>;
+        if (typeof value.props.placeholder === "string" && value.props.placeholder.trim()) {
+          placeholder = value.props.placeholder.trim();
+        }
+        return;
+      }
+      visit((child.props as { children?: ReactNode }).children);
+    });
+  };
+
+  visit(children);
+  return placeholder;
+}
+
 function StableBuilderSelect(props: React.ComponentProps<typeof Select>) {
+  const isSmallViewport = useSmallViewport();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollPositionRef = useRef<{
     window: { left: number; top: number };
@@ -449,6 +510,39 @@ function StableBuilderSelect(props: React.ComponentProps<typeof Select>) {
       }
     );
   });
+
+  if (isSmallViewport) {
+    const options = getNativeSelectOptions(props.children);
+    const value = typeof props.value === "string" ? props.value : "";
+    const hasCurrentValue = options.some((option) => option.value === value);
+
+    return (
+      <div className="relative" ref={rootRef}>
+        <select
+          value={hasCurrentValue ? value : ""}
+          disabled={props.disabled}
+          className="h-11 w-full appearance-none rounded-xl border border-input/90 bg-background/85 px-3.5 py-2 pr-10 text-base font-medium shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] focus-visible:border-ring focus-visible:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-card/90"
+          onChange={(event) => {
+            rememberScrollPosition();
+            props.onValueChange?.(event.target.value);
+            restoreScrollPosition();
+          }}
+        >
+          {!hasCurrentValue ? (
+            <option value="" disabled>
+              {getNativeSelectPlaceholder(props.children)}
+            </option>
+          ) : null}
+          {options.map((option) => (
+            <option key={option.value} value={option.value} disabled={option.disabled}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div
