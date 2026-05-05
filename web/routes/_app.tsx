@@ -35,7 +35,7 @@ import {
   CheckCheck,
   X,
 } from "lucide-react";
-import React, { useState, useEffect, memo, useMemo, useCallback } from "react";
+import React, { useState, useEffect, memo, useMemo, useCallback, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -143,6 +143,8 @@ function getNativePushErrorMessage(error: unknown): string {
   }
   return message.trim() || "iPhone notifications could not be enabled right now.";
 }
+
+const NATIVE_PUSH_ENABLED_STORAGE_KEY = "strata.nativePush.enabled";
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
@@ -369,6 +371,16 @@ function NotificationCenter({
   const [nativePushEnabled, setNativePushEnabled] = useState(false);
   const [nativePushStatus, setNativePushStatus] = useState<string | null>(null);
   const [nativePushError, setNativePushError] = useState<string | null>(null);
+  const nativePushSyncingRef = useRef(false);
+  const setNativePushEnabledPersisted = useCallback((enabled: boolean) => {
+    setNativePushEnabled(enabled);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(NATIVE_PUSH_ENABLED_STORAGE_KEY, enabled ? "true" : "false");
+    } catch {
+      // Local storage can be unavailable in restricted web views; in-memory state is enough for this session.
+    }
+  }, []);
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen !== open) {
@@ -390,37 +402,46 @@ function NotificationCenter({
     return true;
   }, []);
   const syncNativePushStatus = useCallback(async () => {
-    if (!nativePushVisible) return;
+    if (!nativePushVisible || nativePushSyncingRef.current) return;
     const plugin = getNativeNotificationsPlugin();
     if (!plugin?.getStatus) {
       setNativePushError("This iPhone build does not include the native notifications bridge yet.");
-      setNativePushEnabled(false);
+      setNativePushEnabledPersisted(false);
       return;
     }
+    nativePushSyncingRef.current = true;
     setNativePushChecking(true);
     try {
       const statusResult = await plugin.getStatus();
       setNativePushStatus(statusResult.status ?? null);
-      if (isNativePushAuthorized(statusResult.status) && statusResult.deviceToken) {
-        await registerNativePushDevice(statusResult);
-        setNativePushEnabled(true);
-        setNativePushError(null);
+      if (isNativePushAuthorized(statusResult.status)) {
+        const registrationResult =
+          statusResult.deviceToken || !plugin.registerForRemoteNotifications
+            ? statusResult
+            : await plugin.registerForRemoteNotifications();
+        const registered = await registerNativePushDevice({
+          status: registrationResult.status ?? statusResult.status ?? null,
+          deviceToken: registrationResult.deviceToken ?? statusResult.deviceToken ?? null,
+        });
+        setNativePushEnabledPersisted(registered);
+        setNativePushError(registered ? null : "Apple did not return a device token yet. Tap Enable to retry.");
       } else {
-        setNativePushEnabled(false);
+        setNativePushEnabledPersisted(false);
         setNativePushError(statusResult.status === "denied" ? "Notifications are off for Strata in iPhone Settings." : null);
       }
     } catch (error) {
-      setNativePushEnabled(false);
+      setNativePushEnabledPersisted(false);
       setNativePushError(getNativePushErrorMessage(error));
     } finally {
+      nativePushSyncingRef.current = false;
       setNativePushChecking(false);
     }
-  }, [nativePushVisible, registerNativePushDevice]);
+  }, [nativePushVisible, registerNativePushDevice, setNativePushEnabledPersisted]);
   const handleEnableNativePush = useCallback(async () => {
     const plugin = getNativeNotificationsPlugin();
     if (!plugin?.requestAuthorization || !plugin?.registerForRemoteNotifications) {
       setNativePushError("This iPhone build does not include the native notifications bridge yet.");
-      setNativePushEnabled(false);
+      setNativePushEnabledPersisted(false);
       return;
     }
     setNativePushEnabling(true);
@@ -429,7 +450,7 @@ function NotificationCenter({
       const permissionResult = await plugin.requestAuthorization();
       setNativePushStatus(permissionResult.status ?? null);
       if (!isNativePushAuthorized(permissionResult.status)) {
-        setNativePushEnabled(false);
+        setNativePushEnabledPersisted(false);
         setNativePushError(
           permissionResult.status === "denied"
             ? "Notifications are off for Strata in iPhone Settings."
@@ -444,25 +465,31 @@ function NotificationCenter({
         deviceToken: registrationResult.deviceToken ?? permissionResult.deviceToken ?? null,
       });
       if (!registered) {
-        setNativePushEnabled(false);
+        setNativePushEnabledPersisted(false);
         setNativePushError("Apple did not return a device token yet. Try again after reopening the app.");
         return;
       }
       setNativePushStatus(registrationResult.status ?? permissionResult.status ?? null);
-      setNativePushEnabled(true);
+      setNativePushEnabledPersisted(true);
       setNativePushError(null);
       void triggerNotificationFeedback("success");
     } catch (error) {
-      setNativePushEnabled(false);
+      setNativePushEnabledPersisted(false);
       setNativePushError(getNativePushErrorMessage(error));
       void triggerNotificationFeedback("error");
     } finally {
       setNativePushEnabling(false);
     }
-  }, [registerNativePushDevice]);
+  }, [registerNativePushDevice, setNativePushEnabledPersisted]);
 
   useEffect(() => {
     setNativePushVisible(isNativeIOSApp());
+    if (typeof window === "undefined") return;
+    try {
+      setNativePushEnabled(window.localStorage.getItem(NATIVE_PUSH_ENABLED_STORAGE_KEY) === "true");
+    } catch {
+      // Ignore inaccessible storage.
+    }
   }, []);
 
   useEffect(() => {
@@ -477,6 +504,8 @@ function NotificationCenter({
     void onRefresh();
     void syncNativePushStatus();
   }, [open, onRefresh, syncNativePushStatus]);
+
+  const showNativePushEnableCard = nativePushVisible && !nativePushEnabled && !nativePushChecking;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -537,7 +566,7 @@ function NotificationCenter({
           </div>
         </div>
         <div className="max-h-[24rem] overflow-y-auto px-3 py-3">
-          {nativePushVisible && !nativePushEnabled ? (
+          {showNativePushEnableCard ? (
             <div className="mb-3 rounded-2xl border border-orange-200/80 bg-orange-50/80 p-3 shadow-sm dark:border-orange-400/25 dark:bg-orange-500/10">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">

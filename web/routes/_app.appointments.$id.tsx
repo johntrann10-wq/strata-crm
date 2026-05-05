@@ -249,38 +249,45 @@ type CustomerAddonRequest = {
   createdAt: string | Date | null;
 };
 
+function parseActivityMetadata(metadata: unknown): Record<string, unknown> {
+  if (!metadata) return {};
+  if (typeof metadata === "object" && !Array.isArray(metadata)) return metadata as Record<string, unknown>;
+  if (typeof metadata !== "string") return {};
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 function parseCustomerAddonRequests(
-  records: Array<{ id?: string | null; type?: string | null; action?: string | null; metadata?: string | null; createdAt?: string | Date | null }>
+  records: Array<{ id?: string | null; type?: string | null; action?: string | null; metadata?: unknown; createdAt?: string | Date | null }>
 ): CustomerAddonRequest[] {
   const seenAddonServiceIds = new Set<string>();
   return records
     .filter((record) => (record.type ?? record.action) === "appointment.public_addon_requested")
     .map((record) => {
-      try {
-        const parsed = record.metadata ? (JSON.parse(record.metadata) as Record<string, unknown>) : {};
-        const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
-        const addonName = typeof parsed.addonName === "string" && parsed.addonName.trim() ? parsed.addonName.trim() : "Requested add-on";
-        const addonPrice = Number(parsed.addonPrice);
-        const addonDurationMinutes = Number(parsed.addonDurationMinutes);
-        return {
-          activityId: record.id ?? `${addonServiceId}:${String(record.createdAt ?? "")}`,
-          addonServiceId,
-          addonName,
-          addonPrice: Number.isFinite(addonPrice) ? addonPrice : null,
-          addonDurationMinutes: Number.isFinite(addonDurationMinutes) ? addonDurationMinutes : null,
-          parentServiceName:
-            typeof parsed.parentServiceName === "string" && parsed.parentServiceName.trim()
-              ? parsed.parentServiceName.trim()
-              : null,
-          clientName:
-            typeof parsed.clientName === "string" && parsed.clientName.trim()
-              ? parsed.clientName.trim()
-              : null,
-          createdAt: record.createdAt ?? null,
-        };
-      } catch {
-        return null;
-      }
+      const parsed = parseActivityMetadata(record.metadata);
+      const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
+      const addonName = typeof parsed.addonName === "string" && parsed.addonName.trim() ? parsed.addonName.trim() : "Requested add-on";
+      const addonPrice = Number(parsed.addonPrice);
+      const addonDurationMinutes = Number(parsed.addonDurationMinutes);
+      return {
+        activityId: record.id ?? `${addonServiceId}:${String(record.createdAt ?? "")}`,
+        addonServiceId,
+        addonName,
+        addonPrice: Number.isFinite(addonPrice) ? addonPrice : null,
+        addonDurationMinutes: Number.isFinite(addonDurationMinutes) ? addonDurationMinutes : null,
+        parentServiceName:
+          typeof parsed.parentServiceName === "string" && parsed.parentServiceName.trim()
+            ? parsed.parentServiceName.trim()
+            : null,
+        clientName:
+          typeof parsed.clientName === "string" && parsed.clientName.trim()
+            ? parsed.clientName.trim()
+            : null,
+        createdAt: record.createdAt ?? null,
+      };
     })
     .filter((request): request is CustomerAddonRequest => {
       if (!request?.addonServiceId || seenAddonServiceIds.has(request.addonServiceId)) return false;
@@ -290,19 +297,15 @@ function parseCustomerAddonRequests(
 }
 
 function getResolvedCustomerAddonRequestIds(
-  records: Array<{ type?: string | null; action?: string | null; metadata?: string | null }>
+  records: Array<{ type?: string | null; action?: string | null; metadata?: unknown }>
 ): Set<string> {
   const resolved = new Set<string>();
   for (const record of records) {
     const action = record.type ?? record.action;
     if (action !== "appointment.public_addon_approved" && action !== "appointment.public_addon_declined") continue;
-    try {
-      const parsed = record.metadata ? (JSON.parse(record.metadata) as Record<string, unknown>) : {};
-      const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
-      if (addonServiceId) resolved.add(addonServiceId);
-    } catch {
-      // Ignore malformed activity metadata; it should not block live appointment work.
-    }
+    const parsed = parseActivityMetadata(record.metadata);
+    const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
+    if (addonServiceId) resolved.add(addonServiceId);
   }
   return resolved;
 }
@@ -805,7 +808,7 @@ export default function AppointmentDetail() {
   const [{ data: activityLogs, fetching: activityFetching }, refetchActivity] = useFindMany(api.activityLog, {
     entityType: "appointment",
     entityId: id ?? "",
-    first: 25,
+    first: 100,
     sort: { createdAt: "Descending" },
     pause: !id,
   } as any);
@@ -1000,7 +1003,7 @@ export default function AppointmentDetail() {
       id?: string | null;
       type?: string | null;
       action?: string | null;
-      metadata?: string | null;
+      metadata?: unknown;
       createdAt?: string | Date | null;
     }>;
   const resolvedCustomerAddonRequestIds = getResolvedCustomerAddonRequestIds(customerAddonActivityRecords);
@@ -2881,16 +2884,22 @@ export default function AppointmentDetail() {
               </Card>
 
               {customerAddonRequests.length > 0 ? (
-                <Card id="customer-addon-requests" className="scroll-mt-24 border-orange-200 bg-orange-50/70 shadow-sm">
+                <Card
+                  id="customer-addon-requests"
+                  className="scroll-mt-24 border-orange-200 bg-orange-50/80 shadow-sm dark:border-orange-400/25 dark:bg-orange-500/10"
+                >
                   <CardHeader>
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
                         <CardTitle className="text-base">Customer add-on requests</CardTitle>
-                        <p className="mt-1 text-sm text-orange-900/75">
+                        <p className="mt-1 text-sm leading-5 text-orange-900/75 dark:text-orange-100/75">
                           Customer-approved revenue waiting for review. Approving adds the service and sends the updated appointment confirmation.
                         </p>
                       </div>
-                      <Badge variant="secondary" className="rounded-full bg-white text-orange-900">
+                      <Badge
+                        variant="secondary"
+                        className="rounded-full border border-orange-200 bg-white text-orange-900 dark:border-orange-400/25 dark:bg-orange-500/15 dark:text-orange-100"
+                      >
                         {customerAddonRequests.length}
                       </Badge>
                     </div>
@@ -2913,9 +2922,9 @@ export default function AppointmentDetail() {
                       return (
                         <div
                           key={request.activityId}
-                          className="rounded-2xl border border-orange-200 bg-background p-4 shadow-sm"
+                          className="rounded-2xl border border-orange-200 bg-background p-4 shadow-sm dark:border-orange-400/20 dark:bg-slate-950/40"
                         >
-                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                             <div className="min-w-0 space-y-3">
                               <div className="space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -2928,24 +2937,24 @@ export default function AppointmentDetail() {
                                 </p>
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground">
+                                <span className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground dark:bg-white/5">
                                   {displayPrice != null && Number.isFinite(displayPrice)
                                     ? `Adds ${formatCurrency(displayPrice)}`
                                     : "Price from catalog"}
                                 </span>
                                 {displayDuration ? (
-                                  <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground">
+                                  <span className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground dark:bg-white/5">
                                     Adds {displayDuration} min
                                   </span>
                                 ) : null}
                                 {request.createdAt ? (
-                                  <span className="rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                                  <span className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground dark:bg-white/5">
                                     Requested {formatDateTime(request.createdAt)}
                                   </span>
                                 ) : null}
                               </div>
                             </div>
-                            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                            <div className="flex shrink-0 flex-col gap-2 md:items-end">
                               {!catalogService && !alreadyAdded ? (
                                 <p className="max-w-56 text-sm text-muted-foreground">
                                   This add-on is no longer active in the service catalog.
@@ -2971,8 +2980,8 @@ export default function AppointmentDetail() {
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="ghost"
-                                className="min-h-10 w-full text-muted-foreground hover:text-foreground sm:w-auto"
+                                variant="outline"
+                                className="min-h-10 w-full border-border bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto dark:bg-white/5 dark:hover:bg-white/10"
                                 onClick={() => void handleDeclineRequestedService(request)}
                                 disabled={reviewingAddonRequest || addingService}
                               >
