@@ -91,6 +91,12 @@ const organizationSchema = {
   ],
 };
 
+const nativeIOSOverlayScriptPaths = [
+  "/assets/ios-phone-input-overlay.js",
+  "/assets/ios-vehicle-select-overlay.js",
+  "/assets/ios-integrations-cleanup-overlay.js",
+];
+
 function isIndexableMarketingPath(pathname: string) {
   if (pathname === "/") return true;
   return [
@@ -172,6 +178,27 @@ function ThemePreferenceScript() {
       }}
     />
   );
+}
+
+function NativeIOSCompatibilityOverlays() {
+  useEffect(() => {
+    if (!isNativeIOSApp()) return;
+
+    for (const src of nativeIOSOverlayScriptPaths) {
+      const alreadyLoaded = Array.from(document.scripts).some(
+        (script) => script.dataset.strataNativeOverlay === src || script.getAttribute("src") === src,
+      );
+      if (alreadyLoaded) continue;
+
+      const script = document.createElement("script");
+      script.src = src;
+      script.defer = true;
+      script.dataset.strataNativeOverlay = src;
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  return null;
 }
 
 function BrowserErrorReporter() {
@@ -645,6 +672,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
         <Suspense>
           <MobileShellBridge />
           <NativeIOSSwipeBackController />
+          <NativeIOSCompatibilityOverlays />
           <ThemePreferenceController />
           <AuthHashConsumer />
           <AnalyticsRouteTracker />
