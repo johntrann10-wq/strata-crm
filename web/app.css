@@ -84,37 +84,37 @@ body,
 }
 
 .dark {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 10% 3.9%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 10% 3.9%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-  --ring: hsl(240 4.9% 83.9%);
+  --background: hsl(220 18% 8%);
+  --foreground: hsl(220 18% 96%);
+  --card: hsl(220 15% 12% / 0.96);
+  --card-foreground: hsl(220 18% 96%);
+  --popover: hsl(220 15% 12% / 0.98);
+  --popover-foreground: hsl(220 18% 96%);
+  --primary: hsl(22 90% 55%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(220 13% 17%);
+  --secondary-foreground: hsl(220 16% 94%);
+  --muted: hsl(220 12% 18%);
+  --muted-foreground: hsl(220 10% 72%);
+  --accent: hsl(220 14% 18%);
+  --accent-foreground: hsl(220 18% 96%);
+  --destructive: hsl(0 70% 46%);
+  --border: hsl(220 12% 25%);
+  --input: hsl(220 12% 25%);
+  --ring: hsl(22 90% 55%);
   --chart-1: hsl(220 70% 50%);
   --chart-2: hsl(160 60% 45%);
   --chart-3: hsl(30 80% 55%);
   --chart-4: hsl(280 65% 60%);
   --chart-5: hsl(340 75% 55%);
-  --sidebar: hsl(240 10% 3.9%);
-  --sidebar-foreground: hsl(0 0% 98%);
-  --sidebar-primary: hsl(220 70% 50%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(240 4.9% 83.9%);
+  --sidebar: hsl(220 20% 8%);
+  --sidebar-foreground: hsl(220 18% 96%);
+  --sidebar-primary: hsl(22 90% 52%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(220 15% 15%);
+  --sidebar-accent-foreground: hsl(220 18% 96%);
+  --sidebar-border: hsl(220 14% 19%);
+  --sidebar-ring: hsl(22 90% 55%);
 }
 
 @layer base {
@@ -136,6 +136,75 @@ body,
     overflow-x: clip;
     overscroll-behavior-y: auto;
   }
+}
+
+html.dark {
+  background:
+    radial-gradient(circle at top left, hsl(220 18% 16% / 0.86), transparent 30%),
+    radial-gradient(circle at top right, hsl(22 62% 18% / 0.32), transparent 28%),
+    linear-gradient(180deg, hsl(220 18% 8%) 0%, hsl(220 20% 6%) 100%);
+}
+
+html.dark body {
+  color: var(--foreground);
+}
+
+html.dark .bg-white:not(iframe),
+html.dark .bg-gray-50,
+html.dark .bg-slate-50,
+html.dark .bg-stone-50,
+html.dark .bg-orange-50 {
+  background-color: var(--card) !important;
+}
+
+html.dark .bg-white\/90,
+html.dark .bg-white\/80,
+html.dark .bg-white\/70,
+html.dark .bg-white\/60 {
+  background-color: hsl(220 15% 12% / 0.9) !important;
+}
+
+html.dark .text-gray-950,
+html.dark .text-gray-900,
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-stone-950,
+html.dark .text-stone-900 {
+  color: var(--foreground) !important;
+}
+
+html.dark .text-gray-700,
+html.dark .text-gray-600,
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-stone-700,
+html.dark .text-stone-600 {
+  color: var(--muted-foreground) !important;
+}
+
+html.dark .border-gray-200,
+html.dark .border-slate-200,
+html.dark .border-stone-200,
+html.dark .border-orange-100,
+html.dark .border-orange-200 {
+  border-color: var(--border) !important;
+}
+
+html.dark[data-native-back-gesture="active"] body {
+  will-change: transform;
+  box-shadow: -18px 0 38px hsl(220 20% 3% / calc(var(--native-back-progress, 0) * 0.34));
+}
+
+html.dark[data-native-back-gesture="active"]::before,
+html[data-native-back-gesture="active"]::before {
+  content: "";
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 2147483646;
+  width: 4px;
+  pointer-events: none;
+  background: hsl(22 90% 55% / calc(var(--native-back-progress, 0) * 0.82));
+  box-shadow: 0 0 26px hsl(22 90% 55% / calc(var(--native-back-progress, 0) * 0.42));
 }
 
 @layer base {

@@ -24,6 +24,7 @@ import {
   buildNavigationTarget,
   getNativeLaunchUrl,
   isNativeShell,
+  isNativeIOSApp,
   resolveAppReturnState,
   resolveNativeShellReturnUrl,
 } from "./lib/mobileShell";
@@ -342,6 +343,169 @@ function MobileShellBridge() {
   return null;
 }
 
+function isNativeSwipeBackEligiblePath(pathname: string): boolean {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  const rootLevelPaths = new Set([
+    "/",
+    "/signed-in",
+    "/calendar",
+    "/appointments",
+    "/jobs",
+    "/clients",
+    "/leads",
+    "/quotes",
+    "/invoices",
+    "/services",
+    "/finances",
+    "/settings",
+    "/profile",
+    "/onboarding",
+    "/sign-in",
+    "/sign-up",
+  ]);
+  return !rootLevelPaths.has(normalized);
+}
+
+function shouldIgnoreNativeSwipeBackTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest(
+      [
+        "input",
+        "textarea",
+        "select",
+        "button",
+        "a",
+        "[role='button']",
+        "[role='dialog']",
+        "[data-radix-dialog-content]",
+        "[data-sheet-content]",
+        "[data-native-swipe-back-ignore='true']",
+      ].join(",")
+    )
+  );
+}
+
+function NativeIOSSwipeBackController() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isNativeIOSApp() || !isNativeSwipeBackEligiblePath(location.pathname)) return;
+
+    const body = document.body;
+    const html = document.documentElement;
+    const edgeWidth = 26;
+    const commitDistance = 84;
+    const verticalTolerance = 42;
+    const maxTranslate = 58;
+    const minVelocity = 0.42;
+    let gesture:
+      | {
+          pointerId: number;
+          startX: number;
+          startY: number;
+          lastX: number;
+          lastY: number;
+          startAt: number;
+          tracking: boolean;
+          active: boolean;
+        }
+      | null = null;
+
+    const resetPresentation = (transition = true) => {
+      html.style.setProperty("--native-back-progress", "0");
+      delete html.dataset.nativeBackGesture;
+      body.style.transition = transition ? "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)" : "";
+      body.style.transform = "";
+      window.setTimeout(() => {
+        if (!html.dataset.nativeBackGesture) {
+          body.style.transition = "";
+        }
+      }, 190);
+    };
+
+    const updatePresentation = (distance: number) => {
+      const progress = Math.max(0, Math.min(1, distance / commitDistance));
+      const easedTranslate = Math.min(maxTranslate, Math.pow(progress, 0.72) * maxTranslate);
+      html.dataset.nativeBackGesture = "active";
+      html.style.setProperty("--native-back-progress", progress.toFixed(3));
+      body.style.transition = "none";
+      body.style.transform = `translate3d(${easedTranslate}px, 0, 0)`;
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" || event.clientX > edgeWidth || shouldIgnoreNativeSwipeBackTarget(event.target)) return;
+      gesture = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        startAt: performance.now(),
+        tracking: true,
+        active: false,
+      };
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!gesture || gesture.pointerId !== event.pointerId || !gesture.tracking) return;
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+      gesture.lastX = event.clientX;
+      gesture.lastY = event.clientY;
+
+      if (!gesture.active) {
+        if (deltaX < -8 || Math.abs(deltaY) > verticalTolerance) {
+          gesture = null;
+          resetPresentation(false);
+          return;
+        }
+        if (deltaX < 12 || deltaX < Math.abs(deltaY) * 1.25) return;
+        gesture.active = true;
+      }
+
+      event.preventDefault();
+      updatePresentation(deltaX);
+    };
+
+    const finishGesture = (event: PointerEvent) => {
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      const deltaX = gesture.lastX - gesture.startX;
+      const elapsed = Math.max(1, performance.now() - gesture.startAt);
+      const velocity = deltaX / elapsed;
+      const shouldNavigate = gesture.active && (deltaX >= commitDistance || velocity >= minVelocity);
+      gesture = null;
+
+      if (shouldNavigate) {
+        updatePresentation(commitDistance);
+        window.setTimeout(() => {
+          navigate(-1);
+          resetPresentation(true);
+        }, 90);
+        return;
+      }
+
+      resetPresentation(true);
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, { passive: true });
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", finishGesture, { passive: true });
+    window.addEventListener("pointercancel", finishGesture, { passive: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishGesture);
+      window.removeEventListener("pointercancel", finishGesture);
+      resetPresentation(false);
+    };
+  }, [location.pathname, navigate]);
+
+  return null;
+}
+
 function AnalyticsScripts() {
   if (!isProduction || !analyticsEnabled()) return null;
 
@@ -480,6 +644,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       <body>
         <Suspense>
           <MobileShellBridge />
+          <NativeIOSSwipeBackController />
           <ThemePreferenceController />
           <AuthHashConsumer />
           <AnalyticsRouteTracker />
