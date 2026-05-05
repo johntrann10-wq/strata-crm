@@ -996,16 +996,38 @@ export default function AppointmentDetail() {
       ),
     [existingServiceIds, serviceAddonLinks, serviceCatalogRecords]
   );
-  const customerAddonActivityRecords = (activityLogs ?? []) as Array<{
+  const validCustomerAddonServiceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const link of (serviceAddonLinks ?? []) as AppointmentAddonLinkRecord[]) {
+      if (!link.parentServiceId || !link.addonServiceId) continue;
+      if (existingServiceIds.has(link.parentServiceId)) ids.add(link.addonServiceId);
+    }
+    return ids;
+  }, [existingServiceIds, serviceAddonLinks]);
+  const currentAppointmentId = appointment?.id ?? id ?? "";
+  const canShowCustomerAddonRequestsForAppointment = Boolean(
+    appointment?.id &&
+      appointment.client?.id &&
+      !isCalendarBlockAppointment(appointment)
+  );
+  const customerAddonActivityRecords = ((activityLogs ?? []) as Array<{
       id?: string | null;
       type?: string | null;
       action?: string | null;
       metadata?: string | null;
+      entityType?: string | null;
+      entityId?: string | null;
       createdAt?: string | Date | null;
-    }>;
+    }>).filter(
+      (record) =>
+        record.entityType === "appointment" &&
+        record.entityId === currentAppointmentId
+    );
   const resolvedCustomerAddonRequestIds = getResolvedCustomerAddonRequestIds(customerAddonActivityRecords);
   const customerAddonRequests = parseCustomerAddonRequests(customerAddonActivityRecords).filter(
     (request) =>
+      canShowCustomerAddonRequestsForAppointment &&
+      validCustomerAddonServiceIds.has(request.addonServiceId) &&
       !existingServiceIds.has(request.addonServiceId) &&
       !resolvedCustomerAddonRequestIds.has(request.addonServiceId)
   );

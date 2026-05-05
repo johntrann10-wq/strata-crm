@@ -38,6 +38,7 @@ const WEEK_START_DAY = 0;
 const MAX_RECENT_ACTIVITY = 20;
 const MAX_ACTION_QUEUE_ITEMS = 18;
 const HOME_DASHBOARD_CACHE_TTL_MS = 30_000;
+const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
 const ACTION_URGENCY_RANK: Record<HomeDashboardActionQueueItem["urgency"], number> = {
   critical: 0,
   high: 1,
@@ -3286,6 +3287,17 @@ async function loadOpenCustomerAddonRequestRows(businessId: string, tx: DbExecut
         eq(activityLogs.businessId, businessId),
         eq(activityLogs.entityType, "appointment"),
         eq(activityLogs.action, "appointment.public_addon_requested"),
+        sql`${appointments.clientId} is not null`,
+        sql`coalesce(${appointments.internalNotes}, '') not like ${`${CALENDAR_BLOCK_PREFIX}%`}`,
+        sql`exists (
+          select 1
+          from appointment_services base_appointment_services
+          join service_addon_links customer_addon_links
+            on customer_addon_links.business_id = ${businessId}
+           and customer_addon_links.parent_service_id = base_appointment_services.service_id
+           and customer_addon_links.addon_service_id::text = coalesce(${activityLogs.metadata}::json->>'addonServiceId', '')
+          where base_appointment_services.appointment_id = ${activityLogs.entityId}
+        )`,
         sql`not exists (
           select 1
           from ${appointmentServices}

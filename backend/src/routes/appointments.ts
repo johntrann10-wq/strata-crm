@@ -118,6 +118,17 @@ function parseStoredObject(value: string | null | undefined): Record<string, unk
   }
 }
 
+function readMetadataString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(record: Record<string, unknown>, key: string): number | null {
+  const value = record[key];
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function buildSourceVehicleSummary(params: {
   year: number | null | undefined;
   make: string | null | undefined;
@@ -1554,6 +1565,66 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
     bookingRequestId: row.sourceBookingRequestId,
     metadata: sourceMetadata,
   });
+  const canExposeCustomerAddonRequests =
+    Boolean(row.clientId) && !isCalendarBlockInternalNotes(row.internalNotes);
+  const customerAddonActivityRows = canExposeCustomerAddonRequests
+    ? await db
+        .select({
+          id: activityLogs.id,
+          action: activityLogs.action,
+          metadata: activityLogs.metadata,
+          createdAt: activityLogs.createdAt,
+        })
+        .from(activityLogs)
+        .where(
+          and(
+            eq(activityLogs.businessId, bid),
+            eq(activityLogs.entityType, "appointment"),
+            eq(activityLogs.entityId, row.id),
+            sql`${activityLogs.action} in (
+              'appointment.public_addon_requested',
+              'appointment.public_addon_approved',
+              'appointment.public_addon_declined'
+            )`
+          )
+        )
+        .orderBy(asc(activityLogs.createdAt))
+    : [];
+  const customerAddonRequestMap = new Map<
+    string,
+    {
+      activityId: string;
+      addonServiceId: string;
+      addonName: string;
+      addonPrice: number | null;
+      addonDurationMinutes: number | null;
+      parentServiceName: string | null;
+      clientName: string | null;
+      createdAt: Date;
+    }
+  >();
+  for (const activity of customerAddonActivityRows) {
+    const metadata = parseStoredObject(activity.metadata);
+    const addonServiceId = readMetadataString(metadata, "addonServiceId");
+    if (!addonServiceId) continue;
+    if (activity.action === "appointment.public_addon_requested") {
+      customerAddonRequestMap.set(addonServiceId, {
+        activityId: activity.id,
+        addonServiceId,
+        addonName: readMetadataString(metadata, "addonName") ?? "Requested add-on",
+        addonPrice: readMetadataNumber(metadata, "addonPrice"),
+        addonDurationMinutes: readMetadataNumber(metadata, "addonDurationMinutes"),
+        parentServiceName: readMetadataString(metadata, "parentServiceName"),
+        clientName: readMetadataString(metadata, "clientName"),
+        createdAt: activity.createdAt,
+      });
+      continue;
+    }
+    customerAddonRequestMap.delete(addonServiceId);
+  }
+  const customerAddonRequests = Array.from(customerAddonRequestMap.values()).sort(
+    (left, right) => right.createdAt.getTime() - left.createdAt.getTime()
+  );
 
   res.json({
     // Keep flat columns for existing clients
@@ -1637,6 +1708,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
             href: sourceHref,
           }
         : null,
+    customerAddonRequests,
     business: { id: row.businessId },
   });
 });
@@ -2673,11 +2745,19 @@ appointmentsRouter.post(
     const bid = businessId(req);
     const { id, addonServiceId } = params.data;
     const [appointment] = await db
-      .select({ id: appointments.id, title: appointments.title })
+      .select({
+        id: appointments.id,
+        title: appointments.title,
+        clientId: appointments.clientId,
+        internalNotes: appointments.internalNotes,
+      })
       .from(appointments)
       .where(and(eq(appointments.id, id), eq(appointments.businessId, bid)))
       .limit(1);
     if (!appointment) throw new NotFoundError("Appointment not found.");
+    if (!appointment.clientId || isCalendarBlockInternalNotes(appointment.internalNotes)) {
+      throw new BadRequestError("Add-on requests can only be reviewed on customer appointments.");
+    }
 
     const [requestLog] = await db
       .select({ id: activityLogs.id, metadata: activityLogs.metadata })
