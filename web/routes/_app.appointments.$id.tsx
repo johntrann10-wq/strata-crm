@@ -260,54 +260,59 @@ function parseActivityMetadata(metadata: unknown): Record<string, unknown> {
   }
 }
 
-function parseCustomerAddonRequests(
-  records: Array<{ id?: string | null; type?: string | null; action?: string | null; metadata?: unknown; createdAt?: string | Date | null }>
-): CustomerAddonRequest[] {
-  const seenAddonServiceIds = new Set<string>();
-  return records
-    .filter((record) => (record.type ?? record.action) === "appointment.public_addon_requested")
-    .map((record) => {
-      const parsed = parseActivityMetadata(record.metadata);
-      const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
-      const addonName = typeof parsed.addonName === "string" && parsed.addonName.trim() ? parsed.addonName.trim() : "Requested add-on";
-      const addonPrice = Number(parsed.addonPrice);
-      const addonDurationMinutes = Number(parsed.addonDurationMinutes);
-      return {
-        activityId: record.id ?? `${addonServiceId}:${String(record.createdAt ?? "")}`,
-        addonServiceId,
-        addonName,
-        addonPrice: Number.isFinite(addonPrice) ? addonPrice : null,
-        addonDurationMinutes: Number.isFinite(addonDurationMinutes) ? addonDurationMinutes : null,
-        parentServiceName:
-          typeof parsed.parentServiceName === "string" && parsed.parentServiceName.trim()
-            ? parsed.parentServiceName.trim()
-            : null,
-        clientName:
-          typeof parsed.clientName === "string" && parsed.clientName.trim()
-            ? parsed.clientName.trim()
-            : null,
-        createdAt: record.createdAt ?? null,
-      };
-    })
-    .filter((request): request is CustomerAddonRequest => {
-      if (!request?.addonServiceId || seenAddonServiceIds.has(request.addonServiceId)) return false;
-      seenAddonServiceIds.add(request.addonServiceId);
-      return true;
-    });
+function sortCustomerAddonActivityRecords<T extends { createdAt?: string | Date | null }>(records: T[]): T[] {
+  return [...records].sort((left, right) => {
+    const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return leftTime - rightTime;
+  });
 }
 
-function getResolvedCustomerAddonRequestIds(
-  records: Array<{ type?: string | null; action?: string | null; metadata?: unknown }>
-): Set<string> {
-  const resolved = new Set<string>();
-  for (const record of records) {
+function parsePendingCustomerAddonRequestsFromActivity(
+  records: Array<{ id?: string | null; type?: string | null; action?: string | null; metadata?: unknown; createdAt?: string | Date | null }>
+): CustomerAddonRequest[] {
+  const pending = new Map<string, CustomerAddonRequest>();
+  for (const record of sortCustomerAddonActivityRecords(records)) {
     const action = record.type ?? record.action;
-    if (action !== "appointment.public_addon_approved" && action !== "appointment.public_addon_declined") continue;
+    if (
+      action !== "appointment.public_addon_requested" &&
+      action !== "appointment.public_addon_approved" &&
+      action !== "appointment.public_addon_declined"
+    ) {
+      continue;
+    }
     const parsed = parseActivityMetadata(record.metadata);
     const addonServiceId = typeof parsed.addonServiceId === "string" ? parsed.addonServiceId : "";
-    if (addonServiceId) resolved.add(addonServiceId);
+    if (!addonServiceId) continue;
+    if (action !== "appointment.public_addon_requested") {
+      pending.delete(addonServiceId);
+      continue;
+    }
+    const addonName = typeof parsed.addonName === "string" && parsed.addonName.trim() ? parsed.addonName.trim() : "Requested add-on";
+    const addonPrice = Number(parsed.addonPrice);
+    const addonDurationMinutes = Number(parsed.addonDurationMinutes);
+    pending.set(addonServiceId, {
+      activityId: record.id ?? `${addonServiceId}:${String(record.createdAt ?? "")}`,
+      addonServiceId,
+      addonName,
+      addonPrice: Number.isFinite(addonPrice) ? addonPrice : null,
+      addonDurationMinutes: Number.isFinite(addonDurationMinutes) ? addonDurationMinutes : null,
+      parentServiceName:
+        typeof parsed.parentServiceName === "string" && parsed.parentServiceName.trim()
+          ? parsed.parentServiceName.trim()
+          : null,
+      clientName:
+        typeof parsed.clientName === "string" && parsed.clientName.trim()
+          ? parsed.clientName.trim()
+          : null,
+      createdAt: record.createdAt ?? null,
+    });
   }
-  return resolved;
+  return Array.from(pending.values()).sort((left, right) => {
+    const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return rightTime - leftTime;
+  });
 }
 
 function safeDate(value: string | Date | null | undefined): Date | null {
@@ -1010,11 +1015,16 @@ export default function AppointmentDetail() {
   const appointmentCustomerAddonRequests = Array.isArray((appointment as AppointmentDetailRecord | null)?.customerAddonRequests)
     ? ((appointment as AppointmentDetailRecord).customerAddonRequests ?? [])
     : [];
-  const resolvedCustomerAddonRequestIds = getResolvedCustomerAddonRequestIds(customerAddonActivityRecords);
+  const appointmentCustomerAddonRequestIds = new Set(
+    appointmentCustomerAddonRequests.map((request) => request.addonServiceId).filter(Boolean)
+  );
+  const fallbackCustomerAddonRequests = parsePendingCustomerAddonRequestsFromActivity(customerAddonActivityRecords).filter(
+    (request) => !appointmentCustomerAddonRequestIds.has(request.addonServiceId)
+  );
   const customerAddonRequests = Array.from(
-    [...appointmentCustomerAddonRequests, ...parseCustomerAddonRequests(customerAddonActivityRecords)]
+    [...appointmentCustomerAddonRequests, ...fallbackCustomerAddonRequests]
       .reduce((acc, request) => {
-        if (!request.addonServiceId || resolvedCustomerAddonRequestIds.has(request.addonServiceId)) return acc;
+        if (!request.addonServiceId) return acc;
         if (!acc.has(request.addonServiceId)) acc.set(request.addonServiceId, request);
         return acc;
       }, new Map<string, CustomerAddonRequest>())
