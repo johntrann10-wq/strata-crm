@@ -372,6 +372,10 @@ function NotificationCenter({
   const [nativePushStatus, setNativePushStatus] = useState<string | null>(null);
   const [nativePushError, setNativePushError] = useState<string | null>(null);
   const nativePushSyncingRef = useRef(false);
+  const nativePushRegistrationAttemptedRef = useRef(false);
+  const nativePushRegistrationInFlightRef = useRef(false);
+  const openRefreshRanRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
   const setNativePushEnabledPersisted = useCallback((enabled: boolean) => {
     setNativePushEnabled(enabled);
     if (typeof window === "undefined") return;
@@ -402,8 +406,12 @@ function NotificationCenter({
     return true;
   }, []);
   const registerNativePushDeviceQuietly = useCallback(
-    async (statusResult: NativeNotificationStatus) => {
+    async (statusResult: NativeNotificationStatus, options?: { force?: boolean }) => {
+      if (nativePushRegistrationInFlightRef.current) return;
+      if (nativePushRegistrationAttemptedRef.current && !options?.force) return;
       const plugin = getNativeNotificationsPlugin();
+      nativePushRegistrationAttemptedRef.current = true;
+      nativePushRegistrationInFlightRef.current = true;
       try {
         const registrationResult =
           statusResult.deviceToken || !plugin?.registerForRemoteNotifications
@@ -415,6 +423,8 @@ function NotificationCenter({
         });
       } catch {
         // Permission is already enabled at the iOS level; keep the UX stable and retry on the next bell open/app session.
+      } finally {
+        nativePushRegistrationInFlightRef.current = false;
       }
     },
     [registerNativePushDevice]
@@ -473,7 +483,7 @@ function NotificationCenter({
       setNativePushEnabledPersisted(true);
       setNativePushError(null);
       void triggerNotificationFeedback("success");
-      void registerNativePushDeviceQuietly(permissionResult);
+      void registerNativePushDeviceQuietly(permissionResult, { force: true });
     } catch (error) {
       setNativePushEnabledPersisted(false);
       setNativePushError(getNativePushErrorMessage(error));
@@ -501,12 +511,21 @@ function NotificationCenter({
   }, [counts.total, nativePushVisible]);
 
   useEffect(() => {
-    if (!open) return;
-    void onRefresh();
-    void syncNativePushStatus();
-  }, [open, onRefresh, syncNativePushStatus]);
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
-  const showNativePushEnableCard = nativePushVisible && !nativePushEnabled && !nativePushChecking;
+  useEffect(() => {
+    if (!open) {
+      openRefreshRanRef.current = false;
+      return;
+    }
+    if (openRefreshRanRef.current) return;
+    openRefreshRanRef.current = true;
+    void onRefreshRef.current();
+    void syncNativePushStatus();
+  }, [open, syncNativePushStatus]);
+
+  const showNativePushEnableCard = nativePushVisible && !nativePushEnabled;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>

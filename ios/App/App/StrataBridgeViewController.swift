@@ -215,6 +215,7 @@ class NativeNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private static var deviceToken: String?
     private static var pendingRegistrationCalls: [CAPPluginCall] = []
+    private static var registrationInFlight = false
 
     override func load() {
         NotificationCenter.default.addObserver(
@@ -267,6 +268,11 @@ class NativeNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         Self.pendingRegistrationCalls.append(call)
+        guard !Self.registrationInFlight else {
+            return
+        }
+        Self.registrationInFlight = true
+
         DispatchQueue.main.async {
             UIApplication.shared.registerForRemoteNotifications()
         }
@@ -274,6 +280,9 @@ class NativeNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
             guard let index = Self.pendingRegistrationCalls.firstIndex(where: { $0 === call }) else { return }
             Self.pendingRegistrationCalls.remove(at: index)
+            if Self.pendingRegistrationCalls.isEmpty {
+                Self.registrationInFlight = false
+            }
             call.reject("Apple did not return a device token yet.", "NATIVE_NOTIFICATIONS_TOKEN_TIMEOUT")
         }
     }
@@ -288,10 +297,12 @@ class NativeNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     static func updateDeviceToken(_ tokenData: Data) {
         deviceToken = tokenData.map { String(format: "%02.2hhx", $0) }.joined()
+        registrationInFlight = false
         NotificationCenter.default.post(name: .strataRemoteNotificationsRegistered, object: deviceToken)
     }
 
     static func failDeviceTokenRegistration(_ error: Error) {
+        registrationInFlight = false
         NotificationCenter.default.post(name: .strataRemoteNotificationsRegistrationFailed, object: error)
     }
 
