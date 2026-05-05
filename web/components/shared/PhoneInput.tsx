@@ -30,7 +30,6 @@ export function PhoneInput({ value, onChange, onBlur, onBeforeInput, onPaste, ..
       {...props}
       type="tel"
       inputMode="tel"
-      pattern="[0-9]*"
       autoComplete={props.autoComplete ?? "tel"}
       maxLength={US_PHONE_DISPLAY_LENGTH}
       value={formatPhoneNumberInput(value)}
