@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "../components/shared/EmptyState";
 import { ListViewToolbar } from "../components/shared/ListViewToolbar";
+import { buildQuarterHourOptions, ResponsiveTimeSelect } from "../components/appointments/SchedulingControls";
 import { cn } from "@/lib/utils";
 import { buildPublicBookingUrl, openExternalUrl } from "@/lib/publicAppUrl";
 import { shareNativeContent, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
@@ -696,8 +697,9 @@ function ServiceForm({
   const serviceBookingDays = bookingDaysFromDailyHours(normalizedServiceHours);
   const formSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
-  const mobileTimeInputClassName =
-    "h-11 min-w-0 w-full max-w-full rounded-xl border-input/90 bg-background/85 px-3 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
+  const bookingTimeOptions = useMemo(() => buildQuarterHourOptions(), []);
+  const mobileTimeSelectClassName =
+    "h-11 min-w-0 w-full max-w-full appearance-none rounded-xl border border-input/90 bg-background/85 px-3.5 py-2 pr-10 text-base font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] disabled:opacity-45 dark:bg-card/90 sm:h-10 sm:text-sm";
   const bookingFlowSummary =
     formData.bookingFlowType === "self_book"
       ? "Instant booking"
@@ -1017,14 +1019,11 @@ function ServiceForm({
                         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                           Opens
                         </span>
-                        <Input
-                          type="time"
-                          className={mobileTimeInputClassName}
+                        <ResponsiveTimeSelect
                           value={entry.openTime}
-                          disabled={!entry.enabled}
-                          onChange={(event) => {
+                          onChange={(value) => {
                             const next = normalizedServiceHours.map((item) =>
-                              item.dayIndex === entry.dayIndex ? { ...item, openTime: event.target.value } : item
+                              item.dayIndex === entry.dayIndex ? { ...item, openTime: value } : item
                             );
                             onChange({
                               ...formData,
@@ -1033,20 +1032,23 @@ function ServiceForm({
                               bookingDailyHours: next,
                             });
                           }}
+                          options={bookingTimeOptions}
+                          placeholder="Opens"
+                          disabled={!entry.enabled}
+                          desktopClassName={mobileTimeSelectClassName}
+                          mobileClassName={mobileTimeSelectClassName}
+                          mobileIcon="down"
                         />
                       </div>
                       <div className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                           Closes
                         </span>
-                        <Input
-                          type="time"
-                          className={mobileTimeInputClassName}
+                        <ResponsiveTimeSelect
                           value={entry.closeTime}
-                          disabled={!entry.enabled}
-                          onChange={(event) => {
+                          onChange={(value) => {
                             const next = normalizedServiceHours.map((item) =>
-                              item.dayIndex === entry.dayIndex ? { ...item, closeTime: event.target.value } : item
+                              item.dayIndex === entry.dayIndex ? { ...item, closeTime: value } : item
                             );
                             onChange({
                               ...formData,
@@ -1055,6 +1057,12 @@ function ServiceForm({
                               bookingDailyHours: next,
                             });
                           }}
+                          options={bookingTimeOptions}
+                          placeholder="Closes"
+                          disabled={!entry.enabled}
+                          desktopClassName={mobileTimeSelectClassName}
+                          mobileClassName={mobileTimeSelectClassName}
+                          mobileIcon="down"
                         />
                       </div>
                     </div>

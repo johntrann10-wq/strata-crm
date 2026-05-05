@@ -77,6 +77,7 @@ type ResponsiveTimeSelectProps = {
   placeholder: string;
   useNative?: boolean;
   allowEmpty?: boolean;
+  disabled?: boolean;
   desktopClassName?: string;
   mobileClassName?: string;
   mobileIcon?: "left" | "down";
@@ -90,6 +91,7 @@ export function ResponsiveTimeSelect({
   placeholder,
   useNative,
   allowEmpty = false,
+  disabled = false,
   desktopClassName,
   mobileClassName,
   mobileIcon = "left",
@@ -110,6 +112,7 @@ export function ResponsiveTimeSelect({
           id={id}
           className={resolvedMobileClassName}
           value={value}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         >
           {allowEmpty ? <option value="">{placeholder}</option> : null}
@@ -137,6 +140,7 @@ export function ResponsiveTimeSelect({
     <Select
       value={allowEmpty && value === "" ? "__empty__" : value}
       onValueChange={(nextValue) => onChange(allowEmpty && nextValue === "__empty__" ? "" : nextValue)}
+      disabled={disabled}
     >
       <SelectTrigger id={id} className={resolvedDesktopClassName}>
         <SelectValue placeholder={placeholder} />

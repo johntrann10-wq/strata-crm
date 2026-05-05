@@ -80,7 +80,7 @@ import {
   listRuntimeErrors,
   type RuntimeErrorEntry,
 } from "../lib/runtimeErrors";
-import { buildQuarterHourOptions } from "../components/appointments/SchedulingControls";
+import { buildQuarterHourOptions, ResponsiveTimeSelect } from "../components/appointments/SchedulingControls";
 import { PhoneInput } from "../components/shared/PhoneInput";
 import { cn } from "@/lib/utils";
 import {
@@ -1422,8 +1422,8 @@ export default function SettingsPage() {
   const appointmentTimeOptions = useMemo(() => buildQuarterHourOptions(), []);
   const formSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
-  const mobileTimeInputClassName =
-    "h-11 min-w-0 w-full max-w-full rounded-xl border-input/90 bg-background/85 px-3 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
+  const mobileTimeSelectClassName =
+    "h-11 min-w-0 w-full max-w-full appearance-none rounded-xl border border-input/90 bg-background/85 px-3.5 py-2 pr-10 text-base font-medium [font-variant-numeric:tabular-nums] shadow-[0_1px_2px_rgba(15,23,42,0.03)] outline-none transition-[color,box-shadow,border-color,background-color] disabled:opacity-45 dark:bg-card/90 sm:h-10 sm:text-sm";
   const [automationSettings, setAutomationSettings] = useState<AutomationSettingsForm>(
     DEFAULT_AUTOMATION_SETTINGS
   );
@@ -3210,26 +3210,32 @@ export default function SettingsPage() {
 	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-open-${day.value}`}>
 	                                  Opens
 	                                </Label>
-	                                <Input
+	                                <ResponsiveTimeSelect
 	                                  id={`booking-open-${day.value}`}
-	                                  type="time"
-	                                  className={mobileTimeInputClassName}
 	                                  value={entry.openTime}
+	                                  onChange={(value) => handleBookingDayTimeChange(day.value, "openTime", value)}
+	                                  options={appointmentTimeOptions}
+	                                  placeholder="Opens"
 	                                  disabled={!entry.enabled}
-	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "openTime", e.target.value)}
+	                                  desktopClassName={mobileTimeSelectClassName}
+	                                  mobileClassName={mobileTimeSelectClassName}
+	                                  mobileIcon="down"
 	                                />
 	                              </div>
 	                              <div className="min-w-0 space-y-1">
 	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-close-${day.value}`}>
 	                                  Closes
 	                                </Label>
-	                                <Input
+	                                <ResponsiveTimeSelect
 	                                  id={`booking-close-${day.value}`}
-	                                  type="time"
-	                                  className={mobileTimeInputClassName}
 	                                  value={entry.closeTime}
+	                                  onChange={(value) => handleBookingDayTimeChange(day.value, "closeTime", value)}
+	                                  options={appointmentTimeOptions}
+	                                  placeholder="Closes"
 	                                  disabled={!entry.enabled}
-	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "closeTime", e.target.value)}
+	                                  desktopClassName={mobileTimeSelectClassName}
+	                                  mobileClassName={mobileTimeSelectClassName}
+	                                  mobileIcon="down"
 	                                />
 	                              </div>
 	                            </div>

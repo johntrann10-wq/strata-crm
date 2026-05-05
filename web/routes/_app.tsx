@@ -691,10 +691,10 @@ const SidebarNav = memo(function SidebarNav({
     .filter((section) => section.items.length > 0);
 
   return (
-    <div className="flex min-h-full flex-col bg-[hsl(220,20%,10%)]">
+    <div className="app-sidebar-nav flex min-h-full flex-col bg-[hsl(220,20%,10%)]">
       <div
         className={cn(
-          "border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4",
+          "app-sidebar-nav-header border-b border-white/8 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))] px-5 py-4",
           isMobile && "pt-[max(0.75rem,env(safe-area-inset-top))]"
         )}
       >
@@ -718,26 +718,28 @@ const SidebarNav = memo(function SidebarNav({
             </button>
           ) : null}
         </div>
-        <div className="mt-4 grid gap-2">
+        <div className="app-sidebar-quick-actions mt-4 grid gap-2">
           <Button
             type="button"
             variant="secondary"
-            className="w-full justify-start border border-white/8 bg-white/6 text-white hover:bg-white/10"
+            className="app-sidebar-quick-action w-full justify-start border border-white/8 bg-white/6 text-white hover:bg-white/10"
             onClick={handleOpenSearch}
           >
             <SearchIcon className="h-4 w-4" />
-            Search or jump
+            <span className="app-sidebar-action-label-full">Search or jump</span>
+            <span className="app-sidebar-action-label-compact hidden">Search</span>
           </Button>
-          <Button asChild className="w-full justify-start">
+          <Button asChild className="app-sidebar-quick-action w-full justify-start">
             <Link to="/appointments/new" onClick={handleItemClick}>
               <Plus className="h-4 w-4" />
-              New appointment
+              <span className="app-sidebar-action-label-full">New appointment</span>
+              <span className="app-sidebar-action-label-compact hidden">New</span>
             </Link>
           </Button>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="app-sidebar-nav-list flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-4">
           {visibleSections.map((section) => (
             <div key={section.id}>
@@ -791,7 +793,7 @@ const SidebarNav = memo(function SidebarNav({
         </div>
       </nav>
       {((tenantBusinesses?.length ?? 0) > 1 || (locationRecords?.length ?? 0) > 1 || membershipRole) && (
-        <div className="border-t border-white/8 px-4 py-4">
+        <div className="app-sidebar-workspace border-t border-white/8 px-4 py-4">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/28">
             Workspace
           </div>
@@ -1094,7 +1096,7 @@ function AppLayoutInner({
           side="left"
           swipeToClose
           onSwipeClose={() => setMobileOpen(false)}
-          className="gap-0 overflow-hidden border-white/10 bg-[hsl(220,20%,10%)] [&>button]:hidden"
+          className="app-mobile-nav-sheet gap-0 overflow-hidden border-white/10 bg-[hsl(220,20%,10%)] [&>button]:hidden"
         >
           <SidebarNav
             onItemClick={() => setMobileOpen(false)}

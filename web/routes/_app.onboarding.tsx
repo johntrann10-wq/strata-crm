@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { getPhoneNumberInputError } from "@/lib/phone";
+import { buildQuarterHourOptions, ResponsiveTimeSelect } from "@/components/appointments/SchedulingControls";
 import {
   ArrowLeft,
   ArrowRight,
@@ -38,8 +39,8 @@ import type { CSSProperties } from "react";
 const ONBOARDING_FORM_ID = "onboarding-business-form";
 const onboardingInputClass =
   "h-11 min-w-0 max-w-full rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-base sm:text-sm placeholder:text-[#7d8695]";
-const onboardingTimeInputClass =
-  `${onboardingInputClass} w-full [color-scheme:dark] [font-variant-numeric:tabular-nums] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0`;
+const onboardingTimeSelectClass =
+  "h-11 min-w-0 w-full max-w-full appearance-none rounded-xl border border-[#2a2a2a] bg-[#1a1a1a] px-3.5 py-2 pr-10 text-base font-medium text-[#f4f4f5] [font-variant-numeric:tabular-nums] outline-none transition-[color,box-shadow,border-color,background-color] disabled:opacity-45";
 const onboardingInputStyle: CSSProperties = {
   color: "#f4f4f5",
   WebkitTextFillColor: "#f4f4f5",
@@ -199,6 +200,7 @@ export default function OnboardingPage() {
     () => (selectedType ? getBusinessTypeWorkspaceDefaults(selectedType) : null),
     [selectedType]
   );
+  const appointmentTimeOptions = useMemo(() => buildQuarterHourOptions(), []);
 
   useEffect(() => {
     if (!selectedTypeMeta || existingBusiness?.id) return;
@@ -538,24 +540,26 @@ export default function OnboardingPage() {
                                   <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
                                     <div className="min-w-0 space-y-1">
                                       <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b929f]">Opens</span>
-                                      <Input
-                                        type="time"
+                                      <ResponsiveTimeSelect
                                         value={entry.openTime}
-                                        onChange={(e) => updateDailyHour(entry.dayIndex, { openTime: e.target.value })}
-                                        className={onboardingTimeInputClass}
-                                        data-onboarding-input="true"
-                                        style={onboardingInputStyle}
+                                        onChange={(value) => updateDailyHour(entry.dayIndex, { openTime: value })}
+                                        options={appointmentTimeOptions}
+                                        placeholder="Opens"
+                                        desktopClassName={onboardingTimeSelectClass}
+                                        mobileClassName={onboardingTimeSelectClass}
+                                        mobileIcon="down"
                                       />
                                     </div>
                                     <div className="min-w-0 space-y-1">
                                       <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b929f]">Closes</span>
-                                      <Input
-                                        type="time"
+                                      <ResponsiveTimeSelect
                                         value={entry.closeTime}
-                                        onChange={(e) => updateDailyHour(entry.dayIndex, { closeTime: e.target.value })}
-                                        className={onboardingTimeInputClass}
-                                        data-onboarding-input="true"
-                                        style={onboardingInputStyle}
+                                        onChange={(value) => updateDailyHour(entry.dayIndex, { closeTime: value })}
+                                        options={appointmentTimeOptions}
+                                        placeholder="Closes"
+                                        desktopClassName={onboardingTimeSelectClass}
+                                        mobileClassName={onboardingTimeSelectClass}
+                                        mobileIcon="down"
                                       />
                                     </div>
                                   </div>
