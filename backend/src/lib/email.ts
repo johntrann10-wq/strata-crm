@@ -262,6 +262,7 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
         zip: string | null;
         bookingBrandLogoUrl: string | null;
         bookingBrandLogoTransform: string | null;
+        updatedAt: Date | null;
       }
     | undefined;
 
@@ -278,6 +279,7 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
         zip: businesses.zip,
         bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
         bookingBrandLogoTransform: businesses.bookingBrandLogoTransform,
+        updatedAt: businesses.updatedAt,
       })
       .from(businesses)
       .where(eq(businesses.id, businessId))
@@ -301,6 +303,7 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
           state: businesses.state,
           zip: businesses.zip,
           bookingBrandLogoUrl: businesses.bookingBrandLogoUrl,
+          updatedAt: businesses.updatedAt,
         })
         .from(businesses)
         .where(eq(businesses.id, businessId))
@@ -337,6 +340,7 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
             ...contactOnlyBusiness,
             bookingBrandLogoUrl: null,
             bookingBrandLogoTransform: null,
+            updatedAt: null,
           }
         : undefined;
     }
@@ -346,8 +350,9 @@ async function getBusinessContactVars(businessId: string | null | undefined): Pr
   const transform = parseBookingBrandLogoTransform(business?.bookingBrandLogoTransform);
   const plate = resolveBookingBrandLogoPlateStyles(transform.backgroundPlate);
   const logoFrame = buildBusinessLogoTransformCss(transform);
+  const logoVersion = business?.updatedAt instanceof Date ? business.updatedAt.getTime() : undefined;
   const businessLogoUrl = business?.bookingBrandLogoUrl?.trim() && business?.id
-    ? buildPublicBookingBrandLogoUrl(business.id)
+    ? buildPublicBookingBrandLogoUrl(business.id, logoVersion)
     : undefined;
 
   return {
