@@ -84,23 +84,23 @@ body,
 }
 
 .dark {
-  --background: hsl(220 18% 8%);
+  --background: hsl(220 18% 9%);
   --foreground: hsl(220 18% 96%);
-  --card: hsl(220 15% 12% / 0.96);
+  --card: hsl(220 15% 13% / 0.96);
   --card-foreground: hsl(220 18% 96%);
-  --popover: hsl(220 15% 12% / 0.98);
+  --popover: hsl(220 15% 13% / 0.98);
   --popover-foreground: hsl(220 18% 96%);
   --primary: hsl(22 90% 55%);
   --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(220 13% 17%);
+  --secondary: hsl(220 13% 18%);
   --secondary-foreground: hsl(220 16% 94%);
-  --muted: hsl(220 12% 18%);
-  --muted-foreground: hsl(220 10% 72%);
-  --accent: hsl(220 14% 18%);
+  --muted: hsl(220 12% 19%);
+  --muted-foreground: hsl(220 10% 74%);
+  --accent: hsl(220 14% 19%);
   --accent-foreground: hsl(220 18% 96%);
   --destructive: hsl(0 70% 46%);
-  --border: hsl(220 12% 25%);
-  --input: hsl(220 12% 25%);
+  --border: hsl(220 12% 27%);
+  --input: hsl(220 12% 27%);
   --ring: hsl(22 90% 55%);
   --chart-1: hsl(220 70% 50%);
   --chart-2: hsl(160 60% 45%);
@@ -140,9 +140,9 @@ body,
 
 html.dark {
   background:
-    radial-gradient(circle at top left, hsl(220 18% 16% / 0.86), transparent 30%),
-    radial-gradient(circle at top right, hsl(22 62% 18% / 0.32), transparent 28%),
-    linear-gradient(180deg, hsl(220 18% 8%) 0%, hsl(220 20% 6%) 100%);
+    radial-gradient(circle at top left, hsl(220 18% 17% / 0.9), transparent 30%),
+    radial-gradient(circle at top right, hsl(22 62% 18% / 0.28), transparent 28%),
+    linear-gradient(180deg, hsl(220 18% 9%) 0%, hsl(220 20% 7%) 100%);
 }
 
 html.dark body {
@@ -171,16 +171,37 @@ html.dark .bg-red-50 {
 html.dark .bg-white\/96,
 html.dark .bg-white\/95,
 html.dark .bg-white\/94,
+html.dark .bg-white\/98,
+html.dark .bg-white\/97,
 html.dark .bg-white\/92,
 html.dark .bg-white\/90,
+html.dark .bg-white\/88,
+html.dark .bg-white\/86,
 html.dark .bg-white\/85,
+html.dark .bg-white\/84,
+html.dark .bg-white\/82,
 html.dark .bg-white\/80,
+html.dark .bg-white\/78,
+html.dark .bg-white\/76,
 html.dark .bg-white\/75,
+html.dark .bg-white\/72,
 html.dark .bg-white\/70,
 html.dark .bg-white\/60,
 html.dark .bg-white\/50,
+html.dark .bg-gray-50\/95,
+html.dark .bg-gray-50\/90,
+html.dark .bg-gray-50\/80,
+html.dark .bg-gray-100\/80,
+html.dark .bg-slate-50\/95,
+html.dark .bg-slate-50\/90,
 html.dark .bg-slate-50\/80,
+html.dark .bg-slate-50\/75,
+html.dark .bg-slate-50\/70,
+html.dark .bg-slate-50\/60,
+html.dark .bg-slate-100\/90,
 html.dark .bg-slate-100\/80,
+html.dark .bg-slate-100\/75,
+html.dark .bg-slate-100\/70,
 html.dark .bg-background\/95,
 html.dark .bg-background\/92,
 html.dark .bg-background\/90,
@@ -189,7 +210,26 @@ html.dark .bg-background\/80,
 html.dark .bg-card\/95,
 html.dark .bg-card\/90,
 html.dark .bg-muted\/20 {
-  background-color: hsl(220 15% 12% / 0.9) !important;
+  background-color: hsl(220 15% 13% / 0.92) !important;
+}
+
+html.dark [class*="bg-[linear-gradient"]:not(.app-sidebar-nav-header)[class*="rgba(255,255,255"],
+html.dark [class*="bg-[linear-gradient"]:not(.app-sidebar-nav-header)[class*="rgba(248,250,252"],
+html.dark [class*="bg-[linear-gradient"]:not(.app-sidebar-nav-header)[class*="#ffffff"],
+html.dark [class*="bg-[linear-gradient"]:not(.app-sidebar-nav-header)[class*="#fff"],
+html.dark [class*="bg-[radial-gradient"]:not(.app-sidebar-nav-header)[class*="rgba(255,255,255"],
+html.dark [class*="bg-[radial-gradient"]:not(.app-sidebar-nav-header)[class*="rgba(248,250,252"],
+html.dark [class*="bg-[radial-gradient"]:not(.app-sidebar-nav-header)[class*="#ffffff"],
+html.dark [class*="bg-[radial-gradient"]:not(.app-sidebar-nav-header)[class*="#fff"],
+html.dark [class*="from-white"],
+html.dark [class*="via-white"],
+html.dark [class*="to-white"],
+html.dark [class*="from-slate-50"],
+html.dark [class*="to-slate-50"] {
+  background-color: hsl(220 15% 13% / 0.94) !important;
+  background-image:
+    radial-gradient(circle at top left, hsl(22 70% 28% / 0.16), transparent 34%),
+    linear-gradient(180deg, hsl(220 15% 15% / 0.98), hsl(220 17% 11% / 0.96)) !important;
 }
 
 html.dark .text-gray-950,
@@ -204,11 +244,20 @@ html.dark .text-stone-900 {
 
 html.dark .text-gray-700,
 html.dark .text-gray-600,
+html.dark .text-gray-500,
 html.dark .text-slate-700,
 html.dark .text-slate-600,
+html.dark .text-slate-500,
 html.dark .text-stone-700,
-html.dark .text-stone-600 {
+html.dark .text-stone-600,
+html.dark .text-stone-500 {
   color: var(--muted-foreground) !important;
+}
+
+html.dark .text-gray-400,
+html.dark .text-slate-400,
+html.dark .text-stone-400 {
+  color: hsl(220 10% 68%) !important;
 }
 
 html.dark .text-blue-700,
@@ -224,7 +273,11 @@ html.dark .text-emerald-700 {
 }
 
 html.dark .text-amber-700,
-html.dark .text-orange-700 {
+html.dark .text-amber-800,
+html.dark .text-amber-900,
+html.dark .text-orange-700,
+html.dark .text-orange-800,
+html.dark .text-orange-900 {
   color: hsl(38 92% 70%) !important;
 }
 
@@ -236,11 +289,25 @@ html.dark .text-rose-700 {
 }
 
 html.dark .border-gray-200,
+html.dark .border-gray-200\/90,
+html.dark .border-gray-200\/80,
+html.dark .border-gray-200\/70,
 html.dark .border-slate-200,
+html.dark .border-slate-200\/90,
+html.dark .border-slate-200\/85,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/75,
+html.dark .border-slate-200\/70,
 html.dark .border-stone-200,
 html.dark .border-orange-100,
+html.dark .border-orange-100\/90,
+html.dark .border-orange-100\/80,
 html.dark .border-orange-200,
+html.dark .border-orange-200\/90,
+html.dark .border-orange-200\/80,
+html.dark .border-orange-200\/70,
 html.dark .border-amber-200,
+html.dark .border-amber-200\/80,
 html.dark .border-blue-200,
 html.dark .border-sky-200,
 html.dark .border-green-200,
@@ -250,17 +317,62 @@ html.dark .border-rose-200 {
   border-color: var(--border) !important;
 }
 
+html.dark .border-white\/90,
+html.dark .border-white\/85,
+html.dark .border-white\/80,
+html.dark .border-white\/75,
+html.dark .border-white\/70,
+html.dark .border-white\/65,
+html.dark .border-white\/60 {
+  border-color: hsl(220 12% 28% / 0.88) !important;
+}
+
+html.dark .hover\:bg-white:hover,
+html.dark .hover\:bg-white\/90:hover,
+html.dark .hover\:bg-white\/88:hover,
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-orange-50:hover,
+html.dark .hover\:bg-amber-50:hover {
+  background-color: hsl(220 14% 18% / 0.96) !important;
+}
+
 html.dark input,
 html.dark textarea,
 html.dark select {
   color-scheme: dark;
+  background-color: hsl(220 14% 14% / 0.86);
+  border-color: hsl(220 12% 29% / 0.9);
+  color: var(--foreground);
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: hsl(220 10% 64% / 0.9);
 }
 
 html.dark [data-slot="card"],
 html.dark .surface-panel,
-html.dark .kpi-card {
+html.dark .kpi-card,
+html.dark .native-panel-card,
+html.dark .native-touch-surface,
+html.dark .mobile-support-card,
+html.dark .app-page-header-shell {
   background-color: var(--card);
   color: var(--card-foreground);
+  border-color: hsl(220 12% 27% / 0.9);
+}
+
+html.dark .native-touch-surface,
+html.dark .mobile-support-card {
+  box-shadow:
+    0 1px 2px hsl(220 24% 4% / 0.18),
+    inset 0 1px 0 hsl(0 0% 100% / 0.04);
+}
+
+html.dark .app-page-header-shell {
+  background-image:
+    radial-gradient(circle at top left, hsl(22 72% 28% / 0.18), transparent 34%),
+    linear-gradient(180deg, hsl(220 15% 14% / 0.98), hsl(220 17% 10% / 0.96)) !important;
 }
 
 html.dark .shadow-sm,

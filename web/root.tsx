@@ -131,6 +131,8 @@ function ClientToaster() {
 }
 
 function ThemePreferenceController() {
+  const location = useLocation();
+
   useEffect(() => {
     applyThemePreference(readThemePreference());
 
@@ -153,6 +155,10 @@ function ThemePreferenceController() {
     };
   }, []);
 
+  useEffect(() => {
+    applyThemePreference(readThemePreference());
+  }, [location.pathname]);
+
   return null;
 }
 
@@ -164,7 +170,13 @@ function ThemePreferenceScript() {
           (function() {
             try {
               var key = ${JSON.stringify(STRATA_THEME_STORAGE_KEY)};
-              var theme = window.localStorage && window.localStorage.getItem(key) === "dark" ? "dark" : "light";
+              var requestedTheme = window.localStorage && window.localStorage.getItem(key) === "dark" ? "dark" : "light";
+              var pathname = window.location && window.location.pathname ? window.location.pathname : "";
+              var appThemePrefixes = ["/app","/appointments","/billing","/calendar","/clients","/finances","/invoices","/jobs","/leads","/onboarding","/profile","/quotes","/schedule","/services","/settings","/signed-in","/subscribe","/vehicles"];
+              var canUseAppTheme = appThemePrefixes.some(function(prefix) {
+                return pathname === prefix || pathname.indexOf(prefix + "/") === 0;
+              });
+              var theme = requestedTheme === "dark" && canUseAppTheme ? "dark" : "light";
               var root = document.documentElement;
               root.classList.toggle("dark", theme === "dark");
               root.classList.toggle("light", theme !== "dark");
