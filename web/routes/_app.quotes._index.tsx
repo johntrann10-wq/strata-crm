@@ -413,7 +413,7 @@ export default function QuotesIndexPage() {
                 <TabsTrigger key={option.value} value={option.value} className={selectorTabsTriggerClassName()}>
                   {option.label}
                   {option.value !== "all" && count > 0 ? (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700">
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-medium leading-none text-amber-700 dark:bg-slate-700 dark:text-slate-200">
                       {count}
                     </span>
                   ) : null}
@@ -547,7 +547,7 @@ export default function QuotesIndexPage() {
                     return (
                       <TableRow
                         key={qid}
-                        className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === qid) && "bg-amber-50/50")}
+                        className={cn("cursor-pointer", agingRows.some((quote) => String((quote as any).id) === qid) && "bg-amber-50/50 dark:bg-slate-800/45")}
                         onClick={() => navigate(detailHref)}
                       >
                         <TableCell>
@@ -727,7 +727,7 @@ export default function QuotesIndexPage() {
                         linkWithQueueState,
                       );
                       return (
-                        <TableRow key={qid} className="cursor-pointer bg-green-50/40" onClick={() => navigate(detailHref)}>
+                        <TableRow key={qid} className="cursor-pointer bg-green-50/40 dark:bg-emerald-500/8" onClick={() => navigate(detailHref)}>
                           <TableCell>
                             {row.clientId ? (
                               <Link
@@ -847,7 +847,7 @@ export default function QuotesIndexPage() {
                     const isLoading = sendingId === qid;
                     const freshness = getQuoteFreshness(row);
                     return (
-                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50" onClick={() => navigate(detailHref)}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/50 dark:bg-slate-800/45" onClick={() => navigate(detailHref)}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
@@ -951,7 +951,7 @@ export default function QuotesIndexPage() {
                     const { qid, detailHref } = getQuoteQueueLinks(row, currentLocationId, linkWithQueueState);
                     const freshness = getQuoteFreshness(row);
                     return (
-                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40" onClick={() => navigate(detailHref)}>
+                      <TableRow key={qid} className="cursor-pointer bg-amber-50/40 dark:bg-slate-800/45" onClick={() => navigate(detailHref)}>
                         <TableCell>{row.clientId ? <Link to={`/clients/${String(row.clientId)}`} className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>{fullName}</Link> : fullName}</TableCell>
                         <TableCell className="text-muted-foreground">{vehicleLabel}</TableCell>
                         <TableCell><StatusBadge status={String(row.status ?? "")} type="quote" /></TableCell>
@@ -1110,15 +1110,15 @@ function QuoteMetricCard({
   return (
     <div
       className={cn(
-        "rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]",
-        highlight && "bg-slate-950 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)]",
+        "rounded-[22px] border border-white/80 bg-white/84 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)] dark:border-slate-700/75 dark:bg-slate-900/72",
+        highlight && "bg-slate-950 text-white shadow-[0_18px_45px_rgba(15,23,42,0.22)] dark:border-slate-600/80 dark:bg-slate-800/92",
         nativeIOS && "rounded-[24px] px-3.5 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
       )}
     >
-      <p className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400", highlight && "text-orange-300", nativeIOS && "text-[10px] tracking-[0.14em]")}>
+      <p className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400", highlight && "text-orange-300 dark:text-slate-200", nativeIOS && "text-[10px] tracking-[0.14em]")}>
         {label}
       </p>
-      <p className={cn("mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950", highlight && "text-white", nativeIOS && "text-xl leading-none")}>
+      <p className={cn("mt-2 text-[1.7rem] font-semibold tracking-[-0.04em] text-slate-950 dark:text-slate-50", highlight && "text-white", nativeIOS && "text-xl leading-none")}>
         {value}
       </p>
     </div>
@@ -1140,13 +1140,16 @@ function FollowupCard({
   actionLabel: string;
   tone: "warn" | "danger";
 }) {
-  const toneClass = tone === "danger" ? "border-red-200 bg-red-50/80" : "border-amber-200 bg-amber-50/80";
+  const toneClass =
+    tone === "danger"
+      ? "border-red-200 bg-red-50/80 text-red-950 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-100"
+      : "border-amber-200 bg-amber-50/80 text-amber-950 dark:border-slate-600/75 dark:bg-slate-800/78 dark:text-slate-100";
   return (
     <div className={cn("rounded-lg border p-4", toneClass)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+          <p className={cn("mt-1 text-xs", tone === "danger" ? "text-red-700 dark:text-red-200/78" : "text-amber-700 dark:text-slate-300")}>{detail}</p>
         </div>
         <p className="text-sm font-semibold">{amount}</p>
       </div>
@@ -1180,19 +1183,19 @@ function QuoteMobileCard({
 }) {
   const toneClass =
     accent === "warn"
-      ? "border-amber-200/80 bg-amber-50/70"
+      ? "border-amber-200/80 bg-amber-50/70 dark:border-slate-600/70 dark:bg-slate-800/72"
       : accent === "success"
-        ? "border-emerald-200/80 bg-emerald-50/70"
-        : "border-border/70 bg-card/98";
+        ? "border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-400/30 dark:bg-emerald-500/10"
+        : "border-border/70 bg-card/98 dark:border-slate-700/75 dark:bg-slate-900/72";
 
   return (
     <div
       className={cn(
         "rounded-2xl border p-4 shadow-sm",
         toneClass,
-        nativeIOS && "rounded-[26px] border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)] active:scale-[0.99]",
-        nativeIOS && accent === "warn" && "border-amber-200/80 bg-amber-50/70",
-        nativeIOS && accent === "success" && "border-emerald-200/80 bg-emerald-50/70"
+        nativeIOS && "rounded-[26px] border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)] active:scale-[0.99] dark:border-slate-700/80 dark:bg-slate-900/74",
+        nativeIOS && accent === "warn" && "border-amber-200/80 bg-amber-50/70 dark:border-slate-600/70 dark:bg-slate-800/72",
+        nativeIOS && accent === "success" && "border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-400/30 dark:bg-emerald-500/10"
       )}
     >
       <div className="flex items-start justify-between gap-3">

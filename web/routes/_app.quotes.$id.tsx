@@ -67,17 +67,17 @@ import { getCurrentBusinessId } from "@/lib/auth";
 
 const StatusBadge = ({ status }: { status: string }) => {
   const variants: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-700 border-gray-200",
-    sent: "bg-blue-100 text-blue-700 border-blue-200",
-    accepted: "bg-green-100 text-green-700 border-green-200",
-    declined: "bg-red-100 text-red-700 border-red-200",
-    expired: "bg-amber-100 text-amber-700 border-amber-200",
+    draft: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80",
+    sent: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-sky-500/14 dark:text-sky-200 dark:border-sky-400/30",
+    accepted: "bg-green-100 text-green-700 border-green-200 dark:bg-emerald-500/14 dark:text-emerald-200 dark:border-emerald-400/30",
+    declined: "bg-red-100 text-red-700 border-red-200 dark:bg-rose-500/14 dark:text-rose-200 dark:border-rose-400/30",
+    expired: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80",
   };
   return (
     <Badge
       className={cn(
         "capitalize border",
-        variants[status] ?? "bg-gray-100 text-gray-700 border-gray-200"
+        variants[status] ?? "bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80"
       )}
     >
       {status}
@@ -619,7 +619,7 @@ export default function QuoteDetailPage() {
           <CardContent className="space-y-1 p-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Expires</p>
             <p className="text-lg font-semibold">{quote.expiresAt ? formatDate(quote.expiresAt) : "No expiry"}</p>
-            <p className={cn("text-sm", expiresSoon ? "text-amber-700" : "text-muted-foreground")}>
+            <p className={cn("text-sm", expiresSoon ? "text-amber-700 dark:text-slate-300" : "text-muted-foreground")}>
               {expiresSoon ? "Needs follow-up soon before it goes cold" : "Use expiry to keep approvals moving"}
             </p>
           </CardContent>
@@ -1075,32 +1075,32 @@ export default function QuoteDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {quote.status === "accepted" ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/12 dark:text-emerald-100">
                   <div className="flex items-center gap-2 font-medium">
                     <Check className="h-4 w-4" />
                     Approved by the client
                   </div>
-                  <p className="mt-1 text-sm text-emerald-700">
+                  <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-200/78">
                     {quote.acceptedAt ? `Accepted on ${formatDate(quote.acceptedAt)}.` : "Accepted and ready for scheduling or billing."}
                   </p>
                 </div>
               ) : quote.status === "declined" ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 dark:border-rose-400/30 dark:bg-rose-500/12 dark:text-rose-100">
                   <div className="flex items-center gap-2 font-medium">
                     <X className="h-4 w-4" />
                     Declined by the client
                   </div>
-                  <p className="mt-1 text-sm text-red-700">
+                  <p className="mt-1 text-sm text-red-700 dark:text-rose-200/78">
                     Review and revise if you want to re-open the sale.
                   </p>
                 </div>
               ) : (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-slate-600/75 dark:bg-slate-800/78 dark:text-slate-100">
                   <div className="flex items-center gap-2 font-medium">
                     <Send className="h-4 w-4" />
                     Waiting on client approval
                   </div>
-                  <p className="mt-1 text-sm text-amber-700">
+                  <p className="mt-1 text-sm text-amber-700 dark:text-slate-300">
                     {quote.sentAt
                       ? `Last sent ${formatDate(quote.sentAt)}. Follow up before the estimate goes stale.`
                       : "Send this quote once the scope and pricing are locked."}
@@ -1174,13 +1174,13 @@ export default function QuoteDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {quote.status === "accepted" && (
-                <div className="rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+                <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-emerald-400/30 dark:bg-emerald-500/12 dark:text-emerald-100">
                   <div className="flex items-center gap-2 font-medium">
                     <Check className="h-4 w-4" />
                     Quote Accepted
                   </div>
                   {quote.acceptedAt && (
-                    <p className="mt-1 text-green-700 text-xs">
+                    <p className="mt-1 text-xs text-green-700 dark:text-emerald-200/78">
                       {formatDate(quote.acceptedAt)}
                     </p>
                   )}
