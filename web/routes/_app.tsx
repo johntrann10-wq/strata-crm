@@ -401,6 +401,24 @@ function NotificationCenter({
     });
     return true;
   }, []);
+  const registerNativePushDeviceQuietly = useCallback(
+    async (statusResult: NativeNotificationStatus) => {
+      const plugin = getNativeNotificationsPlugin();
+      try {
+        const registrationResult =
+          statusResult.deviceToken || !plugin?.registerForRemoteNotifications
+            ? statusResult
+            : await plugin.registerForRemoteNotifications();
+        await registerNativePushDevice({
+          status: registrationResult.status ?? statusResult.status ?? null,
+          deviceToken: registrationResult.deviceToken ?? statusResult.deviceToken ?? null,
+        });
+      } catch {
+        // Permission is already enabled at the iOS level; keep the UX stable and retry on the next bell open/app session.
+      }
+    },
+    [registerNativePushDevice]
+  );
   const syncNativePushStatus = useCallback(async () => {
     if (!nativePushVisible || nativePushSyncingRef.current) return;
     const plugin = getNativeNotificationsPlugin();
@@ -415,16 +433,9 @@ function NotificationCenter({
       const statusResult = await plugin.getStatus();
       setNativePushStatus(statusResult.status ?? null);
       if (isNativePushAuthorized(statusResult.status)) {
-        const registrationResult =
-          statusResult.deviceToken || !plugin.registerForRemoteNotifications
-            ? statusResult
-            : await plugin.registerForRemoteNotifications();
-        const registered = await registerNativePushDevice({
-          status: registrationResult.status ?? statusResult.status ?? null,
-          deviceToken: registrationResult.deviceToken ?? statusResult.deviceToken ?? null,
-        });
-        setNativePushEnabledPersisted(registered);
-        setNativePushError(registered ? null : "Apple did not return a device token yet. Tap Enable to retry.");
+        setNativePushEnabledPersisted(true);
+        setNativePushError(null);
+        void registerNativePushDeviceQuietly(statusResult);
       } else {
         setNativePushEnabledPersisted(false);
         setNativePushError(statusResult.status === "denied" ? "Notifications are off for Strata in iPhone Settings." : null);
@@ -436,7 +447,7 @@ function NotificationCenter({
       nativePushSyncingRef.current = false;
       setNativePushChecking(false);
     }
-  }, [nativePushVisible, registerNativePushDevice, setNativePushEnabledPersisted]);
+  }, [nativePushVisible, registerNativePushDeviceQuietly, setNativePushEnabledPersisted]);
   const handleEnableNativePush = useCallback(async () => {
     const plugin = getNativeNotificationsPlugin();
     if (!plugin?.requestAuthorization || !plugin?.registerForRemoteNotifications) {
@@ -459,20 +470,10 @@ function NotificationCenter({
         return;
       }
 
-      const registrationResult = await plugin.registerForRemoteNotifications();
-      const registered = await registerNativePushDevice({
-        status: registrationResult.status ?? permissionResult.status ?? null,
-        deviceToken: registrationResult.deviceToken ?? permissionResult.deviceToken ?? null,
-      });
-      if (!registered) {
-        setNativePushEnabledPersisted(false);
-        setNativePushError("Apple did not return a device token yet. Try again after reopening the app.");
-        return;
-      }
-      setNativePushStatus(registrationResult.status ?? permissionResult.status ?? null);
       setNativePushEnabledPersisted(true);
       setNativePushError(null);
       void triggerNotificationFeedback("success");
+      void registerNativePushDeviceQuietly(permissionResult);
     } catch (error) {
       setNativePushEnabledPersisted(false);
       setNativePushError(getNativePushErrorMessage(error));
@@ -480,7 +481,7 @@ function NotificationCenter({
     } finally {
       setNativePushEnabling(false);
     }
-  }, [registerNativePushDevice, setNativePushEnabledPersisted]);
+  }, [registerNativePushDeviceQuietly, setNativePushEnabledPersisted]);
 
   useEffect(() => {
     setNativePushVisible(isNativeIOSApp());

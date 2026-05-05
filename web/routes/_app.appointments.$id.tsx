@@ -1915,6 +1915,107 @@ export default function AppointmentDetail() {
           </div>
         </div>
       </section>
+
+      {customerAddonRequests.length > 0 ? (
+        <Card
+          id="customer-addon-requests"
+          className="scroll-mt-24 overflow-hidden border-orange-200 bg-orange-50/85 shadow-[0_14px_34px_rgba(249,115,22,0.12)] dark:border-orange-400/25 dark:bg-orange-500/10"
+        >
+          <CardHeader className="border-b border-orange-200/75 bg-white/55 px-4 py-4 dark:border-orange-400/20 dark:bg-white/5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <CardTitle className="text-base text-orange-950 dark:text-orange-100">Customer add-on request</CardTitle>
+                <p className="mt-1 text-sm leading-5 text-orange-900/75 dark:text-orange-100/75">
+                  Review this before the appointment changes. Approving adds the service to the job.
+                </p>
+              </div>
+              <Badge className="shrink-0 rounded-full border border-orange-200 bg-white px-2.5 py-1 text-orange-900 hover:bg-white dark:border-orange-400/25 dark:bg-orange-500/15 dark:text-orange-100">
+                {customerAddonRequests.length}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4">
+            {customerAddonRequests.map((request) => {
+              const alreadyAdded = existingServiceIds.has(request.addonServiceId);
+              const catalogService = serviceCatalogRecords.find((service) => service.id === request.addonServiceId);
+              const displayPrice =
+                request.addonPrice != null
+                  ? request.addonPrice
+                  : catalogService?.price != null
+                    ? Number(catalogService.price)
+                    : null;
+              const displayDuration = request.addonDurationMinutes ?? catalogService?.durationMinutes ?? null;
+              const isAddingThisRequest = addingRequestedAddonId === request.addonServiceId;
+              const isDecliningThisRequest = decliningRequestedAddonId === request.addonServiceId;
+              return (
+                <div
+                  key={`priority-${request.activityId}`}
+                  className="rounded-2xl border border-orange-200 bg-background/95 p-4 shadow-sm dark:border-orange-400/20 dark:bg-slate-950/45"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="space-y-1">
+                        <p className="break-words text-base font-semibold text-foreground">{request.addonName}</p>
+                        <p className="text-sm leading-5 text-muted-foreground">
+                          {request.clientName ? `${request.clientName} requested this` : "Customer requested this"}
+                          {request.parentServiceName ? ` with ${request.parentServiceName}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground dark:bg-white/5">
+                          {displayPrice != null && Number.isFinite(displayPrice)
+                            ? `Adds ${formatCurrency(displayPrice)}`
+                            : "Price from catalog"}
+                        </span>
+                        {displayDuration ? (
+                          <span className="rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-semibold text-foreground dark:bg-white/5">
+                            Adds {displayDuration} min
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="grid shrink-0 gap-2 sm:grid-cols-2 md:flex md:flex-col md:items-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="min-h-11 w-full rounded-full px-4 md:w-auto"
+                        variant={alreadyAdded ? "outline" : "default"}
+                        onClick={() => void handleAddRequestedService(request.addonServiceId)}
+                        disabled={addingService || reviewingAddonRequest || alreadyAdded || !catalogService}
+                      >
+                        {isAddingThisRequest ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : alreadyAdded ? (
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                        ) : (
+                          <Plus className="mr-2 h-4 w-4" />
+                        )}
+                        {alreadyAdded ? "Already added" : catalogService ? "Approve & add" : "Unavailable"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="min-h-11 w-full rounded-full border-border bg-background/85 px-4 text-muted-foreground hover:bg-muted hover:text-foreground md:w-auto dark:bg-white/5 dark:hover:bg-white/10"
+                        onClick={() => void handleDeclineRequestedService(request)}
+                        disabled={reviewingAddonRequest || addingService}
+                      >
+                        {isDecliningThisRequest ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <X className="mr-2 h-4 w-4" />
+                        )}
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Header */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
@@ -2885,7 +2986,7 @@ export default function AppointmentDetail() {
 
               {customerAddonRequests.length > 0 ? (
                 <Card
-                  id="customer-addon-requests"
+                  id="customer-addon-requests-detail"
                   className="scroll-mt-24 border-orange-200 bg-orange-50/80 shadow-sm dark:border-orange-400/25 dark:bg-orange-500/10"
                 >
                   <CardHeader>
