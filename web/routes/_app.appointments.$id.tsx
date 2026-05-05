@@ -1005,21 +1005,47 @@ export default function AppointmentDetail() {
       ),
     [existingServiceIds, serviceAddonLinks, serviceCatalogRecords]
   );
-  const customerAddonActivityRecords = (activityLogs ?? []) as Array<{
+  const validCustomerAddonServiceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const link of (serviceAddonLinks ?? []) as AppointmentAddonLinkRecord[]) {
+      if (!link.parentServiceId || !link.addonServiceId) continue;
+      if (existingServiceIds.has(link.parentServiceId)) ids.add(link.addonServiceId);
+    }
+    return ids;
+  }, [existingServiceIds, serviceAddonLinks]);
+  const currentAppointmentId = appointment?.id ?? id ?? "";
+  const canShowCustomerAddonRequestsForAppointment = Boolean(
+    appointment?.id &&
+      appointment.client?.id &&
+      !isCalendarBlockAppointment(appointment)
+  );
+  const customerAddonActivityRecords = ((activityLogs ?? []) as Array<{
       id?: string | null;
       type?: string | null;
       action?: string | null;
+      entityType?: string | null;
+      entityId?: string | null;
       metadata?: unknown;
       createdAt?: string | Date | null;
-    }>;
-  const appointmentCustomerAddonRequests = Array.isArray((appointment as AppointmentDetailRecord | null)?.customerAddonRequests)
-    ? ((appointment as AppointmentDetailRecord).customerAddonRequests ?? [])
-    : [];
+    }>).filter(
+      (record) =>
+        record.entityType === "appointment" &&
+        record.entityId === currentAppointmentId
+    );
+  const isEligibleCustomerAddonRequest = (request: CustomerAddonRequest) =>
+    canShowCustomerAddonRequestsForAppointment &&
+    Boolean(request.addonServiceId) &&
+    validCustomerAddonServiceIds.has(request.addonServiceId);
+  const appointmentCustomerAddonRequests =
+    canShowCustomerAddonRequestsForAppointment &&
+    Array.isArray((appointment as AppointmentDetailRecord | null)?.customerAddonRequests)
+      ? ((appointment as AppointmentDetailRecord).customerAddonRequests ?? []).filter(isEligibleCustomerAddonRequest)
+      : [];
   const appointmentCustomerAddonRequestIds = new Set(
     appointmentCustomerAddonRequests.map((request) => request.addonServiceId).filter(Boolean)
   );
   const fallbackCustomerAddonRequests = parsePendingCustomerAddonRequestsFromActivity(customerAddonActivityRecords).filter(
-    (request) => !appointmentCustomerAddonRequestIds.has(request.addonServiceId)
+    (request) => isEligibleCustomerAddonRequest(request) && !appointmentCustomerAddonRequestIds.has(request.addonServiceId)
   );
   const customerAddonRequests = Array.from(
     [...appointmentCustomerAddonRequests, ...fallbackCustomerAddonRequests]

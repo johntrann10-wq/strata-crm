@@ -71,6 +71,10 @@ type FindManyOpts = {
   vehicleId?: string;
   /** Workflow records: filter by location. */
   locationId?: string;
+  /** Activity records: filter by entity type. */
+  entityType?: string;
+  /** Activity records: filter by entity id. */
+  entityId?: string;
   /** Optional shell data that should not force a logout on transient 401s. */
   suppressAuthInvalidation?: boolean;
   pause?: boolean;
@@ -114,6 +118,8 @@ function buildFindManyOpts(
   clientId: FindManyOpts["clientId"],
   vehicleId: FindManyOpts["vehicleId"],
   locationId: FindManyOpts["locationId"],
+  entityType: FindManyOpts["entityType"],
+  entityId: FindManyOpts["entityId"],
   suppressAuthInvalidation: FindManyOpts["suppressAuthInvalidation"],
   pause: FindManyOpts["pause"],
   live: FindManyOpts["live"]
@@ -134,6 +140,8 @@ function buildFindManyOpts(
     clientId == null &&
     vehicleId == null &&
     locationId == null &&
+    entityType == null &&
+    entityId == null &&
     suppressAuthInvalidation == null &&
     pause == null &&
     live == null
@@ -157,6 +165,8 @@ function buildFindManyOpts(
     clientId,
     vehicleId,
     locationId,
+    entityType,
+    entityId,
     suppressAuthInvalidation,
     pause,
     live,
@@ -281,6 +291,8 @@ export function useFindMany(
         String(opts?.clientId ?? ""),
         String(opts?.vehicleId ?? ""),
         String(opts?.locationId ?? ""),
+        String(opts?.entityType ?? ""),
+        String(opts?.entityId ?? ""),
         opts?.suppressAuthInvalidation ? "1" : "0",
         opts?.pause ? "1" : "0",
         opts?.live ? "1" : "0",
@@ -301,6 +313,8 @@ export function useFindMany(
       opts?.clientId,
       opts?.vehicleId,
       opts?.locationId,
+      opts?.entityType,
+      opts?.entityId,
       opts?.suppressAuthInvalidation,
       opts?.pause,
       opts?.live,
@@ -329,6 +343,8 @@ export function useFindMany(
         opts?.clientId,
         opts?.vehicleId,
         opts?.locationId,
+        opts?.entityType,
+        opts?.entityId,
         opts?.suppressAuthInvalidation,
         opts?.pause,
         opts?.live
@@ -433,6 +449,8 @@ export function useFindFirst(
         String(opts?.clientId ?? ""),
         String(opts?.vehicleId ?? ""),
         String(opts?.locationId ?? ""),
+        String(opts?.entityType ?? ""),
+        String(opts?.entityId ?? ""),
         opts?.suppressAuthInvalidation ? "1" : "0",
         opts?.pause ? "1" : "0",
         opts?.live ? "1" : "0",
@@ -453,6 +471,8 @@ export function useFindFirst(
       opts?.clientId,
       opts?.vehicleId,
       opts?.locationId,
+      opts?.entityType,
+      opts?.entityId,
       opts?.suppressAuthInvalidation,
       opts?.pause,
       opts?.live,
@@ -481,6 +501,8 @@ export function useFindFirst(
         opts?.clientId,
         opts?.vehicleId,
         opts?.locationId,
+        opts?.entityType,
+        opts?.entityId,
         opts?.suppressAuthInvalidation,
         opts?.pause,
         opts?.live

@@ -1587,27 +1587,31 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
     bookingRequestId: row.sourceBookingRequestId,
     metadata: sourceMetadata,
   });
-  const customerAddonActivityRows = await db
-    .select({
-      id: activityLogs.id,
-      action: activityLogs.action,
-      metadata: activityLogs.metadata,
-      createdAt: activityLogs.createdAt,
-    })
-    .from(activityLogs)
-    .where(
-      and(
-        eq(activityLogs.businessId, bid),
-        eq(activityLogs.entityType, "appointment"),
-        eq(activityLogs.entityId, row.id),
-        sql`${activityLogs.action} in (
-          'appointment.public_addon_requested',
-          'appointment.public_addon_approved',
-          'appointment.public_addon_declined'
-        )`
-      )
-    )
-    .orderBy(asc(activityLogs.createdAt));
+  const canExposeCustomerAddonRequests =
+    Boolean(row.clientId) && !isCalendarBlockInternalNotes(row.internalNotes);
+  const customerAddonActivityRows = canExposeCustomerAddonRequests
+    ? await db
+        .select({
+          id: activityLogs.id,
+          action: activityLogs.action,
+          metadata: activityLogs.metadata,
+          createdAt: activityLogs.createdAt,
+        })
+        .from(activityLogs)
+        .where(
+          and(
+            eq(activityLogs.businessId, bid),
+            eq(activityLogs.entityType, "appointment"),
+            eq(activityLogs.entityId, row.id),
+            sql`${activityLogs.action} in (
+              'appointment.public_addon_requested',
+              'appointment.public_addon_approved',
+              'appointment.public_addon_declined'
+            )`
+          )
+        )
+        .orderBy(asc(activityLogs.createdAt))
+    : [];
   const customerAddonRequestMap = new Map<
     string,
     {
@@ -2763,13 +2767,21 @@ appointmentsRouter.post(
     const bid = businessId(req);
     const { id, addonServiceId } = params.data;
     const [appointment] = await db
-      .select({ id: appointments.id, title: appointments.title })
+      .select({
+        id: appointments.id,
+        title: appointments.title,
+        clientId: appointments.clientId,
+        internalNotes: appointments.internalNotes,
+      })
       .from(appointments)
       .where(and(eq(appointments.id, id), eq(appointments.businessId, bid)))
       .limit(1);
     if (!appointment) {
       sendAppointmentNotFound(res);
       return;
+    }
+    if (!appointment.clientId || isCalendarBlockInternalNotes(appointment.internalNotes)) {
+      throw new BadRequestError("Add-on requests can only be reviewed on customer appointments.");
     }
 
     const [requestLog] = await db
