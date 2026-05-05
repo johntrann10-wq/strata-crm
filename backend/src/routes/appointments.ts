@@ -39,6 +39,10 @@ export const appointmentsRouter = Router({ mergeParams: true });
 const CALENDAR_BLOCK_PREFIX = "[[calendar-block:";
 const TERMINAL_APPOINTMENT_STATUSES = new Set(["completed", "cancelled", "no-show"]);
 
+function sendAppointmentNotFound(res: Response): void {
+  res.status(404).json({ message: "Appointment not found.", code: "NOT_FOUND" });
+}
+
 const appointmentConfirmationLimiter = createRateLimiter({
   id: "appointment_confirmation_send",
   windowMs: 10 * 60 * 1000,
@@ -1480,7 +1484,10 @@ appointmentsRouter.get("/", requireAuth, requireTenant, requirePermission("appoi
 appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("appointments.read"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const idParsed = z.string().uuid().safeParse(req.params.id);
-  if (!idParsed.success) throw new NotFoundError("Appointment not found.");
+  if (!idParsed.success) {
+    sendAppointmentNotFound(res);
+    return;
+  }
   const appointmentId = idParsed.data;
 
   const [appointmentExists] = await db
@@ -1488,7 +1495,10 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
     .from(appointments)
     .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
     .limit(1);
-  if (!appointmentExists) throw new NotFoundError("Appointment not found.");
+  if (!appointmentExists) {
+    sendAppointmentNotFound(res);
+    return;
+  }
 
   const [row] = await db
     .select({
@@ -1545,7 +1555,10 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
     .where(and(eq(appointments.id, appointmentExists.id), eq(appointments.businessId, bid)))
     .limit(1);
 
-  if (!row) throw new NotFoundError("Appointment not found.");
+  if (!row) {
+    sendAppointmentNotFound(res);
+    return;
+  }
 
   const finance = (
     await getAppointmentFinanceSummaryMap(bid, [
@@ -2687,7 +2700,10 @@ appointmentsRouter.post(
       .from(appointments)
       .where(and(eq(appointments.id, id), eq(appointments.businessId, bid)))
       .limit(1);
-    if (!appointment) throw new NotFoundError("Appointment not found.");
+    if (!appointment) {
+      sendAppointmentNotFound(res);
+      return;
+    }
 
     const [requestLog] = await db
       .select({ id: activityLogs.id, metadata: activityLogs.metadata })
