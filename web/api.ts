@@ -684,6 +684,26 @@ export const api = {
         method: "POST",
         suppressAuthInvalidation: true,
       }),
+    registerPushDevice: (params: {
+      deviceToken: string;
+      platform?: "ios";
+      authorizationStatus?: string | null;
+      enabledBuckets?: Array<"leads" | "calendar" | "finance">;
+    }) =>
+      request<{ ok: true; id: string | null }>("/notifications/push-device", {
+        method: "POST",
+        body: JSON.stringify(params),
+        suppressAuthInvalidation: true,
+      }),
+    disablePushDevice: (params: {
+      deviceToken: string;
+      authorizationStatus?: string | null;
+    }) =>
+      request<{ ok: true }>("/notifications/push-device/disable", {
+        method: "POST",
+        body: JSON.stringify(params),
+        suppressAuthInvalidation: true,
+      }),
   },
   notificationLog: resource("notification-logs"),
   integration: {

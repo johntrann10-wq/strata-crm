@@ -1855,8 +1855,8 @@ export function HomeCompactQuickActions({
     <Card
       className={cn(
         dashboardPanelClassName,
-        "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78",
-        nativeIOS && "rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
+        "border-dashed border-slate-200/80 bg-gradient-to-r from-white/88 via-white/78 to-slate-50/78 dark:border-slate-700/90 dark:from-slate-950/92 dark:via-slate-900/86 dark:to-slate-950/92 dark:shadow-[0_22px_52px_rgba(0,0,0,0.28)]",
+        nativeIOS && "rounded-[1.45rem] border-white/80 bg-white/96 shadow-[0_12px_28px_rgba(15,23,42,0.06)] dark:border-slate-700/85 dark:bg-slate-950/90"
       )}
     >
       <CardHeader className="pb-3">
@@ -1869,9 +1869,9 @@ export function HomeCompactQuickActions({
             variant="outline"
             size="icon"
             className={cn(
-              "h-8 w-8 rounded-full border-slate-200 bg-white/88 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950",
+              "h-8 w-8 rounded-full border-slate-200 bg-white/88 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:border-slate-300 hover:bg-white hover:text-slate-950 dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-800 dark:hover:text-white",
               nativeIOS && "h-10 w-10",
-              customizing && "border-slate-300 bg-slate-950 text-white hover:bg-slate-900 hover:text-white"
+              customizing && "border-slate-300 bg-slate-950 text-white hover:bg-slate-900 hover:text-white dark:border-orange-400/45 dark:bg-orange-500/18 dark:text-orange-100 dark:hover:bg-orange-500/25"
             )}
             onClick={() => setCustomizing((current) => !current)}
             aria-expanded={customizing}
@@ -1884,7 +1884,7 @@ export function HomeCompactQuickActions({
       </CardHeader>
       <CardContent className="space-y-3">
         {customizing ? (
-          <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/82 p-3">
+          <div className="rounded-[1.15rem] border border-slate-200/80 bg-white/82 p-3 dark:border-slate-700/80 dark:bg-slate-950/55">
             <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-4", nativeIOS && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2")}>
               {availableActions.map((action) => {
                 const activeKeys = selectedShortcutKeys ?? defaultActions.map((item) => item.key);
@@ -1895,8 +1895,8 @@ export function HomeCompactQuickActions({
                     className={cn(
                       "flex min-h-[58px] cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-sm transition-colors",
                       checked
-                        ? "border-slate-300 bg-slate-950 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        ? "border-slate-300 bg-slate-950 text-white dark:border-orange-400/40 dark:bg-orange-500/16 dark:text-orange-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:bg-slate-800/90"
                     )}
                   >
                     <input
@@ -1914,7 +1914,7 @@ export function HomeCompactQuickActions({
                     />
                     <span className="min-w-0">
                       <span className="block font-semibold leading-tight">{action.label}</span>
-                      <span className={cn("mt-1 block text-[11px] font-medium leading-snug", checked ? "text-white/72" : "text-slate-500")}>
+                      <span className={cn("mt-1 block text-[11px] font-medium leading-snug", checked ? "text-white/72 dark:text-orange-100/72" : "text-slate-500 dark:text-slate-400")}>
                         {action.description}
                       </span>
                     </span>
@@ -1927,7 +1927,7 @@ export function HomeCompactQuickActions({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="rounded-full text-xs text-slate-500"
+                className="rounded-full text-xs text-slate-500 dark:text-slate-400 dark:hover:text-white"
                 onClick={() => {
                   setSelectedShortcutKeys(null);
                   if (typeof window !== "undefined") {
@@ -1948,8 +1948,8 @@ export function HomeCompactQuickActions({
               const className = cn(
                 "min-h-[42px] w-full justify-center rounded-full sm:w-auto sm:justify-start",
                 primary
-                  ? "bg-slate-950 text-white hover:bg-slate-800"
-                  : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50",
+                  ? "bg-slate-950 text-white hover:bg-slate-800 dark:bg-orange-500 dark:text-white dark:hover:bg-orange-400"
+                  : "border-slate-200 bg-white/85 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/78 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800",
                 nativeIOS && "min-h-[3.25rem] rounded-[1rem] px-3 text-sm shadow-[0_8px_18px_rgba(15,23,42,0.04)] sm:w-full sm:justify-center"
               );
 
@@ -1982,7 +1982,7 @@ export function HomeCompactQuickActions({
               );
             })
           ) : (
-            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/72 px-3 py-3 text-sm text-slate-500">
+            <div className="rounded-[1rem] border border-dashed border-slate-200/80 bg-white/72 px-3 py-3 text-sm text-slate-500 dark:border-slate-700/80 dark:bg-slate-900/65 dark:text-slate-300">
               No shortcuts selected.
             </div>
           )}

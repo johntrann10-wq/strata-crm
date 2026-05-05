@@ -897,28 +897,28 @@ export default function NewQuotePage() {
                   <Separator />
                   <div className="space-y-4">
                     {selectedAddonSuggestions.length > 0 ? (
-                      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3 sm:p-4">
+                      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-3 dark:border-orange-400/30 dark:bg-orange-500/10 sm:p-4">
                         <div className="flex flex-col gap-1">
-                          <p className="text-sm font-semibold text-amber-950">Suggested add-ons</p>
-                          <p className="text-xs leading-5 text-amber-800/80">
+                          <p className="text-sm font-semibold text-amber-950 dark:text-orange-100">Suggested add-ons</p>
+                          <p className="text-xs leading-5 text-amber-800/80 dark:text-orange-100/75">
                             Based on services already on this quote. Add only what belongs on this estimate.
                           </p>
                         </div>
                         <div className="mt-3 grid gap-2">
                           {selectedAddonSuggestions.map((suggestion) => (
                             <div key={suggestion.baseService.id} className="space-y-2">
-                              <p className="text-xs font-medium text-amber-900/80">For {suggestion.baseService.name}</p>
+                              <p className="text-xs font-medium text-amber-900/80 dark:text-orange-200/80">For {suggestion.baseService.name}</p>
                               <div className="flex flex-wrap gap-2">
                                 {suggestion.linkedAddons.map((addon) => (
                                   <button
                                     key={addon.id}
                                     type="button"
                                     onClick={() => addServiceAsLineItem(addon)}
-                                    className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-sm transition-colors hover:bg-amber-50"
+                                    className="inline-flex max-w-full items-center gap-2 rounded-full border border-amber-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-sm transition-colors hover:bg-amber-50 dark:border-orange-400/25 dark:bg-slate-950/50 dark:text-orange-100 dark:hover:bg-orange-500/15"
                                   >
-                                    <Plus className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                                    <Plus className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-orange-200" />
                                     <span className="min-w-0 break-words">{addon.name}</span>
-                                    <span className="shrink-0 text-slate-500">{formatCurrency(toMoneyNumber(addon.price))}</span>
+                                    <span className="shrink-0 text-slate-500 dark:text-orange-100/80">{formatCurrency(toMoneyNumber(addon.price))}</span>
                                   </button>
                                 ))}
                               </div>

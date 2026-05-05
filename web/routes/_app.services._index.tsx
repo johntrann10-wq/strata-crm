@@ -1136,11 +1136,11 @@ function ServiceForm({
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <Card className="border-slate-200/75 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.045)]">
+    <Card className="border-slate-200/75 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.045)] dark:border-slate-700/80 dark:bg-slate-900/88 dark:shadow-[0_16px_34px_rgba(0,0,0,0.24)]">
       <CardContent className="space-y-2 p-4">
-        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-        <p className="text-2xl font-semibold tracking-[-0.03em] text-slate-950">{value}</p>
-        <p className="text-sm leading-6 text-slate-600">{detail}</p>
+        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</p>
+        <p className="text-2xl font-semibold tracking-[-0.03em] text-slate-950 dark:text-white">{value}</p>
+        <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{detail}</p>
       </CardContent>
     </Card>
   );
@@ -1152,8 +1152,8 @@ function BookingRulePill({ active, children }: { active: boolean; children: Reac
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-1 text-[0.68rem] font-medium tracking-[0.08em] uppercase shadow-[inset_0_1px_0_rgba(255,255,255,0.3)]",
         active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-white text-slate-500"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/12 dark:text-emerald-200"
+          : "border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300"
       )}
     >
       {children}
@@ -1172,16 +1172,16 @@ function ServiceMetaPill({
 }) {
   const toneClasses =
     tone === "warm"
-      ? "border-amber-200 bg-amber-50/80 text-amber-900"
+      ? "border-amber-200 bg-amber-50/80 text-amber-900 dark:border-orange-400/30 dark:bg-orange-500/12 dark:text-orange-100"
       : tone === "success"
-        ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+        ? "border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-500/12 dark:text-emerald-100"
         : tone === "neutral"
-          ? "border-slate-200 bg-slate-50 text-slate-800"
-          : "border-slate-200 bg-white/90 text-slate-900";
+          ? "border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+          : "border-slate-200 bg-white/90 text-slate-900 dark:border-slate-700 dark:bg-slate-900/80 dark:text-white";
 
   return (
     <div className={cn("rounded-2xl border px-3.5 py-3 shadow-sm", toneClasses)}>
-      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-sm font-semibold tracking-[-0.01em]">{value}</p>
     </div>
   );
@@ -1199,11 +1199,11 @@ function BuilderSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[1.45rem] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)] sm:p-6">
+    <section className="rounded-[1.45rem] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)] dark:border-slate-700/80 dark:bg-slate-950/86 dark:shadow-[0_18px_38px_rgba(0,0,0,0.24)] sm:p-6">
       <div className="space-y-1">
-        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
-        <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950">{title}</h3>
-        <p className="max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
+        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{eyebrow}</p>
+        <h3 className="text-lg font-semibold tracking-[-0.02em] text-slate-950 dark:text-white">{title}</h3>
+        <p className="max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">{description}</p>
       </div>
       <div className="mt-5">{children}</div>
     </section>
@@ -1283,31 +1283,31 @@ function ServiceCard({
 
   return (
     <div
-      className="group flex flex-col gap-5 rounded-[1.5rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_20px_42px_rgba(15,23,42,0.08)] lg:flex-row lg:items-start lg:justify-between"
+      className="group flex flex-col gap-5 rounded-[1.5rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(248,250,252,0.95))] p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_20px_42px_rgba(15,23,42,0.08)] dark:border-slate-700/80 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.92))] dark:shadow-[0_18px_42px_rgba(0,0,0,0.28)] dark:hover:border-slate-600 lg:flex-row lg:items-start lg:justify-between"
       onClick={() => { if (canEdit) onEdit(service); }}
     >
       <div className="min-w-0 flex-1 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="rounded-full bg-white">
+              <Badge variant="outline" className="rounded-full bg-white dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100">
                 {service.bookingEnabled === true ? "Public booking" : "Internal only"}
               </Badge>
-              {service.isAddon ? <Badge variant="secondary">Add-on</Badge> : null}
-              {!service.isAddon && linkedAddons.length > 0 ? <Badge variant="outline">{linkedAddons.length} optional add-on{linkedAddons.length === 1 ? "" : "s"}</Badge> : null}
-              <Badge variant="outline">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
-              {service.bookingEnabled === true ? <Badge variant="outline">{serviceModeLabel(service.bookingServiceMode)}</Badge> : null}
+              {service.isAddon ? <Badge variant="secondary" className="dark:bg-orange-500/15 dark:text-orange-100">Add-on</Badge> : null}
+              {!service.isAddon && linkedAddons.length > 0 ? <Badge variant="outline" className="dark:border-orange-400/30 dark:bg-orange-500/10 dark:text-orange-100">{linkedAddons.length} optional add-on{linkedAddons.length === 1 ? "" : "s"}</Badge> : null}
+              <Badge variant="outline" className="dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{service.categoryLabel ?? formatServiceCategory(service.category)}</Badge>
+              {service.bookingEnabled === true ? <Badge variant="outline" className="dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{serviceModeLabel(service.bookingServiceMode)}</Badge> : null}
             </div>
             <div className="space-y-1">
-              <span className="truncate text-lg font-semibold tracking-[-0.03em] text-slate-950">{service.name}</span>
-              <p className="max-w-3xl text-sm leading-6 text-slate-600">
+              <span className="truncate text-lg font-semibold tracking-[-0.03em] text-slate-950 dark:text-white">{service.name}</span>
+              <p className="max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                 {service.bookingDescription || service.notes || "Use this service as part of the public booking catalog without losing the internal detail your team already relies on."}
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {service.bookingFeatured === true ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Featured</Badge> : null}
-            {bookingModeBadge ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">{bookingModeBadge}</Badge> : null}
+            {service.bookingFeatured === true ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50 dark:bg-orange-500/15 dark:text-orange-100 dark:hover:bg-orange-500/15">Featured</Badge> : null}
+            {bookingModeBadge ? <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50 dark:bg-orange-500/15 dark:text-orange-100 dark:hover:bg-orange-500/15">{bookingModeBadge}</Badge> : null}
           </div>
         </div>
 
@@ -1339,15 +1339,15 @@ function ServiceCard({
           {service.bookingEnabled === true && service.bookingWindowDays ? <span>{service.bookingWindowDays} day window</span> : null}
         </div>
         {!service.isAddon && visibleLinkedAddons.length > 0 ? (
-          <div className="rounded-[1.1rem] border border-orange-100 bg-orange-50/55 px-3 py-2.5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700/80">Optional add-ons</p>
+          <div className="rounded-[1.1rem] border border-orange-100 bg-orange-50/55 px-3 py-2.5 dark:border-orange-400/25 dark:bg-orange-500/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700/80 dark:text-orange-200/85">Optional add-ons</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {visibleLinkedAddons.map((addon) => (
-                <Badge key={addon.id} variant="outline" className="bg-white/85 text-slate-700">
+                <Badge key={addon.id} variant="outline" className="bg-white/85 text-slate-700 dark:border-orange-400/25 dark:bg-slate-950/50 dark:text-orange-100">
                   {addon.name}
                 </Badge>
               ))}
-              {hiddenLinkedAddonCount > 0 ? <Badge variant="outline" className="bg-white/85 text-slate-700">+{hiddenLinkedAddonCount} more</Badge> : null}
+              {hiddenLinkedAddonCount > 0 ? <Badge variant="outline" className="bg-white/85 text-slate-700 dark:border-orange-400/25 dark:bg-slate-950/50 dark:text-orange-100">+{hiddenLinkedAddonCount} more</Badge> : null}
             </div>
           </div>
         ) : null}
@@ -1360,8 +1360,8 @@ function ServiceCard({
             Edit
           </Button>
         </div>
-        <div className="flex w-full items-center justify-between rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-3 py-2.5 lg:w-auto lg:min-w-[220px]">
-          <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Service order</span>
+        <div className="flex w-full items-center justify-between rounded-[1.1rem] border border-slate-200 bg-slate-50/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900/70 lg:w-auto lg:min-w-[220px]">
+          <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Service order</span>
           <div className="flex items-center gap-2">
             <Button size="icon" variant="outline" className="h-8 w-8 rounded-xl" onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={moveDisabledUp || !canEdit}>
               <ArrowUp className="h-3.5 w-3.5" />
@@ -1371,10 +1371,10 @@ function ServiceCard({
             </Button>
           </div>
         </div>
-        <div className="flex w-full items-center justify-between rounded-[1.1rem] border border-slate-200 bg-white px-3 py-2.5 lg:w-auto lg:min-w-[220px]">
+        <div className="flex w-full items-center justify-between rounded-[1.1rem] border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900/78 lg:w-auto lg:min-w-[220px]">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Active</p>
-            <p className="text-sm font-medium text-slate-950">{service.active !== false ? "Visible internally" : "Archived from team view"}</p>
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Active</p>
+            <p className="text-sm font-medium text-slate-950 dark:text-white">{service.active !== false ? "Visible internally" : "Archived from team view"}</p>
           </div>
           <ActiveToggle active={service.active !== false} onToggle={() => onToggle(service)} loading={isToggling || !canEdit} />
         </div>

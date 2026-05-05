@@ -74,7 +74,7 @@ import {
   type BillingPromptState,
 } from "../lib/billingPrompts";
 import { BillingPromptDialog } from "@/components/billing/BillingPromptDialog";
-import { canOpenExternalPaymentProvider, isNativeShell, shouldShowWebBillingSurface } from "@/lib/mobileShell";
+import { canOpenExternalPaymentProvider, isNativeIOSApp, isNativeShell, shouldShowWebBillingSurface } from "@/lib/mobileShell";
 import { triggerImpactFeedback, triggerNotificationFeedback, triggerSelectionFeedback } from "@/lib/nativeInteractions";
 import { useKeyboardShortcutHints } from "@/hooks/useKeyboardShortcutHints";
 
@@ -99,6 +99,50 @@ type BillingStatus = {
   checkoutConfigured: boolean;
   portalConfigured: boolean;
 };
+
+type NativeNotificationStatus = {
+  status?: string | null;
+  deviceToken?: string | null;
+};
+
+type NativeNotificationsPlugin = {
+  getStatus?: () => Promise<NativeNotificationStatus>;
+  requestAuthorization?: () => Promise<NativeNotificationStatus>;
+  registerForRemoteNotifications?: () => Promise<NativeNotificationStatus>;
+  setBadgeCount?: (input: { count: number }) => Promise<void>;
+};
+
+type WindowWithNativeNotifications = Window & {
+  Capacitor?: {
+    Plugins?: {
+      NativeNotifications?: NativeNotificationsPlugin;
+    };
+  };
+};
+
+function getNativeNotificationsPlugin(): NativeNotificationsPlugin | null {
+  if (typeof window === "undefined") return null;
+  const plugin = (window as WindowWithNativeNotifications).Capacitor?.Plugins?.NativeNotifications;
+  return plugin ?? null;
+}
+
+function isNativePushAuthorized(status: string | null | undefined): boolean {
+  return status === "authorized" || status === "provisional" || status === "ephemeral";
+}
+
+function getNativePushErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (/aps-environment/i.test(message)) {
+    return "This iPhone build is missing the Apple push entitlement. Rebuild with Push Notifications enabled.";
+  }
+  if (/not implemented/i.test(message)) {
+    return "This iPhone build does not include the native notifications bridge yet.";
+  }
+  if (/denied/i.test(message)) {
+    return "Notifications are off for Strata in iPhone Settings.";
+  }
+  return message.trim() || "iPhone notifications could not be enabled right now.";
+}
 
 // SPA mode: no loader; auth/session are resolved client-side via /api/auth/me.
 
@@ -319,6 +363,12 @@ function NotificationCenter({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [nativePushVisible, setNativePushVisible] = useState(false);
+  const [nativePushChecking, setNativePushChecking] = useState(false);
+  const [nativePushEnabling, setNativePushEnabling] = useState(false);
+  const [nativePushEnabled, setNativePushEnabled] = useState(false);
+  const [nativePushStatus, setNativePushStatus] = useState<string | null>(null);
+  const [nativePushError, setNativePushError] = useState<string | null>(null);
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen !== open) {
@@ -328,11 +378,105 @@ function NotificationCenter({
     },
     [open]
   );
+  const registerNativePushDevice = useCallback(async (statusResult: NativeNotificationStatus) => {
+    const deviceToken = typeof statusResult.deviceToken === "string" ? statusResult.deviceToken.trim() : "";
+    if (!deviceToken) return false;
+    await api.notification.registerPushDevice({
+      deviceToken,
+      platform: "ios",
+      authorizationStatus: statusResult.status ?? null,
+      enabledBuckets: ["leads", "calendar", "finance"],
+    });
+    return true;
+  }, []);
+  const syncNativePushStatus = useCallback(async () => {
+    if (!nativePushVisible) return;
+    const plugin = getNativeNotificationsPlugin();
+    if (!plugin?.getStatus) {
+      setNativePushError("This iPhone build does not include the native notifications bridge yet.");
+      setNativePushEnabled(false);
+      return;
+    }
+    setNativePushChecking(true);
+    try {
+      const statusResult = await plugin.getStatus();
+      setNativePushStatus(statusResult.status ?? null);
+      if (isNativePushAuthorized(statusResult.status) && statusResult.deviceToken) {
+        await registerNativePushDevice(statusResult);
+        setNativePushEnabled(true);
+        setNativePushError(null);
+      } else {
+        setNativePushEnabled(false);
+        setNativePushError(statusResult.status === "denied" ? "Notifications are off for Strata in iPhone Settings." : null);
+      }
+    } catch (error) {
+      setNativePushEnabled(false);
+      setNativePushError(getNativePushErrorMessage(error));
+    } finally {
+      setNativePushChecking(false);
+    }
+  }, [nativePushVisible, registerNativePushDevice]);
+  const handleEnableNativePush = useCallback(async () => {
+    const plugin = getNativeNotificationsPlugin();
+    if (!plugin?.requestAuthorization || !plugin?.registerForRemoteNotifications) {
+      setNativePushError("This iPhone build does not include the native notifications bridge yet.");
+      setNativePushEnabled(false);
+      return;
+    }
+    setNativePushEnabling(true);
+    setNativePushError(null);
+    try {
+      const permissionResult = await plugin.requestAuthorization();
+      setNativePushStatus(permissionResult.status ?? null);
+      if (!isNativePushAuthorized(permissionResult.status)) {
+        setNativePushEnabled(false);
+        setNativePushError(
+          permissionResult.status === "denied"
+            ? "Notifications are off for Strata in iPhone Settings."
+            : "Notification permission was not granted."
+        );
+        return;
+      }
+
+      const registrationResult = await plugin.registerForRemoteNotifications();
+      const registered = await registerNativePushDevice({
+        status: registrationResult.status ?? permissionResult.status ?? null,
+        deviceToken: registrationResult.deviceToken ?? permissionResult.deviceToken ?? null,
+      });
+      if (!registered) {
+        setNativePushEnabled(false);
+        setNativePushError("Apple did not return a device token yet. Try again after reopening the app.");
+        return;
+      }
+      setNativePushStatus(registrationResult.status ?? permissionResult.status ?? null);
+      setNativePushEnabled(true);
+      setNativePushError(null);
+      void triggerNotificationFeedback("success");
+    } catch (error) {
+      setNativePushEnabled(false);
+      setNativePushError(getNativePushErrorMessage(error));
+      void triggerNotificationFeedback("error");
+    } finally {
+      setNativePushEnabling(false);
+    }
+  }, [registerNativePushDevice]);
+
+  useEffect(() => {
+    setNativePushVisible(isNativeIOSApp());
+  }, []);
+
+  useEffect(() => {
+    if (!nativePushVisible) return;
+    const plugin = getNativeNotificationsPlugin();
+    if (!plugin?.setBadgeCount) return;
+    void plugin.setBadgeCount({ count: Math.max(0, counts.total) }).catch(() => undefined);
+  }, [counts.total, nativePushVisible]);
 
   useEffect(() => {
     if (!open) return;
     void onRefresh();
-  }, [open, onRefresh]);
+    void syncNativePushStatus();
+  }, [open, onRefresh, syncNativePushStatus]);
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -393,6 +537,34 @@ function NotificationCenter({
           </div>
         </div>
         <div className="max-h-[24rem] overflow-y-auto px-3 py-3">
+          {nativePushVisible && !nativePushEnabled ? (
+            <div className="mb-3 rounded-2xl border border-orange-200/80 bg-orange-50/80 p-3 shadow-sm dark:border-orange-400/25 dark:bg-orange-500/10">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-orange-950 dark:text-orange-100">Enable iPhone notifications</p>
+                  <p className="mt-1 text-xs leading-5 text-orange-800/85 dark:text-orange-100/75">
+                    Get booking requests, appointment updates, and payment alerts as iPhone banners.
+                  </p>
+                  {nativePushError ? (
+                    <p className="mt-2 text-xs font-medium text-orange-900 dark:text-orange-100">{nativePushError}</p>
+                  ) : nativePushStatus ? (
+                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700/75 dark:text-orange-200/70">
+                      Status: {nativePushStatus.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                    </p>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="shrink-0 rounded-full bg-orange-600 text-white hover:bg-orange-500 dark:bg-orange-500 dark:hover:bg-orange-400"
+                  onClick={handleEnableNativePush}
+                  disabled={nativePushChecking || nativePushEnabling || nativePushStatus === "denied"}
+                >
+                  {nativePushEnabling ? "Enabling..." : nativePushChecking ? "Checking..." : "Enable"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {loading && notifications.length === 0 ? (
             <div className="rounded-2xl border border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
               Loading notifications...

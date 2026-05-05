@@ -1857,22 +1857,22 @@ export default function NewAppointmentPage() {
                   </div>
 
                   {selectedAddonSuggestions.length > 0 ? (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50/75 p-4 shadow-sm">
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/75 p-4 shadow-sm dark:border-orange-400/30 dark:bg-orange-500/10">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-amber-950">Optional add-ons</p>
-                          <p className="text-xs text-amber-800">
+                          <p className="text-sm font-semibold text-amber-950 dark:text-orange-100">Optional add-ons</p>
+                          <p className="text-xs text-amber-800 dark:text-orange-100/75">
                             Add configured upgrades without digging through the full service list.
                           </p>
                         </div>
-                        <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-900">
+                        <Badge variant="outline" className="w-fit border-amber-300 bg-white text-amber-900 dark:border-orange-400/30 dark:bg-slate-950/45 dark:text-orange-100">
                           Revenue lift
                         </Badge>
                       </div>
                       <div className="mt-3 space-y-3">
                         {selectedAddonSuggestions.map((suggestion) => (
                           <div key={suggestion.baseService.id} className="space-y-2">
-                            <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-800">
+                            <p className="text-xs font-medium uppercase tracking-[0.14em] text-amber-800 dark:text-orange-200/80">
                               For {suggestion.baseService.name}
                             </p>
                             <div className="grid gap-2 sm:grid-cols-2">
@@ -1881,10 +1881,10 @@ export default function NewAppointmentPage() {
                                   key={addon.id}
                                   type="button"
                                   onClick={() => toggleService(addon.id)}
-                                  className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50"
+                                  className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-left text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 dark:border-orange-400/25 dark:bg-slate-950/50 dark:hover:border-orange-300/45 dark:hover:bg-orange-500/15"
                                 >
-                                  <span className="min-w-0 break-words font-medium text-slate-950">{addon.name}</span>
-                                  <span className="inline-flex shrink-0 items-center gap-1 text-slate-600">
+                                  <span className="min-w-0 break-words font-medium text-slate-950 dark:text-white">{addon.name}</span>
+                                  <span className="inline-flex shrink-0 items-center gap-1 text-slate-600 dark:text-orange-100">
                                     <Plus className="h-3.5 w-3.5" />
                                     ${toMoneyNumber(addon.price).toFixed(2)}
                                   </span>
