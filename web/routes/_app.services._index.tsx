@@ -697,7 +697,7 @@ function ServiceForm({
   const formSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const mobileTimeInputClassName =
-    "h-11 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
+    "h-11 min-w-0 w-full max-w-full rounded-xl border-input/90 bg-background/85 px-3 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
   const bookingFlowSummary =
     formData.bookingFlowType === "self_book"
       ? "Instant booking"
@@ -993,7 +993,7 @@ function ServiceForm({
                     <div
                       key={entry.dayIndex}
                       className={cn(
-                        "grid gap-3 rounded-xl border bg-white p-3 sm:grid-cols-[minmax(88px,0.75fr)_1fr_1fr] sm:items-center",
+                        "grid min-w-0 gap-3 overflow-hidden rounded-xl border bg-white p-3 sm:grid-cols-[minmax(88px,0.75fr)_minmax(0,1fr)_minmax(0,1fr)] sm:items-center",
                         entry.enabled ? "border-orange-200 shadow-sm" : "border-slate-200 opacity-75"
                       )}
                     >
@@ -1013,7 +1013,7 @@ function ServiceForm({
                           }}
                         />
                       </label>
-                      <div className="grid gap-1">
+                      <div className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                           Opens
                         </span>
@@ -1035,7 +1035,7 @@ function ServiceForm({
                           }}
                         />
                       </div>
-                      <div className="grid gap-1">
+                      <div className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                           Closes
                         </span>

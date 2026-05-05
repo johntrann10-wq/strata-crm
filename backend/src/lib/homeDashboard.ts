@@ -96,6 +96,8 @@ export type HomeDashboardQuickAction = {
     | "new_invoice"
     | "add_client"
     | "add_vehicle"
+    | "search_appointments"
+    | "search_leads"
     | "collect_payment"
     | "send_reminder";
   label: string;
@@ -1464,6 +1466,24 @@ export function buildQuickActions(
       url: "/calendar",
       permission: "appointments.write",
       requiresSelection: true,
+    });
+  }
+  if (permissions.todaySchedule && has("appointments.read")) {
+    actions.push({
+      key: "search_appointments",
+      label: "Search appointments",
+      description: "Find schedule items by customer, vehicle, status, time, or team member.",
+      url: "/appointments?focus=search",
+      permission: "appointments.read",
+    });
+  }
+  if ((permissions.clientVisibility || permissions.pipeline || permissions.conversion) && has("customers.read")) {
+    actions.push({
+      key: "search_leads",
+      label: "Search leads",
+      description: "Open the lead queue with search focused.",
+      url: "/leads?focus=search",
+      permission: "customers.read",
     });
   }
   return actions;

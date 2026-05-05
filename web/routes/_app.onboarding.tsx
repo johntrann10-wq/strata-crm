@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { StrataLogoLockup } from "@/components/brand/StrataLogo";
@@ -36,7 +37,9 @@ import type { CSSProperties } from "react";
 
 const ONBOARDING_FORM_ID = "onboarding-business-form";
 const onboardingInputClass =
-  "h-11 rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-base sm:text-sm placeholder:text-[#7d8695]";
+  "h-11 min-w-0 max-w-full rounded-lg border-[#2a2a2a] bg-[#1a1a1a] text-base sm:text-sm placeholder:text-[#7d8695]";
+const onboardingTimeInputClass =
+  `${onboardingInputClass} w-full [color-scheme:dark] [font-variant-numeric:tabular-nums] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0`;
 const onboardingInputStyle: CSSProperties = {
   color: "#f4f4f5",
   WebkitTextFillColor: "#f4f4f5",
@@ -65,6 +68,61 @@ const businessTypeIcons: Record<BusinessTypeValue, typeof Droplets> = {
 };
 
 type FormData = { name: string; phone: string; email: string; address: string; city: string; state: string; zip: string };
+
+type OnboardingDailyHoursEntry = {
+  dayIndex: number;
+  enabled: boolean;
+  openTime: string;
+  closeTime: string;
+};
+
+const ONBOARDING_DAY_OPTIONS = [
+  { value: 0, label: "Sun", fullLabel: "Sunday" },
+  { value: 1, label: "Mon", fullLabel: "Monday" },
+  { value: 2, label: "Tue", fullLabel: "Tuesday" },
+  { value: 3, label: "Wed", fullLabel: "Wednesday" },
+  { value: 4, label: "Thu", fullLabel: "Thursday" },
+  { value: 5, label: "Fri", fullLabel: "Friday" },
+  { value: 6, label: "Sat", fullLabel: "Saturday" },
+] as const;
+
+function dayIndexesFromSummary(summary: string): number[] {
+  const normalized = summary.trim().toLowerCase();
+  if (!normalized) return [1, 2, 3, 4, 5];
+  if (normalized.includes("every") || normalized.includes("daily") || normalized.includes("7")) return [0, 1, 2, 3, 4, 5, 6];
+  if (normalized.includes("weekend")) return [0, 6];
+  if (normalized.includes("weekday") || normalized.includes("mon-fri") || normalized.includes("mon - fri")) return [1, 2, 3, 4, 5];
+
+  const matches = ONBOARDING_DAY_OPTIONS.filter((day) => normalized.includes(day.label.toLowerCase())).map((day) => day.value);
+  return matches.length > 0 ? matches : [1, 2, 3, 4, 5];
+}
+
+function buildOnboardingDailyHours(daysSummary = "Mon-Fri", openTime = "09:00", closeTime = "17:00"): OnboardingDailyHoursEntry[] {
+  const enabledDays = new Set(dayIndexesFromSummary(daysSummary));
+  return ONBOARDING_DAY_OPTIONS.map((day) => ({
+    dayIndex: day.value,
+    enabled: enabledDays.has(day.value),
+    openTime,
+    closeTime,
+  }));
+}
+
+function summarizeDayIndexes(dayIndexes: number[]): string {
+  const sorted = [...new Set(dayIndexes)].sort((a, b) => a - b);
+  if (sorted.length === 7) return "Every day";
+  if (sorted.join(",") === "1,2,3,4,5") return "Mon-Fri";
+  if (sorted.join(",") === "0,6") return "Weekends";
+  return ONBOARDING_DAY_OPTIONS.filter((day) => sorted.includes(day.value)).map((day) => day.label).join(", ") || "Closed";
+}
+
+function summarizeDailyHours(entries: OnboardingDailyHoursEntry[]): string {
+  const enabled = entries.filter((entry) => entry.enabled);
+  if (enabled.length === 0) return "Closed";
+  const daySummary = summarizeDayIndexes(enabled.map((entry) => entry.dayIndex));
+  const first = enabled[0];
+  const sameHours = enabled.every((entry) => entry.openTime === first.openTime && entry.closeTime === first.closeTime);
+  return sameHours ? `${daySummary} ${first.openTime}-${first.closeTime}` : `${daySummary} custom hours`;
+}
 
 function ProgressIndicator({ step }: { step: number }) {
   const steps = [
@@ -95,6 +153,10 @@ export default function OnboardingPage() {
   const [selectedType, setSelectedType] = useState<BusinessTypeValue | null>(null);
   const [staffCount, setStaffCount] = useState("1");
   const [operatingHours, setOperatingHours] = useState({ days: "Mon-Fri", open: "09:00", close: "17:00" });
+  const [operatingDailyHours, setOperatingDailyHours] = useState<OnboardingDailyHoursEntry[]>(() =>
+    buildOnboardingDailyHours("Mon-Fri", "09:00", "17:00")
+  );
+  const [closedOnUsHolidays, setClosedOnUsHolidays] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showOptionalBasics, setShowOptionalBasics] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -126,7 +188,11 @@ export default function OnboardingPage() {
     setStaffCount(typeof existingBusiness.staffCount === "number" ? String(existingBusiness.staffCount) : "1");
     const rawHours = typeof existingBusiness.operatingHours === "string" ? existingBusiness.operatingHours : "";
     const match = rawHours.match(/^(.*)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (match) setOperatingHours({ days: match[1], open: match[2], close: match[3] });
+    if (match) {
+      const nextHours = { days: match[1], open: match[2], close: match[3] };
+      setOperatingHours(nextHours);
+      setOperatingDailyHours(buildOnboardingDailyHours(nextHours.days, nextHours.open, nextHours.close));
+    }
   }, [existingBusiness, navigate]);
 
   const selectedTypeMeta = useMemo(
@@ -137,8 +203,22 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!selectedTypeMeta || existingBusiness?.id) return;
     setStaffCount(selectedTypeMeta.defaultStaffCount);
-    setOperatingHours({ days: selectedTypeMeta.defaultDays, open: selectedTypeMeta.defaultOpen, close: selectedTypeMeta.defaultClose });
+    const nextHours = { days: selectedTypeMeta.defaultDays, open: selectedTypeMeta.defaultOpen, close: selectedTypeMeta.defaultClose };
+    setOperatingHours(nextHours);
+    setOperatingDailyHours(buildOnboardingDailyHours(nextHours.days, nextHours.open, nextHours.close));
   }, [selectedTypeMeta, existingBusiness?.id]);
+
+  const operatingHoursSummary = useMemo(() => summarizeDailyHours(operatingDailyHours), [operatingDailyHours]);
+
+  const updateDailyHour = (
+    dayIndex: number,
+    update: Partial<Pick<OnboardingDailyHoursEntry, "enabled" | "openTime" | "closeTime">>
+  ) => {
+    setOperatingDailyHours((current) =>
+      current.map((entry) => (entry.dayIndex === dayIndex ? { ...entry, ...update } : entry))
+    );
+    setValidationError(null);
+  };
 
   const handleFieldChange = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((current) => ({ ...current, [field]: e.target.value }));
@@ -169,6 +249,9 @@ export default function OnboardingPage() {
       return;
     }
 
+    const enabledDailyHours = operatingDailyHours.filter((entry) => entry.enabled);
+    const firstEnabledDay = enabledDailyHours[0] ?? operatingDailyHours.find((entry) => entry.dayIndex === 1) ?? operatingDailyHours[0];
+    const bookingAvailableDays = enabledDailyHours.map((entry) => entry.dayIndex);
     const payload = {
       name: formData.name.trim(),
       type: selectedType as any,
@@ -179,7 +262,12 @@ export default function OnboardingPage() {
       state: formData.state.trim() || undefined,
       zip: formData.zip.trim() || undefined,
       staffCount: Math.max(0, parseInt(staffCount, 10) || 0),
-      operatingHours: `${operatingHours.days.trim() || "Mon-Fri"} ${operatingHours.open}-${operatingHours.close}`,
+      operatingHours: operatingHoursSummary,
+      bookingAvailableDays,
+      bookingAvailableStartTime: firstEnabledDay?.openTime ?? operatingHours.open,
+      bookingAvailableEndTime: firstEnabledDay?.closeTime ?? operatingHours.close,
+      bookingDailyHours: operatingDailyHours.map((entry) => ({ ...entry })),
+      bookingClosedOnUsHolidays: closedOnUsHolidays,
       defaultTaxRate: typeDefaults.defaultTaxRate,
       appointmentBufferMinutes: typeDefaults.appointmentBufferMinutes,
     };
@@ -420,14 +508,69 @@ export default function OnboardingPage() {
                         <Label htmlFor="staffCount" className="text-sm font-medium text-[#d1d5db]">Number of staff</Label>
                         <Input id="staffCount" type="number" min={0} max={500} value={staffCount} onChange={(e) => setStaffCount(e.target.value)} className={`${onboardingInputClass} w-full sm:w-32`} data-onboarding-input="true" style={onboardingInputStyle} />
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium text-[#d1d5db]">Typical operating hours</Label>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[120px_1fr_auto_1fr] sm:items-center">
-                          <Input value={operatingHours.days} onChange={(e) => setOperatingHours((current) => ({ ...current, days: e.target.value }))} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
-                          <Input type="time" value={operatingHours.open} onChange={(e) => setOperatingHours((current) => ({ ...current, open: e.target.value }))} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
-                          <span className="text-center text-[#6b7280]">to</span>
-                          <Input type="time" value={operatingHours.close} onChange={(e) => setOperatingHours((current) => ({ ...current, close: e.target.value }))} className={onboardingInputClass} data-onboarding-input="true" style={onboardingInputStyle} />
+                      <div className="space-y-3">
+                        <div>
+                          <Label className="text-sm font-medium text-[#d1d5db]">Operating days &amp; hours</Label>
+                          <p className="mt-1 text-xs leading-5 text-[#8b929f]">Set the first public booking schedule now. You can fine-tune it later in Settings.</p>
                         </div>
+                        <div className="grid gap-2">
+                          {operatingDailyHours.map((entry) => {
+                            const day = ONBOARDING_DAY_OPTIONS.find((item) => item.value === entry.dayIndex);
+                            return (
+                              <div
+                                key={entry.dayIndex}
+                                className={cn(
+                                  "min-w-0 rounded-2xl border p-3 transition-colors",
+                                  entry.enabled ? "border-orange-500/30 bg-orange-500/[0.06]" : "border-[#262626] bg-[#151515]"
+                                )}
+                              >
+                                <div className="flex min-h-10 items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-white">{day?.fullLabel ?? "Day"}</p>
+                                    <p className="text-xs text-[#8b929f]">{entry.enabled ? `${entry.openTime} - ${entry.closeTime}` : "Closed"}</p>
+                                  </div>
+                                  <Switch
+                                    checked={entry.enabled}
+                                    onCheckedChange={(enabled) => updateDailyHour(entry.dayIndex, { enabled })}
+                                  />
+                                </div>
+                                {entry.enabled ? (
+                                  <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
+                                    <div className="min-w-0 space-y-1">
+                                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b929f]">Opens</span>
+                                      <Input
+                                        type="time"
+                                        value={entry.openTime}
+                                        onChange={(e) => updateDailyHour(entry.dayIndex, { openTime: e.target.value })}
+                                        className={onboardingTimeInputClass}
+                                        data-onboarding-input="true"
+                                        style={onboardingInputStyle}
+                                      />
+                                    </div>
+                                    <div className="min-w-0 space-y-1">
+                                      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b929f]">Closes</span>
+                                      <Input
+                                        type="time"
+                                        value={entry.closeTime}
+                                        onChange={(e) => updateDailyHour(entry.dayIndex, { closeTime: e.target.value })}
+                                        className={onboardingTimeInputClass}
+                                        data-onboarding-input="true"
+                                        style={onboardingInputStyle}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <label className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-[#262626] bg-[#151515] px-3 py-2">
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-white">Close on U.S. holidays</span>
+                            <span className="block text-xs leading-5 text-[#8b929f]">Automatically block major observed holidays.</span>
+                          </span>
+                          <Switch checked={closedOnUsHolidays} onCheckedChange={setClosedOnUsHolidays} />
+                        </label>
                       </div>
                     </div>
                   ) : null}
@@ -502,7 +645,7 @@ export default function OnboardingPage() {
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[#9ca3af]">Default hours</span>
-                      <span className="font-medium text-white">{operatingHours.days} {operatingHours.open}-{operatingHours.close}</span>
+                      <span className="text-right font-medium text-white">{operatingHoursSummary}</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[#9ca3af]">Booking buffer</span>

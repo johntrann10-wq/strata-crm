@@ -1423,7 +1423,7 @@ export default function SettingsPage() {
   const formSelectTriggerClassName =
     "h-10 w-full rounded-xl border-input/90 bg-background/85 px-3 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.03)]";
   const mobileTimeInputClassName =
-    "h-11 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
+    "h-11 min-w-0 w-full max-w-full rounded-xl border-input/90 bg-background/85 px-3 text-base [font-variant-numeric:tabular-nums] sm:h-10 sm:text-sm [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-date-and-time-value]:min-h-[1.25rem] [&::-webkit-date-and-time-value]:text-left [&::-webkit-datetime-edit]:min-w-0 [&::-webkit-datetime-edit-fields-wrapper]:min-w-0";
   const [automationSettings, setAutomationSettings] = useState<AutomationSettingsForm>(
     DEFAULT_AUTOMATION_SETTINGS
   );
@@ -3195,7 +3195,7 @@ export default function SettingsPage() {
 	                            <div
 	                              key={day.value}
 	                              className={cn(
-	                                "grid gap-3 rounded-2xl border bg-background/85 p-3 sm:grid-cols-[7rem_1fr_1fr] sm:items-center",
+	                                "grid min-w-0 gap-3 overflow-hidden rounded-2xl border bg-background/85 p-3 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)] sm:items-center",
 	                                entry.enabled ? "border-primary/25" : "border-border/70 opacity-75"
 	                              )}
 	                            >
@@ -3206,7 +3206,7 @@ export default function SettingsPage() {
 	                                  onCheckedChange={(enabled) => handleBookingDayToggle(day.value, enabled)}
 	                                />
 	                              </label>
-	                              <div className="space-y-1">
+	                              <div className="min-w-0 space-y-1">
 	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-open-${day.value}`}>
 	                                  Opens
 	                                </Label>
@@ -3219,7 +3219,7 @@ export default function SettingsPage() {
 	                                  onChange={(e) => handleBookingDayTimeChange(day.value, "openTime", e.target.value)}
 	                                />
 	                              </div>
-	                              <div className="space-y-1">
+	                              <div className="min-w-0 space-y-1">
 	                                <Label className="text-xs text-muted-foreground" htmlFor={`booking-close-${day.value}`}>
 	                                  Closes
 	                                </Label>

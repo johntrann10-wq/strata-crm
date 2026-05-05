@@ -151,16 +151,33 @@ html.dark body {
 
 html.dark .bg-white:not(iframe),
 html.dark .bg-gray-50,
+html.dark .bg-gray-100,
 html.dark .bg-slate-50,
+html.dark .bg-slate-100,
 html.dark .bg-stone-50,
-html.dark .bg-orange-50 {
+html.dark .bg-stone-100,
+html.dark .bg-orange-50,
+html.dark .bg-orange-100,
+html.dark .bg-amber-50,
+html.dark .bg-blue-50,
+html.dark .bg-sky-50,
+html.dark .bg-green-50,
+html.dark .bg-emerald-50,
+html.dark .bg-rose-50,
+html.dark .bg-red-50 {
   background-color: var(--card) !important;
 }
 
+html.dark .bg-white\/96,
+html.dark .bg-white\/95,
+html.dark .bg-white\/94,
 html.dark .bg-white\/90,
+html.dark .bg-white\/85,
 html.dark .bg-white\/80,
 html.dark .bg-white\/70,
-html.dark .bg-white\/60 {
+html.dark .bg-white\/60,
+html.dark .bg-slate-50\/80,
+html.dark .bg-muted\/20 {
   background-color: hsl(220 15% 12% / 0.9) !important;
 }
 
@@ -168,6 +185,7 @@ html.dark .text-gray-950,
 html.dark .text-gray-900,
 html.dark .text-slate-950,
 html.dark .text-slate-900,
+html.dark .text-slate-800,
 html.dark .text-stone-950,
 html.dark .text-stone-900 {
   color: var(--foreground) !important;
@@ -182,12 +200,56 @@ html.dark .text-stone-600 {
   color: var(--muted-foreground) !important;
 }
 
+html.dark .text-blue-700,
+html.dark .text-sky-700 {
+  color: hsl(205 75% 72%) !important;
+}
+
+html.dark .text-green-600,
+html.dark .text-green-700,
+html.dark .text-emerald-600,
+html.dark .text-emerald-700 {
+  color: hsl(158 64% 64%) !important;
+}
+
+html.dark .text-amber-700,
+html.dark .text-orange-700 {
+  color: hsl(38 92% 70%) !important;
+}
+
+html.dark .text-red-600,
+html.dark .text-red-700,
+html.dark .text-rose-600,
+html.dark .text-rose-700 {
+  color: hsl(0 82% 72%) !important;
+}
+
 html.dark .border-gray-200,
 html.dark .border-slate-200,
 html.dark .border-stone-200,
 html.dark .border-orange-100,
-html.dark .border-orange-200 {
+html.dark .border-orange-200,
+html.dark .border-amber-200,
+html.dark .border-blue-200,
+html.dark .border-sky-200,
+html.dark .border-green-200,
+html.dark .border-emerald-200,
+html.dark .border-red-200,
+html.dark .border-rose-200 {
   border-color: var(--border) !important;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  color-scheme: dark;
+}
+
+html.dark [data-slot="card"],
+html.dark .surface-panel,
+html.dark .kpi-card {
+  background-color: var(--card);
+  color: var(--card-foreground);
 }
 
 html.dark[data-native-back-gesture="active"] body {

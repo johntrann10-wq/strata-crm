@@ -194,6 +194,8 @@ export type HomeDashboardSnapshot = {
       | "new_invoice"
       | "add_client"
       | "add_vehicle"
+      | "search_appointments"
+      | "search_leads"
       | "collect_payment"
       | "send_reminder";
     label: string;
