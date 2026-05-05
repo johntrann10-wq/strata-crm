@@ -46,17 +46,17 @@ export function getAppointmentStatusLabel(status: string): string {
 export function getInvoiceStatusClass(status: string): string {
   switch (status) {
     case "draft":
-      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-500 border border-zinc-200/60";
+      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-500 border border-zinc-200/60 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80";
     case "sent":
-      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200/60";
+      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200/60 dark:bg-sky-500/14 dark:text-sky-200 dark:border-sky-400/30";
     case "paid":
-      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60";
+      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-500/14 dark:text-emerald-200 dark:border-emerald-400/30";
     case "partial":
-      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200/60";
+      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200/60 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80";
     case "void":
-      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-400 border border-zinc-200/60 line-through";
+      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-400 border border-zinc-200/60 line-through dark:bg-slate-800/80 dark:text-slate-500 dark:border-slate-700/80";
     default:
-      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-500 border border-zinc-200/60";
+      return "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-500 border border-zinc-200/60 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80";
   }
 }
 

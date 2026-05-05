@@ -83,11 +83,11 @@ import { QueueReturnBanner } from "../components/shared/QueueReturnBanner";
 import { PageHeader } from "../components/shared/PageHeader";
 
 const STATUS_STYLES: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700 border-gray-200",
-  sent: "bg-blue-100 text-blue-700 border-blue-200",
-  paid: "bg-green-100 text-green-700 border-green-200",
-  partial: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  void: "bg-red-100 text-red-700 border-red-200",
+  draft: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80",
+  sent: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-sky-500/14 dark:text-sky-200 dark:border-sky-400/30",
+  paid: "bg-green-100 text-green-700 border-green-200 dark:bg-emerald-500/14 dark:text-emerald-200 dark:border-emerald-400/30",
+  partial: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700/80",
+  void: "bg-red-100 text-red-700 border-red-200 dark:bg-rose-500/14 dark:text-rose-200 dark:border-rose-400/30",
 };
 
 function formatCurrency(amount: number | null | undefined): string {

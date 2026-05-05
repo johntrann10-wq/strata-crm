@@ -86,6 +86,15 @@ function toMoneyNumber(value: unknown): number {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function isBlankInvoiceLineItem(item: LineItem | null | undefined) {
+  return Boolean(
+    item &&
+      item.description.trim() === "" &&
+      item.qty === 1 &&
+      item.unitPrice === 0
+  );
+}
+
 function formatDuration(minutes: number) {
   if (minutes >= 60) {
     const hours = Math.floor(minutes / 60);
@@ -660,8 +669,7 @@ export default function NewInvoicePage() {
   };
 
   const addPackageAsLineItems = (baseService: ServiceRecord, addonServices: ServiceRecord[]) => {
-    setLineItems((prev) => [
-      ...prev,
+    const nextItems = [
       {
         id: crypto.randomUUID(),
         description: baseService.name,
@@ -674,19 +682,20 @@ export default function NewInvoicePage() {
         qty: 1,
         unitPrice: Number(service.price ?? 0),
       })),
-    ]);
+    ];
+
+    setLineItems((prev) => (prev.length === 1 && isBlankInvoiceLineItem(prev[0]) ? nextItems : [...prev, ...nextItems]));
   };
 
   const addServiceAsLineItem = (service: ServiceRecord) => {
-    setLineItems((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        description: service.name,
-        qty: 1,
-        unitPrice: toMoneyNumber(service.price),
-      },
-    ]);
+    const nextItem = {
+      id: crypto.randomUUID(),
+      description: service.name,
+      qty: 1,
+      unitPrice: toMoneyNumber(service.price),
+    };
+
+    setLineItems((prev) => (prev.length === 1 && isBlankInvoiceLineItem(prev[0]) ? [nextItem] : [...prev, nextItem]));
   };
 
   const handleQuickClientFieldChange = (field: keyof typeof quickClientForm, value: string) => {

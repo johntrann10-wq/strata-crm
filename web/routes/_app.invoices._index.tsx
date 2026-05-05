@@ -808,22 +808,22 @@ function InvoiceMobileCard({
 }) {
   const toneClass =
     accent === "danger"
-      ? "border-red-200/80 bg-red-50/70"
+      ? "border-red-200/80 bg-red-50/70 dark:border-rose-400/30 dark:bg-rose-500/10"
       : accent === "warn"
-        ? "border-amber-200/80 bg-amber-50/70"
+        ? "border-amber-200/80 bg-amber-50/70 dark:border-slate-600/70 dark:bg-slate-800/72"
         : accent === "success"
-          ? "border-emerald-200/80 bg-emerald-50/70"
-          : "border-border/70 bg-card/98";
+          ? "border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-400/30 dark:bg-emerald-500/10"
+          : "border-border/70 bg-card/98 dark:border-slate-700/75 dark:bg-slate-900/72";
 
   return (
     <div
       className={cn(
         "rounded-2xl border p-4 shadow-sm",
         toneClass,
-        nativeIOS && "rounded-[26px] border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)] active:scale-[0.99]",
-        nativeIOS && accent === "danger" && "border-red-200/80 bg-red-50/70",
-        nativeIOS && accent === "warn" && "border-amber-200/80 bg-amber-50/70",
-        nativeIOS && accent === "success" && "border-emerald-200/80 bg-emerald-50/70"
+        nativeIOS && "rounded-[26px] border-white/80 bg-white/92 px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.06)] active:scale-[0.99] dark:border-slate-700/80 dark:bg-slate-900/74",
+        nativeIOS && accent === "danger" && "border-red-200/80 bg-red-50/70 dark:border-rose-400/30 dark:bg-rose-500/10",
+        nativeIOS && accent === "warn" && "border-amber-200/80 bg-amber-50/70 dark:border-slate-600/70 dark:bg-slate-800/72",
+        nativeIOS && accent === "success" && "border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-400/30 dark:bg-emerald-500/10"
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -837,7 +837,7 @@ function InvoiceMobileCard({
           <StatusBadge status={status} type="invoice" />
           <span className={cn("text-sm font-semibold tabular-nums text-foreground", nativeIOS && "text-[15px]")}>{amount}</span>
           {overdue ? (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-red-700">
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-red-700 dark:bg-rose-500/14 dark:text-rose-200">
               Overdue
             </span>
           ) : null}
