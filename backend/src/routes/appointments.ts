@@ -1296,7 +1296,7 @@ async function sendAppointmentConfirmationForRecord(
   }
 }
 
-appointmentsRouter.get("/", requireAuth, requireTenant, requirePermission("appointments.read"), async (req: Request, res: Response) => {
+appointmentsRouter.get("/", requireAuth, requireTenant, requirePermission("appointments.read"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const first = req.query.first != null ? Math.min(Math.max(Number(req.query.first), 1), 500) : 50;
 
@@ -1475,10 +1475,20 @@ appointmentsRouter.get("/", requireAuth, requireTenant, requirePermission("appoi
     location: row.locationName != null ? { name: row.locationName } : null,
   })});
   res.json({ records });
-});
+}));
 
-appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("appointments.read"), async (req: Request, res: Response) => {
+appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("appointments.read"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
+  const idParsed = z.string().uuid().safeParse(req.params.id);
+  if (!idParsed.success) throw new NotFoundError("Appointment not found.");
+  const appointmentId = idParsed.data;
+
+  const [appointmentExists] = await db
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(and(eq(appointments.id, appointmentId), eq(appointments.businessId, bid)))
+    .limit(1);
+  if (!appointmentExists) throw new NotFoundError("Appointment not found.");
 
   const [row] = await db
     .select({
@@ -1532,7 +1542,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
     .leftJoin(vehicles, and(eq(appointments.vehicleId, vehicles.id), eq(vehicles.businessId, bid)))
     .leftJoin(staff, and(eq(appointments.assignedStaffId, staff.id), eq(staff.businessId, bid)))
     .leftJoin(appointmentSources, and(eq(appointmentSources.appointmentId, appointments.id), eq(appointmentSources.businessId, bid)))
-    .where(and(eq(appointments.id, req.params.id), eq(appointments.businessId, bid)))
+    .where(and(eq(appointments.id, appointmentExists.id), eq(appointments.businessId, bid)))
     .limit(1);
 
   if (!row) throw new NotFoundError("Appointment not found.");
@@ -1639,7 +1649,7 @@ appointmentsRouter.get("/:id", requireAuth, requireTenant, requirePermission("ap
         : null,
     business: { id: row.businessId },
   });
-});
+}));
 
 appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
@@ -2423,7 +2433,7 @@ appointmentsRouter.post("/", requireAuth, requireTenant, requirePermission("appo
   res.status(201).json({ ...created, ...confirmationResult });
 }));
 
-appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
+appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({
@@ -2657,7 +2667,7 @@ appointmentsRouter.patch("/:id", requireAuth, requireTenant, requirePermission("
     }
   }
   res.json(updated);
-});
+}));
 
 appointmentsRouter.post(
   "/:id/add-on-requests/:addonServiceId/review",
@@ -3581,7 +3591,7 @@ appointmentsRouter.post(
   });
 }));
 
-appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(async (req: Request, res: Response) => {
   const statusParsed = appointmentStatusSchema.safeParse(req.body?.status ?? "scheduled");
   if (!statusParsed.success) throw new BadRequestError("Invalid status.");
   const status = statusParsed.data;
@@ -3694,7 +3704,7 @@ appointmentsRouter.post("/:id/updateStatus", requireAuth, requireTenant, require
   }
 
   res.json(updated);
-});
+}));
 
 async function deleteAppointmentRecord(req: Request, res: Response) {
   const bid = businessId(req);
@@ -3764,7 +3774,7 @@ async function deleteAppointmentRecord(req: Request, res: Response) {
 appointmentsRouter.delete("/:id", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(deleteAppointmentRecord));
 appointmentsRouter.post("/:id/delete", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(deleteAppointmentRecord));
 
-appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({ id: appointments.id, status: appointments.status })
@@ -3817,9 +3827,9 @@ appointmentsRouter.post("/:id/complete", requireAuth, requireTenant, requirePerm
     }
   }
   res.json(updated);
-});
+}));
 
-appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermission("appointments.write"), async (req: Request, res: Response) => {
+appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermission("appointments.write"), wrapAsync(async (req: Request, res: Response) => {
   const bid = businessId(req);
   const [existing] = await db
     .select({ id: appointments.id, status: appointments.status })
@@ -3875,7 +3885,7 @@ appointmentsRouter.post("/:id/cancel", requireAuth, requireTenant, requirePermis
     }
   }
   res.json(updated);
-});
+}));
 
 appointmentsRouter.post(
   "/:id/revoke-public-access",

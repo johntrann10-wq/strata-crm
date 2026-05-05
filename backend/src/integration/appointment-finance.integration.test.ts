@@ -5,6 +5,7 @@ import pg from "pg";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import type { Application } from "express";
 
@@ -176,6 +177,19 @@ describe.skipIf(skipEmbeddedFinancePath)("Appointment finance critical path (bac
       totalPrice: string | number | null;
     };
   }
+
+  it("returns a clean 404 for missing appointment detail requests", async () => {
+    if (!app) throw new Error("Backend app failed to load.");
+    const res = await request(app)
+      .get(`/api/appointments/${randomUUID()}`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({
+      code: "NOT_FOUND",
+      message: "Appointment not found.",
+    });
+  });
 
   it("keeps brand-new no-deposit appointments unpaid with full balance due", async () => {
     const appointmentId = await createAppointment({ depositAmount: 0, totalPrice: 715.85 });
