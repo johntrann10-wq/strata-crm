@@ -11,9 +11,14 @@ jobs:
     steps:
       - name: Call runAutomations
         run: |
-          curl -sf -X POST "${{ secrets.API_URL }}/api/actions/runAutomations" \
+          if [ -z "${API_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "Skipping automations: GitHub secrets API_URL and CRON_SECRET must be configured."
+            exit 0
+          fi
+
+          curl -sf -X POST "${API_URL%/}/api/actions/runAutomations" \
             -H "Content-Type: application/json" \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
+            -H "x-cron-secret: ${CRON_SECRET}"
         env:
           API_URL: ${{ secrets.API_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
