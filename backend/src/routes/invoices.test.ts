@@ -103,6 +103,16 @@ describe("invoices route logic", () => {
     ).toBe(38);
   });
 
+  it("starts at one when no invoice counters or prior invoice numbers exist", () => {
+    expect(
+      getInitialInvoiceNumberSeed({
+        nextInvoiceNumber: null,
+        businessHighestInvoiceNumber: null,
+        globalHighestInvoiceNumber: null,
+      })
+    ).toBe(1);
+  });
+
   it("still respects a higher business-local counter when it is already ahead", () => {
     expect(
       getInitialInvoiceNumberSeed({
@@ -113,9 +123,23 @@ describe("invoices route logic", () => {
     ).toBe(112);
   });
 
+  it("caps oversized invoice number seeds to the integer-safe range", () => {
+    expect(
+      getInitialInvoiceNumberSeed({
+        nextInvoiceNumber: Number.MAX_SAFE_INTEGER,
+        businessHighestInvoiceNumber: Number.MAX_SAFE_INTEGER,
+        globalHighestInvoiceNumber: Number.MAX_SAFE_INTEGER,
+      })
+    ).toBe(2147483646);
+  });
+
   it("jumps invoice retry candidates to the safer fallback seed when conflicts continue", () => {
     expect(nextInvoiceNumberCandidate("INV-1", 5000)).toBe("INV-5000");
     expect(nextInvoiceNumberCandidate("INV-4999", 5000)).toBe("INV-5000");
     expect(nextInvoiceNumberCandidate("INV-5000", 5000)).toBe("INV-5001");
+  });
+
+  it("does not use timestamp-sized fallback seeds for invoice retries", () => {
+    expect(nextInvoiceNumberCandidate("INV-1", Date.now())).toBe("INV-2");
   });
 });

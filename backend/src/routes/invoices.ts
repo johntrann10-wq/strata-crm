@@ -93,6 +93,8 @@ const publicInvoicePaymentSessionLimiter = createRateLimiter({
 });
 
 const INVOICE_STATUSES = ["draft", "sent", "paid", "partial", "void"] as const;
+const MAX_INVOICE_NUMBER_SEED = 2_147_483_646;
+const MAX_INVOICE_COUNTER_VALUE = 2_147_483_647;
 
 function isInvoiceSchemaDriftError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -138,12 +140,36 @@ async function isConnectedStripeAccountReady(accountId: string | null | undefine
   }
 }
 
+function normalizeInvoiceNumberSeed(value: unknown, fallbackSeed = 1): number {
+  const fallback = Math.floor(Number(fallbackSeed));
+  const safeFallback = Number.isFinite(fallback)
+    ? Math.min(Math.max(fallback, 0), MAX_INVOICE_NUMBER_SEED)
+    : 1;
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > MAX_INVOICE_NUMBER_SEED) {
+    return safeFallback;
+  }
+  return parsed;
+}
+
+function clampInvoiceNumberSeed(value: unknown, fallbackSeed = 1): number {
+  const fallback = normalizeInvoiceNumberSeed(fallbackSeed, 0);
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, MAX_INVOICE_NUMBER_SEED);
+}
+
+function getNextInvoiceCounterValue(invoiceNumber: string, fallbackSeed: number) {
+  const match = /^INV-(\d+)$/.exec(invoiceNumber);
+  const invoiceSeed = match ? normalizeInvoiceNumberSeed(match[1], fallbackSeed) : normalizeInvoiceNumberSeed(fallbackSeed);
+  return Math.min(invoiceSeed + 1, MAX_INVOICE_COUNTER_VALUE);
+}
+
 export function nextInvoiceNumberCandidate(current: string, fallbackSeed: number) {
   const match = /^INV-(\d+)$/.exec(current);
-  if (match) {
-    return `INV-${Math.max(Number(match[1]) + 1, fallbackSeed)}`;
-  }
-  return `INV-${fallbackSeed}`;
+  const currentSeed = match ? normalizeInvoiceNumberSeed(match[1], 0) : 0;
+  const safeFallbackSeed = normalizeInvoiceNumberSeed(fallbackSeed);
+  return `INV-${Math.min(Math.max(currentSeed + 1, safeFallbackSeed), MAX_INVOICE_NUMBER_SEED)}`;
 }
 
 const createInvoiceReturning = {
@@ -259,19 +285,30 @@ async function getHighestExistingInvoiceNumber(
   if (!invoiceColumns.has("invoice_number")) return null;
   const result = bid
     ? await executor.execute(sql`
-    select max((regexp_match(invoice_number, '^INV-(\d+)$'))[1]::int) as max_invoice_number
-    from invoices
-    where business_id = ${bid}
+    select max(invoice_number_value) as max_invoice_number
+    from (
+      select (regexp_match(invoice_number, '^INV-([0-9]+)$'))[1]::numeric as invoice_number_value
+      from invoices
+      where business_id = ${bid}
+        and invoice_number ~ '^INV-[0-9]+$'
+    ) invoice_numbers
+    where invoice_number_value between 1 and ${MAX_INVOICE_NUMBER_SEED}
   `)
     : await executor.execute(sql`
-    select max((regexp_match(invoice_number, '^INV-(\d+)$'))[1]::int) as max_invoice_number
-    from invoices
+    select max(invoice_number_value) as max_invoice_number
+    from (
+      select (regexp_match(invoice_number, '^INV-([0-9]+)$'))[1]::numeric as invoice_number_value
+      from invoices
+      where invoice_number ~ '^INV-[0-9]+$'
+    ) invoice_numbers
+    where invoice_number_value between 1 and ${MAX_INVOICE_NUMBER_SEED}
   `);
   const rows = (result as { rows?: Array<{ max_invoice_number?: number | string | null }> }).rows ?? [];
   const value = rows[0]?.max_invoice_number;
   if (value == null) return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  const normalized = Number.isFinite(parsed) ? normalizeInvoiceNumberSeed(parsed, 0) : 0;
+  return normalized > 0 ? normalized : null;
 }
 
 export function getInitialInvoiceNumberSeed(params: {
@@ -279,10 +316,16 @@ export function getInitialInvoiceNumberSeed(params: {
   businessHighestInvoiceNumber: number | null;
   globalHighestInvoiceNumber: number | null;
 }) {
-  return Math.max(
-    params.nextInvoiceNumber ?? 1,
-    (params.businessHighestInvoiceNumber ?? 0) + 1,
-    (params.globalHighestInvoiceNumber ?? 0) + 1,
+  const nextInvoiceNumber = clampInvoiceNumberSeed(params.nextInvoiceNumber ?? 1, 1);
+  const businessHighestInvoiceNumber = clampInvoiceNumberSeed(params.businessHighestInvoiceNumber, 0);
+  const globalHighestInvoiceNumber = clampInvoiceNumberSeed(params.globalHighestInvoiceNumber, 0);
+  return Math.min(
+    Math.max(
+      nextInvoiceNumber,
+      businessHighestInvoiceNumber + 1,
+      globalHighestInvoiceNumber + 1,
+    ),
+    MAX_INVOICE_NUMBER_SEED
   );
 }
 
@@ -1477,7 +1520,7 @@ invoicesRouter.post(
                 invoiceRowPersisted = true;
               } catch (error) {
                 if (isInvoiceNumberConflictError(error)) {
-                  invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+                  invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, initialNumericInvoiceNumber + attempt + 1);
                   continue;
                 }
                 throw error;
@@ -1485,7 +1528,7 @@ invoicesRouter.post(
             }
           } catch (error) {
             if (isInvoiceNumberConflictError(error)) {
-              invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+              invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, initialNumericInvoiceNumber + attempt + 1);
               continue;
             }
             if (!isInvoiceSchemaDriftError(error)) throw error;
@@ -1506,7 +1549,7 @@ invoicesRouter.post(
               invoiceRowPersisted = true;
             } catch (fallbackError) {
               if (isInvoiceNumberConflictError(fallbackError)) {
-                invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, Date.now() + attempt);
+                invoiceNumber = nextInvoiceNumberCandidate(invoiceNumber, initialNumericInvoiceNumber + attempt + 1);
                 continue;
               }
               throw fallbackError;
@@ -1515,9 +1558,7 @@ invoicesRouter.post(
         }
         if (!created) throw new BadRequestError("Failed to create invoice.");
         try {
-          const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
-          const nextCounterValue =
-            createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
+          const nextCounterValue = getNextInvoiceCounterValue(created.invoiceNumber, initialNumericInvoiceNumber);
           await executor
             .update(businesses)
             .set({ nextInvoiceNumber: nextCounterValue, updatedAt: new Date() })
@@ -1527,9 +1568,7 @@ invoicesRouter.post(
             try {
               const businessColumns = await getBusinessColumns();
               if (businessColumns.has("next_invoice_number")) {
-                const createdNumberMatch = /^INV-(\d+)$/.exec(created.invoiceNumber);
-                const nextCounterValue =
-                  createdNumberMatch != null ? Number(createdNumberMatch[1]) + 1 : initialNumericInvoiceNumber + 1;
+                const nextCounterValue = getNextInvoiceCounterValue(created.invoiceNumber, initialNumericInvoiceNumber);
                 const updates: Record<string, unknown> = { nextInvoiceNumber: nextCounterValue };
                 if (businessColumns.has("updated_at")) updates.updatedAt = new Date();
                 await executor.update(businesses).set(updates).where(eq(businesses.id, bid));
