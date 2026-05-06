@@ -42,6 +42,22 @@ describe("bookingRequestAccess", () => {
     expect(verifyBookingRequestToken(token, { requestId: "req-123", businessId: "biz-999" })).toBeNull();
   });
 
+  it("keeps default booking request response links valid for 30 days", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-16T10:00:00.000Z"));
+
+    const token = createBookingRequestToken({
+      requestId: "req-123",
+      businessId: "biz-123",
+    });
+
+    vi.setSystemTime(new Date("2026-05-16T09:59:00.000Z"));
+    expect(verifyCurrentBookingRequestToken(token, { requestId: "req-123", businessId: "biz-123" }, 1)).not.toBeNull();
+
+    vi.setSystemTime(new Date("2026-05-17T10:00:00.000Z"));
+    expect(verifyCurrentBookingRequestToken(token, { requestId: "req-123", businessId: "biz-123" }, 1)).toBeNull();
+  });
+
   it("rejects expired request tokens", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-16T10:00:00.000Z"));

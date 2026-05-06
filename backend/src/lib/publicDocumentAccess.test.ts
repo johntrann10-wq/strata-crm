@@ -35,10 +35,10 @@ describe("publicDocumentAccess", () => {
     expect(verifyPublicDocumentToken(token, { kind: "quote", entityId: "quote-123" })?.ver).toBe(1);
   });
 
-  it("uses shorter default expiry for appointment links while keeping quote and invoice links shareable", () => {
-    expect(getPublicDocumentTokenExpiry("appointment")).toBe("7d");
-    expect(getPublicDocumentTokenExpiry("quote")).toBe("14d");
-    expect(getPublicDocumentTokenExpiry("invoice")).toBe("14d");
+  it("uses longer practical default expiry windows for customer-facing document links", () => {
+    expect(getPublicDocumentTokenExpiry("appointment")).toBe("90d");
+    expect(getPublicDocumentTokenExpiry("quote")).toBe("90d");
+    expect(getPublicDocumentTokenExpiry("invoice")).toBe("365d");
   });
 
   it("returns a current payload for a valid token and matching version", () => {

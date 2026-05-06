@@ -11,9 +11,9 @@ export type PublicDocumentTokenPayload = {
 };
 
 const DEFAULT_PUBLIC_DOCUMENT_EXPIRY_BY_KIND: Record<PublicDocumentKind, NonNullable<SignOptions["expiresIn"]>> = {
-  quote: "14d",
-  invoice: "14d",
-  appointment: "7d",
+  quote: "90d",
+  invoice: "365d",
+  appointment: "90d",
 };
 
 export function normalizePublicDocumentTokenVersion(value: unknown): number {

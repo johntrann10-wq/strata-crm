@@ -9,7 +9,7 @@ export type BookingRequestTokenPayload = {
   ver?: number;
 };
 
-const DEFAULT_BOOKING_REQUEST_TOKEN_EXPIRY: NonNullable<SignOptions["expiresIn"]> = "14d";
+const DEFAULT_BOOKING_REQUEST_TOKEN_EXPIRY: NonNullable<SignOptions["expiresIn"]> = "30d";
 
 export function normalizeBookingRequestTokenVersion(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
